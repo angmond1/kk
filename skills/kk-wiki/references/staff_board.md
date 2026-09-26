@@ -18,15 +18,18 @@
 - **기간(사용자 정책)**: 조직개편으로 부서가 사라지거나 새로 생기거나 바뀌는 일이 잦아 **2025-01-01 이후 글을 우선**한다. 다만 그 이후 글이 없는 **존속 부서**(시설운영팀·데이터정보팀 등)는 그 전 최신 글을 쓰되 **⚠오래됨** 으로 표시한다(코어 `staffList({minDate:'2025-01-01'})` → 덤프 팀 줄 `| 오래됨 예`, 파서 `import --since 2025-01-01`). 2020년 이전 글뿐인 부서(`floorDate`)는 개편 전 조직으로 보고 `excluded` 에만 남긴다 — 2026-09-25 실측: 강릉분원 행정팀('18.3)·연구지원실('10.12).
 - 답에 붙일 때 ⚠오래됨 팀은 "게시판 최신 글이 YYYY-MM 것이라 담당자가 바뀌었을 수 있음" 을 붙인다.
 
-## 덤프 형식 (`staffRender()` → `get_page_text` → `wiki_staff.py import`)
+## 덤프 형식 (`staffDownload()` → `wiki_staff.py import --from-downloads --expect <run>`; 다운로드가 막히면 `staffRender()` → `get_page_text` → `import <파일>`)
 ```
-=== KKWIKI-STAFF v1 | exported <ISO> | board FC_BBS224 | teams N ===
+=== KKWIKI-STAFF v1 | exported <ISO> | board FC_BBS224 | teams N | run <run> ===
 ## 팀: 재무팀 | 글번호 NNNNN | 게시일 08-18 17:58 | 게시자 김키키 | 제목 [재무팀] 업무분장 안내('26.08.18.) | id NEW… | url https://ngw.kist.re.kr/xclick_kist/dispatcherArticleView.jsp?articleId=NEW…&userid=SESSIONNOCHECK
 | 직무구분 | 직무 내용 | 담당 |
 | 팀장 | ◦ 재무업무 총괄 | 김키키 (NNNN) |
 (표 없음 — 이미지 게시글, 이미지 1개: 링크에서 직접 확인)
+(표 없음 — 수집 오류: timeout)                 ← 가져오기가 기존 표를 유지
+(표 없음 — 표 인식 실패: 본문 N자, 머리행 규칙 확인)  ← 가져오기가 기존 표를 유지
 === END ===
 ```
+- 가져오기(`import`)는 머리줄의 팀 수와 읽은 팀 수가 다르거나 `=== END ===` 가 없으면 잘린 덤프로 보고 저장하지 않는다(`--force` 로 무시). `--keep` 없이 기존 팀이 빠져도 저장하지 않는다(일부만 받은 덤프면 `--keep`).
 - `get_page_text` 는 3만 자 이상을 한 번에 돌려준다(실측) → `javascript_tool` 의 ~1,000자 제한을 우회하는 표준 반출 채널. 큰 결과는 문서를 `<pre>` 로 바꿔 읽고, 읽은 뒤 새로고침.
 - 저장 위치 `{kiki_root}/wiki/staff/`: `staff_dump_yymmdd.txt`(원본), `staff.json`, `staff.md`, 이전본 `_history/`. **이름·내선 = 내부 자료, 로컬만.**
 

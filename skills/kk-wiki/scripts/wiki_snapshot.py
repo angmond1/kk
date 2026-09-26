@@ -89,6 +89,43 @@ def latest_download(pattern: str, max_age_h: float = 24.0) -> str:
     return max(cands, key=os.path.getmtime) if cands else ""
 
 
+def _run_of(p: str) -> str:
+    """다운로드 파일 머리의 run id — JSON 은 "run_id": "xxxx", 담당자 덤프는 첫 줄의 '| run xxxx ==='. 없으면 ''."""
+    try:
+        with io.open(p, encoding="utf-8-sig", errors="ignore") as f:
+            head = f.read(4096)
+    except Exception:
+        return ""
+    m = re.search(r'"run_id"\s*:\s*"(\w+)"', head) or re.search(r"\|\s*run\s+(\w+)\s*===", head)
+    return m.group(1) if m else ""
+
+
+def pick_download(pattern: str, expect: str = "", wait: float = 20.0, max_age_h: float = 24.0, hint: str = "브라우저 코어의 다운로드 함수") -> tuple:
+    """(경로, 오류문구). expect(run id)가 있으면 그 run 의 파일만 쓴다 — 다운로드가 끝나길 최대 wait 초 기다리고, 끝내 없으면 옛 파일을 쓰지 않고 오류.
+    expect 가 없으면 max_age_h 안의 가장 최근 파일(하위 호환 — 호출측이 경고를 찍는다)."""
+    import glob
+    d = downloads_dir()
+    deadline = time.time() + (wait if expect else 0)
+    while True:
+        cands = sorted((p for p in glob.glob(os.path.join(d, pattern)) if os.path.isfile(p)), key=os.path.getmtime, reverse=True)
+        if not expect:
+            fresh = [p for p in cands if time.time() - os.path.getmtime(p) <= max_age_h * 3600]
+            return (fresh[0], "") if fresh else ("", f"다운로드 폴더({d})에 {max_age_h:g}시간 안의 {pattern} 가 없습니다 — {hint} 먼저")
+        for p in cands[:40]:
+            if _run_of(p) == expect:
+                return p, ""
+        if time.time() >= deadline:
+            info = ""
+            if cands:
+                p = cands[0]
+                info = (f" 가장 최근 파일은 {os.path.basename(p)}(run {_run_of(p) or '없음'}, "
+                        f"{time.strftime('%m-%d %H:%M', time.localtime(os.path.getmtime(p)))}) — 이전 실행분이라 쓰지 않습니다.")
+            return "", (f"방금 내려받은 파일(run {expect})이 다운로드 폴더({d})에 없습니다.{info} "
+                        "Chrome 이 저장 위치를 물으면 [저장], '여러 파일 다운로드' 허용을 물으면 [허용]을 누른 뒤 같은 명령을 다시 실행하세요. "
+                        "다른 폴더에 저장됐다면 환경변수 KIKI_DOWNLOADS 로 그 폴더를 지정하세요.")
+        time.sleep(1.0)
+
+
 # ---------- 토큰 (kk-pay dooray_drive.py 와 동일 규칙) ----------
 def _read_text(p: str) -> str:
     """메모장이 UTF-16 이나 ANSI 로 저장해도 읽히게 — BOM 우선, 그다음 UTF-8, 시스템 인코딩."""
@@ -104,20 +141,31 @@ def _read_text(p: str) -> str:
 
 
 def _token_from_file(p: str) -> str:
+    """token.txt('Dooray token:' 다음 줄 또는 같은 줄) 또는 kiki.env(DOORAY_TOKEN=...) 에서 토큰 추출. 없으면 ''.
+    머리글 아래가 비었거나 머리글 위에 붙여넣은 경우도 찾는다: 공백·'://' 없는 20자 이상 한 줄(Dooray 토큰은 'xxxx:yyyy' 꼴이라 ':' 는 허용)."""
     try:
         lines = _read_text(p).splitlines()
     except Exception:
         return ""
     body = [ln.strip() for ln in lines if ln.strip() and not ln.lstrip().startswith("#")]
+
+    def _tok(x: str) -> str:
+        x = str(x or "").strip().strip('"').strip("'")
+        return x if len(x) >= 20 and " " not in x and "://" not in x else ""
     for i, ln in enumerate(body):
         if ln.upper().startswith("DOORAY_TOKEN="):
-            return ln.split("=", 1)[1].strip().strip('"').strip("'")
+            t = _tok(ln.split("=", 1)[1])
+            if t:
+                return t
         if ln.lower().startswith("dooray token"):
-            rest = ln.split(":", 1)[1].strip() if ":" in ln else ""
-            if rest:
-                return rest.strip('"').strip("'")
-            return body[i + 1].strip('"').strip("'") if i + 1 < len(body) else ""
-    return body[0].strip('"').strip("'") if body else ""
+            t = _tok(ln.split(":", 1)[1] if ":" in ln else "") or (_tok(body[i + 1]) if i + 1 < len(body) else "")
+            if t:
+                return t
+    for ln in body:                      # 머리글 없이 토큰만 있거나, 머리글 위에 붙여넣은 경우
+        t = _tok(ln)
+        if t:
+            return t
+    return ""
 
 
 def load_token() -> str:
@@ -448,6 +496,10 @@ def import_export(root: str, wiki: str, home: str, path: str, force: bool = Fals
     keep = set()
     n_err = 0
     _FAILS.clear()
+    walk_errors = data.get("walk_errors") if isinstance(data, dict) else None
+    if walk_errors:                                           # 브라우저 수집에서 하위 목록을 못 받은 가지가 있으면 '사라진 페이지' 판정을 하지 않는다
+        _FAILS.extend(str(w.get("pid", "")) for w in walk_errors if isinstance(w, dict))
+        print(f"[kk-wiki] ⚠ 하위 목록을 못 받은 가지 {len(walk_errors)}곳 — 그 아래 페이지는 이번 수집에 없어도 지우지 않습니다(다시 수집 권장)", flush=True)
     for i, p in enumerate(pages):
         pid = str(p.get("id") or "")
         if not pid:
@@ -565,7 +617,8 @@ def main(argv=None):
     ap.add_argument("--update", action="store_true")
     ap.add_argument("--max-mb", type=float, default=30.0, help="attach: 이보다 큰 첨부는 건너뜀")
     ap.add_argument("--force", action="store_true", help="crawl/import: 새 수집이 기존의 절반 미만이어도 기존 페이지를 _old 로 보관")
-    ap.add_argument("--from-downloads", action="store_true", help="import: 다운로드 폴더의 최근 kist_wiki_*.json 을 자동으로 찾아 쓴다(exportSnapshot 결과)")
+    ap.add_argument("--from-downloads", action="store_true", help="import: 다운로드 폴더의 kist_wiki_*.json(exportSnapshot 결과)을 쓴다")
+    ap.add_argument("--expect", default="", help="import --from-downloads: 코어가 알려 준 run id — 그 run 의 파일만 쓴다(옛 파일 오사용 방지)")
     a = ap.parse_intermixed_args(argv)
     cfg = _skill_config()
     wiki = a.wiki or cfg.get("space_id") or DEFAULT_WIKI
@@ -575,9 +628,11 @@ def main(argv=None):
     if a.cmd == "crawl":
         crawl(root, wiki, home, a.force)
     elif a.cmd == "import":
-        src = a.args[0] if a.args else (latest_download("kist_wiki_*.json") if a.from_downloads else "")
+        src, why = (a.args[0], "") if a.args else (pick_download("kist_wiki_*.json", a.expect, hint="코어 exportSnapshot()") if a.from_downloads else ("", ""))
         if not src:
-            raise SystemExit("import <export.json>  또는  import --from-downloads (다운로드 폴더 " + downloads_dir() + " 에 24시간 내 kist_wiki_*.json 없음 — 브라우저 코어 exportSnapshot() 먼저)")
+            raise SystemExit("[kk-wiki] " + (why or "import <export.json>  또는  import --from-downloads --expect <run>"))
+        if a.from_downloads and not a.expect:
+            print(f"[kk-wiki] ⚠ --expect 없이 가장 최근 파일을 씁니다: {os.path.basename(src)} — 방금 내려받은 파일이 맞는지 확인", flush=True)
         import_export(root, wiki, home, src, a.force)
     elif a.cmd == "build":
         build(root, wiki, home)

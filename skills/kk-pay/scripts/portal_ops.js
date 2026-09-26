@@ -39,7 +39,11 @@
     });
     var t = await r.text();
     // 세션 만료·잘못된 경로면 XML 대신 HTML(로그인·오류 페이지)이 온다 → 빈 결과로 넘어가지 않게 throw (2026-09-27 실측: authTk 가 틀려도 200 XML, 세션이 없으면 HTML)
-    if (!r.ok || t.indexOf('<Root') < 0) throw new Error('PORTAL: 통합정보 응답이 XML 이 아닙니다(HTTP ' + r.status + ') — 세션 만료 가능성. e.kist.re.kr 로그인 확인 → 통합정보 탭 새로고침 → 코어 재주입');
+    if (!r.ok || t.indexOf('<Root') < 0) {
+      if (r.status === 404) throw new Error('PORTAL: 요청 주소가 없습니다(HTTP 404 ' + path + ') — 통합정보 화면·주소가 바뀌었을 수 있음(코어 갱신 필요, 로그인 문제 아님)');
+      if (r.status >= 500) throw new Error('PORTAL: 통합정보 서버 오류(HTTP ' + r.status + ') — 잠시 뒤 1회 다시');
+      throw new Error('PORTAL: 통합정보 응답이 XML 이 아닙니다(HTTP ' + r.status + ') — 세션 만료 가능성. e.kist.re.kr 로그인 확인 → 통합정보 탭 새로고침 → 코어 재주입');
+    }
     var ec = /<Parameter id="ErrorCode"[^>]*>(-?\d+)</.exec(t);
     if (ec && +ec[1] < 0) { var em = /<Parameter id="ErrorMsg"[^>]*>([\s\S]*?)</.exec(t); throw new Error('PORTAL ErrorCode ' + ec[1] + (em ? ': ' + decodeEnt(em[1]).slice(0, 200) : '')); }
     return t;
@@ -126,20 +130,28 @@
   // ---------- 출력 조각 (Claude in Chrome javascript_tool 제약: ~1,000자 truncation, 8자리 이상 숫자·URL 가림, a=b 꼴 차단) ----------
   // 카드 목록을 12~15줄씩 읽는다. 승인번호는 4자리마다 '-', 날짜는 YYYY-MM-DD, 금액은 천단위 콤마 → 8자리 연속 숫자가 없다. '=' 도 없다.
   //   idx | 날짜 | 거래처 | 금액 | 승인 XXXX-XXXX | 상태 | 카드책임자 | (법인/연구비)
+  // 2-스텝 결과(window.__c) 그대로 넘긴다: null = 아직(또는 .then 에 오류 처리를 안 붙임) / {error} = 실패 / 배열 = 결과.
+  var NOT_YET = '(결과 없음 — 조회가 아직이면 2~3초 뒤 다시. 계속 이러면 .then(r=>…, e=>window.__c={error:String(e)}) 로 오류까지 저장했는지 확인)';
+  function errLine(x) { return 'ERR ' + String(x.error).replace(/https?:\S+/g, '[url]').replace(/[=&?;]/g, ' ').slice(0, 300); }
+  // 반환 문자열은 1,000자에서 잘린다(실측) → 줄 수가 아니라 글자 수로 끊고 머리줄에 다음 조각 번호를 적는다
+  function fitRows(rows, reserve) { var out = [], n = reserve || 150; for (var i = 0; i < rows.length; i++) { n += rows[i].length + 1; if (n > 960) break; out.push(rows[i]); } return out; }
   function fmtCards(rows, from, to) {
+    if (rows == null) return NOT_YET;
+    if (!Array.isArray(rows) && rows.error) return errLine(rows);
     rows = rows || []; from = from || 0; to = to == null ? from + 15 : to;
     var hy = function (x) { return String(x == null ? '' : x).replace(/(\d{4})(?=\d)/g, '$1-'); };
     var dt = function (d) { d = String(d || ''); return /^\d{8}$/.test(d) ? d.slice(0, 4) + '-' + d.slice(4, 6) + '-' + d.slice(6) : d; };
     var won = function (a) { if (a && typeof a === 'object') a = a.hi; var n = parseFloat(String(a == null ? '' : a).replace(/[^0-9.\-]/g, '')); return isNaN(n) ? String(a == null ? '' : a) : Math.round(n).toLocaleString('en-US'); };
-    var lines = rows.slice(from, to).map(function (c, k) {
+    var lines = fitRows(rows.slice(from, to).map(function (c, k) {
       return [from + k, dt(c.date), String(c.custnm || '').slice(0, 16), won(c.amount), '승인 ' + hy(c.apprno), c.status || '', c.holder || '', c.cardKind || ''].join(' | ').replace(/[=&?;]/g, ' ');
-    });
-    return '[' + from + '-' + Math.min(to, rows.length) + ' of ' + rows.length + ']\n' + lines.join('\n');
+    }));
+    var end = from + lines.length;
+    return '[' + from + '-' + end + ' of ' + rows.length + ']' + (end < Math.min(to, rows.length) ? ' ▶ 다음 조각 ' + end : '') + '\n' + lines.join('\n');
   }
   window.kkPay = {
     authTk: authTk, ready: ready, nexBody: nexBody, post: post, parseRows: parseRows, ds: ds,
     queryCards: queryCards, queryProjects: queryProjects, nameToEmpno: nameToEmpno, fmtCards: fmtCards, esc: esc,
-    _version: 'kk-pay-portal/1.1',
+    _version: 'kk-pay-portal/1.2',
   };
   return window.kkPay._version + ' =^.^=';
 })();

@@ -19,11 +19,28 @@
     'dooray-drive-api-version': '1.1',
   };
 
+  // 응답 판독(2026-09-27 전체 흐름 검수): 로그인이 풀리면 JSON 대신 로그인 화면(HTML)이 온다 → 'SyntaxError' 대신 원인과 다음 행동을 담은 DOORAY: 오류.
+  //   API 가 header.isSuccessful=false 로 거절한 경우는 각 함수가 error 로 올린다(빈 목록으로 넘기지 않는다 — '폴더 0개'·'규칙 없음'으로 오인 방지).
   async function dfetch(url, { method = 'GET', body = null } = {}) {
     const opts = { method, credentials: 'include', headers: H };
     if (body != null) opts.body = typeof body === 'string' ? body : JSON.stringify(body);
     const r = await fetch(url, opts);
-    return r.json();
+    if (r.status === 401 || r.status === 403) throw new Error(`DOORAY: 권한 없음(HTTP ${r.status}) — kist.gov-dooray.com 로그인 확인 → 탭 새로고침 → 코어 재주입`);
+    const t = await r.text();
+    if (r.status === 404) throw new Error(`DOORAY: 요청 주소가 없습니다(HTTP 404) — Dooray 화면·API 가 바뀌었을 수 있음(코어 갱신 필요, 로그인 문제 아님)`);
+    if (r.status >= 500) throw new Error(`DOORAY: 서버 오류(HTTP ${r.status}) — 잠시 뒤 1회 다시`);
+    if (!t.trim() && r.ok) return { header: { isSuccessful: true } };
+    let d;
+    try { d = JSON.parse(t); }
+    catch (e) { throw new Error(`DOORAY: 응답이 JSON 이 아닙니다(HTTP ${r.status}) — 로그인이 풀렸을 수 있습니다. kist.gov-dooray.com 로그인 확인 → 탭 새로고침 → 코어 재주입`); }
+    // 4xx 는 JSON 이어도 실패 — header 가 없으면(스프링 기본 오류 형식) 만들어 붙여 apiErr 가 잡게 한다
+    if (!r.ok && d && typeof d === 'object' && !d.header) d.header = { isSuccessful: false, resultCode: r.status, resultMessage: String(d.error || d.message || 'HTTP ' + r.status) };
+    return d;
+  }
+  function apiErr(d) {
+    if (!d || typeof d !== 'object') return 'no response';
+    const h = d.header || {};
+    return h.isSuccessful === false ? String(h.resultMessage || h.resultCode || 'isSuccessful false') : '';
   }
 
   // ---------- 폴더 조회 ----------
@@ -32,6 +49,7 @@
     const out = { system: [], user: [] };
     for (const t of ['system', 'user']) {
       const d = await dfetch(`/v2/wapi/mail-folders?type=${t}&size=1000`);
+      if (!d.result && apiErr(d)) throw new Error('DOORAY 폴더 조회 실패: ' + apiErr(d));
       const arr = (d.result && d.result.contents) ? d.result.contents : (Array.isArray(d.result) ? d.result : []);
       out[t] = arr.map(f => ({ id: f.id, name: f.name, type: t, total: f.totalCount }));
     }
@@ -80,7 +98,9 @@
   async function listInbox({ days = 7, size = 500, maxPages = 10 } = {}) {
     // 기간 안 메일 전부(페이지 넘김). 바쁜 편지함에서 200건 넘게 와도 빠지지 않는다. truncated=true 면 maxPages 를 늘릴 것.
     const r = await listMails({ folder: 'inbox', sinceDays: days, size, maxPages });
-    return { totalInbox: r.total, fetched: r.fetched, recent: r.mails, truncated: r.pages >= maxPages && r.fetched >= size * maxPages };
+    const out = { totalInbox: r.total, fetched: r.fetched, recent: r.mails, truncated: r.pages >= maxPages && r.fetched >= size * maxPages };
+    if (r.error) out.error = r.error;
+    return out;
   }
 
   async function listFolderMails(folderId, { size = 50 } = {}) {
@@ -126,8 +146,9 @@
     const out = { total: null, fetched: 0, pages: 0, mails: [] };
     for (let p = 0; p < maxPages; p++) {
       const d = await dfetch(`/v2/wapi/mails?${base}&size=${size}&page=${p}&order=-createdAt`);
-      const c = (d.result && d.result.contents) ? d.result.contents : [];
-      if (out.total == null && d.result) out.total = d.result.totalCount;
+      if (!d.result) { out.error = 'DOORAY 목록 조회 실패(page ' + p + '): ' + (apiErr(d) || 'no result'); break; }
+      const c = d.result.contents || [];
+      if (out.total == null) out.total = d.result.totalCount;
       out.fetched += c.length; out.pages++;
       let stop = c.length < size;
       for (const m of c) {
@@ -185,7 +206,9 @@
 
   // ---------- 기능 4: 스팸 신고 (휴지통 + 학습 + 발신자 차단) ----------
   // idList: 메일 id 배열 (N건 일괄). 항상 호출측이 사용자 confirm 후 실행.
+  const normIds = (list) => (list || []).map(x => String(x && x.id ? x.id : x).replace(/-/g, '')).filter(Boolean);
   async function reportSpam(idList, { applyBefore = true, addReject = true } = {}) {
+    idList = normIds(idList);
     return dfetch('/v2/wapi/mails/report-spam-hacking', {
       method: 'POST',
       body: {
@@ -199,6 +222,7 @@
 
   // ---------- 기능 2: 폴더 이동 (1회성, 과거 메일) ----------
   async function moveMails(mailIdList, targetFolderId, targetFolderName) {
+    mailIdList = normIds(mailIdList);
     return dfetch('/v2/wapi/mails/move', {
       method: 'POST',
       body: { targetFolderId, targetFolderName, mailIdList },
@@ -369,6 +393,7 @@
 
   async function listMailRules() {
     const d = await dfetch('/v2/wapi/mail-rules?size=1000&page=0&types=auto_classification');
+    if (!d.result && apiErr(d)) throw new Error('DOORAY 규칙 조회 실패: ' + apiErr(d));
     const res = d.result || {};
     return Array.isArray(res) ? res : (res.contents || []);
   }
@@ -442,12 +467,21 @@
     return (mails || []).filter(m => (rx.test(m.subject) || rx.test(m.fromName) || rx.test(m.fromEmail)) && !(ex && ex.test(m.fromEmail)));
   }
   // 목록 한 조각: idx | 날짜 | R/U | 첨부수 | 발신 | 제목 [폴더] [| 미리보기 pv자] [| id(하이픈)]. 12줄 ≈ 800자(pv 를 주면 줄을 줄일 것).
-  function fmtList(mails, from = 0, to = 12, { subj = 44, who = 14, ids = false, pv = 0 } = {}) {
-    mails = mails || [];
-    const rows = mails.slice(from, to).map((m, k) =>
+  // 2-스텝 결과(window.__x) 그대로 넘긴다: null = 아직(또는 .then 에 오류 처리를 안 붙임) / {error} = 실패 / 배열·컨테이너 = 결과.
+  const NOT_YET = '(결과 없음 — 비동기 조회가 아직이면 2~3초 뒤 다시. 계속 이러면 .then(r=>…, e=>window.__x={error:String(e)}) 로 오류까지 저장했는지 확인)';
+  function listOf(x) { return Array.isArray(x) ? x : (x && (x.mails || x.recent)) || []; }
+  function errOf(x) { return (x && !Array.isArray(x) && x.error) ? String(x.error) : ''; }
+  // 반환 문자열은 1,000자에서 잘린다(실측) → 줄 수가 아니라 글자 수로 끊고 머리줄에 다음 조각 번호를 적는다
+  function fitRows(rows, reserve = 150) { const out = []; let n = reserve; for (const r of rows) { n += r.length + 1; if (n > 960) break; out.push(r); } return out; }
+  function fmtList(x, from = 0, to = 12, { subj = 44, who = 14, ids = false, pv = 0 } = {}) {
+    if (x == null) return NOT_YET;
+    const mails = listOf(x), err = errOf(x);
+    if (err && !mails.length) return 'ERR ' + sanitize(err);
+    const rows = fitRows(mails.slice(from, to).map((m, k) =>
       sanitize(`${from + k} | ${m.date.slice(2)} | ${m.read ? 'R' : 'U'} | att${m.fileCount} | ${(m.fromName || m.fromEmail).slice(0, who)} | ${m.subject.slice(0, subj)}`
-        + (m.folder && m.folder !== 'inbox' ? ` [${m.folder}]` : '') + (pv && m.preview ? ' | ' + m.preview.slice(0, pv) : '')) + (ids ? ' | ' + hyId(m.id) : ''));
-    return `[${from}-${Math.min(to, mails.length)} of ${mails.length}]\n` + rows.join('\n');
+        + (m.folder && m.folder !== 'inbox' ? ` [${m.folder}]` : '') + (pv && m.preview ? ' | ' + m.preview.slice(0, pv) : '')) + (ids ? ' | ' + hyId(m.id) : '')));
+    const end = from + rows.length;
+    return `[${from}-${end} of ${mails.length}]` + (end < Math.min(to, mails.length) ? ` ▶ 다음 조각 ${end}` : '') + (err ? ' ⚠ 일부 오류: ' + sanitize(err).slice(0, 80) : '') + (x.truncated ? ' ⚠ 목록 잘림(maxPages 늘릴 것)' : '') + '\n' + rows.join('\n');
   }
   // 본문 1건: 머리 1줄(제목·날짜·발신·첨부·복원 여부) + 본문 chars 자. 긴 본문은 offset 을 옮겨 이어 읽는다.
   function fmtBody(b, chars = 700, offset = 0) {
@@ -499,42 +533,54 @@
   }
 
   // ---------- export ----------
-  // ---------- 스팸·분류 1차 힌트 + 첫 실행 현황 조각 (판별 패턴은 references/classification_policy.md — 최종 판단·확인은 Claude·사용자, 2026-09-27) ----------
-  //   spamHints(mails) → 각 메일에 spamScore·spamWhy·spamLevel(스팸의심/광고성?) 을 붙여 점수순 정렬 / fmtSpam(mails) 조각 / fmtFolders(findAllFolders 결과) / fmtRules(listMailRules 결과)
-  const SPAM_TLD = /\.(info|live|top|cloud|xyz|site|online|club|icu|buzz|rest|pw)$/i;
-  const SPAM_RELAY = /ccsend\.com|constantcontact|mailchimp|sendgrid\.net|mailgun|amazonses\.com|rsgsv\.net/i;
-  const SPAM_SUBJ = /invited?\s+(?:speaker|lecture|talk)|keynote|plenary|special\s+issue|call\s+for\s+(?:papers|abstracts|chapters)|publish|\bapc\b|article\s+processing|fee\s+waiver|discount|%\s*off|fast\s+track|indexed|impact\s+factor|editorial\s+board|guest\s+editor|join\s+us|register\s+now|early\s+bird|last\s+call|final\s+reminder|extended\s+deadline|abstract\s+submission|proceedings|congress|summit|expo|webinar|conference|symposium|journal\s+of/gi;
-  const GOOD_DOM = /(kist\.re\.kr|acs\.org|rsc\.org|wiley\.com|elsevier\.com|springer|nature\.com|kiche\.or\.kr|ksiec\.or\.kr|kecs\.or\.kr|kchem\.org|kim\.or\.kr|mrs-k\.or\.kr|nanokorea\.net|kontrs\.or\.kr|nrf\.re\.kr|keit\.re\.kr|kiat\.or\.kr|ketep\.or\.kr|ust\.ac\.kr|editorialmanager|manuscriptcentral|scholarone|atypon)/i;
-  function spamHints(mails) {
-    return (mails || []).map(m => {
-      const em = String(m.fromEmail || '').toLowerCase(), dom = em.split('@')[1] || '', subj = String(m.subject || ''), pv = String(m.preview || '');
-      let score = 0; const why = [];
-      if (SPAM_TLD.test(dom)) { score += 3; why.push('의심 도메인 .' + dom.split('.').pop()); }
-      if (SPAM_RELAY.test(em)) { score += 2; why.push('대량발송 중계'); }
-      const hits = (subj + ' ' + pv).match(SPAM_SUBJ) || [];
-      if (hits.length) { score += Math.min(3, hits.length); why.push('모객 문구 ' + hits.slice(0, 2).join('/')); }
-      if (/^(?:dear|hello|greetings)\b/i.test(subj) || /\b(?:dr|prof)\.?\s|professor/i.test(subj)) { score += 1; why.push('이름·호칭 제목'); }
-      if (GOOD_DOM.test(dom)) { score -= 3; why.push('정상 기관 도메인'); }
-      if (/^(?:re|fw|fwd)\s*:|^회신|^전달/i.test(subj)) score -= 1;
-      return Object.assign({}, m, { spamScore: score, spamWhy: why.join(', '), spamLevel: score >= 4 ? '스팸의심' : score >= 2 ? '광고성?' : '' });
-    }).sort((a, b) => b.spamScore - a.spamScore);
-  }
-  function fmtSpam(mails, from = 0, to = 15) {
-    const h = (mails && mails.length && 'spamScore' in mails[0]) ? mails : spamHints(mails);
-    const rows = h.slice(from, to).map((m, k) => sanitize(`${from + k} | ${m.spamLevel || '-'} ${m.spamScore} | ${String(m.date || '').slice(2)} | ${String(m.fromEmail || '').slice(0, 30)} | ${String(m.subject || '').slice(0, 40)} | ${m.spamWhy}`) + ' | ' + hyId(m.id));
-    return `[${from}-${Math.min(to, h.length)} of ${h.length}, 스팸의심 ${h.filter(m => m.spamLevel === '스팸의심').length} / 광고성? ${h.filter(m => m.spamLevel === '광고성?').length}]\n` + rows.join('\n');
+  // ---------- 스팸 후보 목록 + 첫 실행 현황 조각 (2026-09-27 전체 흐름 검수) ----------
+  //   점수 규칙(spamHints)은 폐기: 실제 받은편지함 3주치(226통)에서 약탈적 저널·학회 모객·피싱 약 10통 중 1통만 '스팸의심'으로 잡고
+  //   지갑 피싱 메일은 0점이었다(거짓 안심). 코드는 사내 발신을 빼고 외부 발신만 짧게 나열하고, 판단은 Claude 가 classification_policy.md 로 한다.
+  //   fmtExternal(listInbox 결과 또는 메일 배열) → '[외부 발신 a-b of N | 전체 M, 사내 K 제외]' + 'idx | 월-일 시각 | 발신 도메인 | 제목'
+  //   id 는 찍지 않는다 — 신고·이동은 번호로: reportSpam([3,7].map(i => kkMail.externalOf(window.__x)[i])) (19자리 id 를 옮겨 적다 틀리는 일을 없앤다)
+  const INTERNAL = /(^|\.)kist\.re\.kr$/i;
+  function externalOf(x, internal = INTERNAL) { return listOf(x).filter(m => !internal.test(String(m.fromEmail || '').split('@')[1] || '')); }
+  function fmtExternal(x, from = 0, to = 20, { internal = INTERNAL } = {}) {
+    if (x == null) return NOT_YET;
+    const all = listOf(x), err = errOf(x);
+    if (err && !all.length) return 'ERR ' + sanitize(err);
+    const ext = externalOf(x, internal);
+    const rows = fitRows(ext.slice(from, to).map((m, k) => sanitize(`${from + k} | ${String(m.date || '').slice(5)} | ${String(m.fromEmail || '').split('@')[1] || '?'} | ${String(m.subject || '').slice(0, 56)}`)));
+    const end = from + rows.length;
+    return `[외부 발신 ${from}-${end} of ${ext.length} | 전체 ${all.length}, 사내 ${all.length - ext.length} 제외]` + (end < Math.min(to, ext.length) ? ` ▶ 다음 조각 ${end}` : '') + (err ? ' ⚠ 일부 오류: ' + sanitize(err).slice(0, 60) : '') + (x && x.truncated ? ' ⚠ 목록 잘림' : '') + '\n' + rows.join('\n');
   }
   function fmtFolders(all) {
-    const u = (all && all.user) || [], s = (all && all.system) || [];
-    return sanitize('사용자 폴더 ' + u.length + ': ' + u.map(f => `${f.name}(${f.total || 0})`).join(', ') + '\n시스템: ' + s.map(f => `${f.name}(${f.total || 0})`).join(', '));
+    if (all == null) return NOT_YET;
+    if (all.error) return 'ERR ' + sanitize(all.error);
+    const u = all.user || [], s = all.system || [];
+    const cap = (t, n) => t.length > n ? t.slice(0, n) + ' …(생략)' : t;
+    return sanitize('사용자 폴더 ' + u.length + ': ' + cap(u.map(f => `${f.name}(${f.total || 0})`).join(', '), 330) + '\n시스템: ' + cap(s.map(f => `${f.name}(${f.total || 0})`).join(', '), 150));
   }
-  function fmtRules(rules) {
-    rules = rules || []; if (!rules.length) return '자동분류 규칙 없음';
-    return sanitize(rules.map((r, i) => {
+  // fmtRules(rules, from, {reserve, q}) — q 를 주면 발신·제목·폴더에 q 가 든 규칙만(규칙이 수백 개여도 충돌 확인은 검색으로). 번호는 원래 순번.
+  // 규칙 동작 이름: 폴더 이동이면 폴더명, 아니면 휴지통 등(실측: 157개 중 28개가 action.toTrash)
+  function ruleTarget(r) { const a = r.action || {}; return (a.toFolder && a.toFolder.name) || (a.toTrash ? '휴지통' : '') || (a.toSpam || a.spam ? '스팸' : '') || '기타 동작(' + (Object.keys(a).filter(k => k !== 'version').join('+') || '없음') + ')'; }
+  function ruleText(r) { const c = r.condition || {}; return [((c.from && c.from.value) || []).join(' '), ((c.subject && c.subject.value) || []).join(' '), ruleTarget(r)].join(' '); }
+  function fmtRules(rules, from = 0, { reserve = 150, q = '' } = {}) {
+    if (rules == null) return NOT_YET;
+    if (!Array.isArray(rules) && rules.error) return 'ERR ' + sanitize(rules.error);
+    if (!rules.length) return '자동분류 규칙 없음(조회 성공, 0개)';
+    const pool = rules.map((r, i) => [r, i]).filter(([r]) => !q || ruleText(r).toLowerCase().includes(String(q).toLowerCase()));
+    const lines = fitRows(pool.slice(from).map(([r, i]) => {
       const c = r.condition || {}, fr = ((c.from && c.from.value) || []).join(' '), sj = ((c.subject && c.subject.value) || []).join(' ');
-      const to = (r.action && r.action.toFolder && r.action.toFolder.name) || '?';
-      return `${i} | 발신 ${fr || '-'} | 제목 ${sj || '-'} | → ${to} | order ${r.applyOrder == null ? '-' : r.applyOrder}`;
-    }).join('\n'));
+      const to = ruleTarget(r);
+      return sanitize(`${i} | 발신 ${fr.slice(0, 60) || '-'} | 제목 ${sj.slice(0, 40) || '-'} | → ${to} | order ${r.applyOrder == null ? '-' : r.applyOrder}`);
+    }), reserve);
+    const end = from + lines.length;
+    return `[규칙 ${from}-${end} of ${pool.length}` + (q ? ` (검색 ${sanitize(q)}, 전체 ${rules.length})` : '') + ']' + (end < pool.length ? ` ▶ 다음 조각 ${end}` : '') + '\n' + lines.join('\n');
+  }
+  async function overview() { const [folders, rules] = await Promise.all([findAllFolders(), listMailRules()]); return { folders, rules }; }
+  function fmtOverview(x) {
+    if (x == null) return NOT_YET;
+    if (x.error) return 'ERR ' + sanitize(x.error);
+    const f = fmtFolders(x.folders), by = {};
+    (x.rules || []).forEach(r => { const t = ruleTarget(r); by[t] = (by[t] || 0) + 1; });
+    const sum = '규칙 ' + (x.rules || []).length + '개(대상별): ' + Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' ' + v).join(' · ');
+    return f + '\n' + ((x.rules || []).length ? sanitize(sum).slice(0, 200) + '\n' : '') + fmtRules(x.rules, 0, { reserve: 150 + f.length + sum.length }) + ((x.rules || []).length > 8 ? '\n(특정 발신·제목 규칙 확인은 fmtRules(window.__f.rules, 0, {q:"주소 일부"}))' : '');
   }
   window.kkMail = {
     dfetch, findAllFolders, findFolderId, ensureFolder, deleteFolder,
@@ -545,8 +591,8 @@
     reportSpam, moveMails,
     createRule, listMailRules, deleteMailRule,
     subjectKeyword, checkSubjectKeywords, previewSubjectRule,
-    spamHints, fmtSpam, fmtFolders, fmtRules,
-    _version: 'kk-mail-ops/1.7',
+    externalOf, fmtExternal, fmtFolders, fmtRules, ruleTarget, overview, fmtOverview, apiErr,
+    _version: 'kk-mail-ops/1.8',
   };
   return window.kkMail._version + ' =^.^=';
 })();

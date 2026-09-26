@@ -85,24 +85,29 @@ def _read_text(p: str) -> str:
 
 
 def _token_from_file(p: str) -> str:
-    """token.txt('Dooray token:' 다음 줄 또는 같은 줄) 또는 kiki.env(DOORAY_TOKEN=...) 에서 토큰 추출. 없으면 ''."""
+    """token.txt('Dooray token:' 다음 줄 또는 같은 줄) 또는 kiki.env(DOORAY_TOKEN=...) 에서 토큰 추출. 없으면 ''.
+    머리글 아래가 비었거나 머리글 위에 붙여넣은 경우도 찾는다: 공백·'://' 없는 20자 이상 한 줄(Dooray 토큰은 'xxxx:yyyy' 꼴이라 ':' 는 허용)."""
     try:
         lines = _read_text(p).splitlines()
     except Exception:
         return ""
     body = [ln.strip() for ln in lines if ln.strip() and not ln.lstrip().startswith("#")]
+
+    def _tok(x: str) -> str:
+        x = str(x or "").strip().strip('"').strip("'")
+        return x if len(x) >= 20 and " " not in x and "://" not in x else ""
     for i, ln in enumerate(body):
         if ln.upper().startswith("DOORAY_TOKEN="):
-            return ln.split("=", 1)[1].strip().strip('"').strip("'")
+            t = _tok(ln.split("=", 1)[1])
+            if t:
+                return t
         if ln.lower().startswith("dooray token"):
-            rest = ln.split(":", 1)[1].strip() if ":" in ln else ""
-            if rest:
-                return rest.strip('"').strip("'")
-            return body[i + 1].strip('"').strip("'") if i + 1 < len(body) else ""
-    # 머리글 없이 토큰만 있거나, 머리글 위에 붙여넣은 경우: 공백 없는 긴 한 줄을 토큰으로 본다
-    for ln in body:
-        t = ln.strip('"').strip("'")
-        if " " not in t and len(t) >= 20 and ":" not in t:
+            t = _tok(ln.split(":", 1)[1] if ":" in ln else "") or (_tok(body[i + 1]) if i + 1 < len(body) else "")
+            if t:
+                return t
+    for ln in body:                      # 머리글 없이 토큰만 있거나, 머리글 위에 붙여넣은 경우
+        t = _tok(ln)
+        if t:
             return t
     return ""
 
@@ -167,6 +172,15 @@ class DoorayDrive:
         self.timeout = timeout
         self.s = requests.Session()
         self.s.headers.update({"Authorization": f"dooray-api {self.token}", "Accept": "application/json"})
+
+    def probe(self, folder: str | None = None) -> str:
+        """토큰이 실제로 통하는지(드라이브 목록 1건 읽기) + 폴더를 주면 그 폴더 접근까지. 쓰기 없음."""
+        params = {"page": 0, "size": 1}
+        if folder:
+            params["parentId"] = folder_id_of(folder)
+        r = self.s.get(f"{API}/drive/v1/drives/{DRIVE}/files", params=params, verify=VERIFY_TLS, timeout=self.timeout)
+        self._check(r, "토큰 확인" if not folder else "폴더 접근 확인")
+        return "인증 OK" + (" · 폴더 접근 OK" if folder else "")
 
     def web_url(self, folder_id: str) -> str:
         return f"https://kist.gov-dooray.com/drive/{PROJECT}/{folder_id}"
@@ -321,10 +335,22 @@ def archive_local(file_path: str, acccd: str, mode: str = "move", base: str | No
     return dest
 
 
-USAGE = ("usage: python dooray_drive.py check\n"
+USAGE = ("usage: python dooray_drive.py check [--live [폴더id|폴더링크]]   (--live: 토큰이 실제로 통하는지·폴더 접근까지, 읽기 1회)\n"
          "       python dooray_drive.py find <행정원이름> [본부약어]\n"
          "       python dooray_drive.py structure <폴더id|폴더링크>\n"
-         "       python dooray_drive.py upload <폴더id|폴더링크> <파일...>   (사용자 confirm 후)")
+         "       python dooray_drive.py upload <폴더id|폴더링크> <파일...> [--any-name]   (사용자 confirm 후, RPA 파일명 규칙 검사)")
+
+
+def rpa_name_problem(name: str) -> str:
+    """RPA 증빙 파일명 규칙 위반 사유('' = 통과). 계정_항목_비목_(승인번호_)이름]내용, 80자 이내(확장자 제외), jpg/pdf."""
+    stem, ext = os.path.splitext(name)
+    if ext.lower() not in (".jpg", ".pdf"):
+        return f"jpg/pdf 만 업로드 가능({ext or '확장자 없음'})"
+    if not re.match(r"^(?:[0-9][A-Za-z][0-9]{5}|[0-9]{2}[A-Za-z][0-9]{4})_\d{2}_\d{3}_", stem):
+        return "RPA 파일명 규칙(계정_항목_비목_…)이 아님"
+    if len(stem) > 80:
+        return f"{len(stem)}자 — 80자 이내(확장자 제외)"
+    return ""
 
 
 def main(argv: list) -> int:
@@ -333,7 +359,17 @@ def main(argv: list) -> int:
         print(USAGE)
         return 0 if cmd else 1
     if cmd == "check":
-        print(check_token())
+        msg = check_token()
+        print(msg)
+        if not msg.startswith("OK"):
+            return 1
+        if "--live" in argv:
+            try:
+                folder = next((x for x in argv[2:] if not x.startswith("--")), None)
+                print(DoorayDrive().probe(folder))
+            except (RuntimeError, ValueError) as e:
+                print("ERR", e)
+                return 1
         return 0
     if cmd == "find" and len(argv) >= 3:
         try:
@@ -356,21 +392,35 @@ def main(argv: list) -> int:
             return 1
         return 0
     if cmd == "upload" and len(argv) >= 4:
-        bad = 0
+        files = [p for p in argv[3:] if p != "--any-name"]
+        # 올리기 전에 전부 검사 — 업로드 = RPA 자동 기안이라, 규칙에 어긋난 이름 하나가 실패 기안·반려 메일이 된다(하나라도 걸리면 아무것도 안 올림)
+        probs = []
+        for p in files:
+            if not os.path.isfile(p):
+                probs.append("파일 없음: " + p)
+            elif "--any-name" not in argv:
+                why = rpa_name_problem(os.path.basename(p))
+                if why:
+                    probs.append(f"{os.path.basename(p)}: {why}")
+        if probs:
+            print("ERR 올리지 않았습니다 —", " / ".join(probs))
+            print("  (파일명은 kk_pay_files.py plan/apply 로 만들고, 규칙과 다른 이름을 일부러 올릴 때만 --any-name)")
+            print(f"[요약] 업로드 0 / 점검 {len(probs)}")
+            return 1
+        ok = 0
         try:
             c = DoorayDrive()
-            for p in argv[3:]:
-                if not os.path.isfile(p):
-                    print("ERR 파일이 없습니다:", p)
-                    bad = 1
-                    continue
+            for p in files:
                 d = c.upload(argv[2], p)
                 rid = (d.get("result") or {}).get("id") if isinstance(d.get("result"), dict) else ""
                 print("업로드 완료:", os.path.basename(p), ("id " + str(rid)) if rid else "")
+                ok += 1
         except (RuntimeError, ValueError) as e:
             print("ERR", e)
+            print(f"[요약] 업로드 {ok} / 실패 1 / 남음 {len(files) - ok - 1} — 올라간 {ok}건은 드라이브 웹에서 확인")
             return 1
-        return bad
+        print(f"[요약] 업로드 {ok}건 — 드라이브 웹에서 파일명을 눈으로 확인(7단계)")
+        return 0
     print(USAGE)
     return 1
 

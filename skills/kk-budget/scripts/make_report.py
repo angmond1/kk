@@ -7,8 +7,11 @@ kk-budget 예산 리포트 렌더러.
 사용: python make_report.py <input.json> <output.xlsx>
 credential-free. 개인 식별자/경로 하드코딩 없음(전부 인자/JSON).
 """
+import io
 import json
+import re
 import sys
+import time
 # Windows 한국어(cp949) 콘솔·파이프에서도 한글·기호가 깨지거나 멈추지 않게 출력은 UTF-8 로 (모듈로 불러 써도 적용)
 for _stream in (sys.stdout, sys.stderr):
     try:
@@ -74,6 +77,8 @@ def main(json_path, out_path):
     if isinstance(projs, list):                        # [{acccd,…}] 목록도 허용 (queryProjects·kiki.config 형식)
         projs = {str(pj.get("acccd", "")): pj for pj in projs if isinstance(pj, dict) and pj.get("acccd")}
     ds = snap["snapshot_date"]
+    if not projs:
+        sys.exit(f"[kk-budget] 스냅샷에 과제가 0건이라 엑셀을 만들지 않았습니다 (경고 {len(snap.get('warnings') or [])}건: {'; '.join((snap.get('warnings') or [])[:2])[:200]}) — 코어 collectStatus() 의 ERR 부터 확인")
 
     wb = Workbook()
     ws = wb.active
@@ -146,8 +151,18 @@ def main(json_path, out_path):
 
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
-    wb.save(out)
-    print(f"[OK] 저장: {out} (과제 {len(projs)}, 비목 {len(cats)}, 기준일 {ds})")
+    try:
+        wb.save(out)
+    except PermissionError:
+        sys.exit(f"[kk-budget] 엑셀 파일이 열려 있어 저장하지 못했습니다 — Excel 에서 {out.name} 을 닫고 같은 명령을 다시 실행하세요")
+    warns, nf = snap.get("warnings") or [], snap.get("not_found") or []
+    print(f"[OK] 저장: {out} (과제 {len(projs)}, 비목 {len(cats)}, 기준일 {ds}"
+          + (f", 수집 {snap.get('collected_at')}" if snap.get("collected_at") else "") + (f", run {snap.get('run_id')}" if snap.get("run_id") else "")
+          + (f", 경고 {len(warns)}" if warns else "") + (f", 목록에 없음 {len(nf)}" if nf else "") + ")")
+    for w in warns[:10]:
+        print("  ⚠", w)
+    if nf:
+        print("  ⚠ 참여 과제 목록에 없음:", ", ".join(nf))
     return out
 
 
@@ -184,30 +199,63 @@ def _downloads_dir() -> str:
     return os.path.join(os.path.expanduser("~"), "Downloads")
 
 
-def _latest_download(pattern: str, max_age_h: float = 24.0) -> str:
-    import glob, time
-    cands = [p for p in glob.glob(os.path.join(_downloads_dir(), pattern)) if os.path.isfile(p) and time.time() - os.path.getmtime(p) <= max_age_h * 3600]
-    return max(cands, key=os.path.getmtime) if cands else ""
+def _run_of(p: str) -> str:
+    """다운로드 파일 머리의 run id — JSON 은 "run_id": "xxxx", 담당자 덤프는 첫 줄의 '| run xxxx ==='. 없으면 ''."""
+    try:
+        with io.open(p, encoding="utf-8-sig", errors="ignore") as f:
+            head = f.read(4096)
+    except Exception:
+        return ""
+    m = re.search(r'"run_id"\s*:\s*"(\w+)"', head) or re.search(r"\|\s*run\s+(\w+)\s*===", head)
+    return m.group(1) if m else ""
+
+
+def pick_download(pattern: str, expect: str = "", wait: float = 20.0, max_age_h: float = 24.0, hint: str = "브라우저 코어의 다운로드 함수") -> tuple:
+    """(경로, 오류문구). expect(run id)가 있으면 그 run 의 파일만 쓴다 — 다운로드가 끝나길 최대 wait 초 기다리고, 끝내 없으면 옛 파일을 쓰지 않고 오류.
+    expect 가 없으면 max_age_h 안의 가장 최근 파일(하위 호환 — 호출측이 경고를 찍는다)."""
+    import glob
+    d = _downloads_dir()
+    deadline = time.time() + (wait if expect else 0)
+    while True:
+        cands = sorted((p for p in glob.glob(os.path.join(d, pattern)) if os.path.isfile(p)), key=os.path.getmtime, reverse=True)
+        if not expect:
+            fresh = [p for p in cands if time.time() - os.path.getmtime(p) <= max_age_h * 3600]
+            return (fresh[0], "") if fresh else ("", f"다운로드 폴더({d})에 {max_age_h:g}시간 안의 {pattern} 가 없습니다 — {hint} 먼저")
+        for p in cands[:40]:
+            if _run_of(p) == expect:
+                return p, ""
+        if time.time() >= deadline:
+            info = ""
+            if cands:
+                p = cands[0]
+                info = (f" 가장 최근 파일은 {os.path.basename(p)}(run {_run_of(p) or '없음'}, "
+                        f"{time.strftime('%m-%d %H:%M', time.localtime(os.path.getmtime(p)))}) — 이전 실행분이라 쓰지 않습니다.")
+            return "", (f"방금 내려받은 파일(run {expect})이 다운로드 폴더({d})에 없습니다.{info} "
+                        "Chrome 이 저장 위치를 물으면 [저장], '여러 파일 다운로드' 허용을 물으면 [허용]을 누른 뒤 같은 명령을 다시 실행하세요. "
+                        "다른 폴더에 저장됐다면 환경변수 KIKI_DOWNLOADS 로 그 폴더를 지정하세요.")
+        time.sleep(1.0)
+
 
 
 def cli(argv: list) -> int:
     """사용: python make_report.py <input.json> <output.xlsx>
-       python make_report.py --from-downloads [--out <output.xlsx>] [--save-snapshot [<dir>]]
-         --from-downloads : 다운로드 폴더의 최근 kiki_budget_*.json(브라우저 코어 downloadSnapshot 결과)
+       python make_report.py --from-downloads --expect <run> [--out <output.xlsx>] [--save-snapshot [<dir>]]
+         --from-downloads : 다운로드 폴더의 kiki_budget_*.json(브라우저 코어 downloadSnapshot 결과)
+         --expect         : downloadSnapshot() 이 알려 준 run id — 그 run 의 파일만 쓴다(없으면 옛 파일을 쓰지 않고 오류)
          --out            : 기본 {kiki_root}/budget/yymmdd.xlsx (yymmdd = 스냅샷 날짜)
          --save-snapshot  : 입력 JSON 을 <dir>/yymmdd.json 으로 보관 (기본 ~/.claude/kiki/kk-budget/data)"""
     if not argv or argv[0] in ("-h", "--help"):
         print(cli.__doc__); return 0 if argv else 1
     import shutil
-    src = out = None; save = None
+    src = out = None; save = None; from_dl = False; expect = ""
     pos = []
     i = 0
     while i < len(argv):
         a = argv[i]
         if a == "--from-downloads":
-            src = _latest_download("kiki_budget_*.json")
-            if not src:
-                print("[kk-budget] 다운로드 폴더(" + _downloads_dir() + ")에 24시간 내 kiki_budget_*.json 이 없습니다 — 브라우저 코어 downloadSnapshot() 먼저"); return 1
+            from_dl = True
+        elif a == "--expect" and i + 1 < len(argv):
+            expect = argv[i + 1]; i += 1
         elif a == "--out" and i + 1 < len(argv):
             out = argv[i + 1]; i += 1
         elif a == "--save-snapshot":
@@ -217,6 +265,12 @@ def cli(argv: list) -> int:
         else:
             pos.append(a)
         i += 1
+    if from_dl:
+        src, why = pick_download("kiki_budget_*.json", expect, hint="코어 downloadSnapshot()")
+        if not src:
+            print("[kk-budget] " + why); return 1
+        if not expect:
+            print(f"[kk-budget] ⚠ --expect 없이 가장 최근 파일을 씁니다: {os.path.basename(src)} — 방금 내려받은 파일이 맞는지 확인")
     if src is None and pos:
         src = pos.pop(0)
     if out is None and pos:
@@ -231,11 +285,11 @@ def cli(argv: list) -> int:
     ymd = (snap.get("snapshot_date") or "").replace("-", "")[2:] or __import__("time").strftime("%y%m%d")
     if not out:
         out = os.path.join(_kiki_root(), "budget", ymd + ".xlsx")
+    main(src, out)                     # 엑셀을 만든 뒤에만 보관한다(과제 0건 같은 불량 스냅샷이 그날 정상본을 덮지 않게)
     if save:
         os.makedirs(os.path.expanduser(save), exist_ok=True)
         dst = os.path.join(os.path.expanduser(save), ymd + ".json")
         shutil.copy2(os.path.expanduser(src), dst); print("[kk-budget] 스냅샷 보관:", dst)
-    main(src, out)
     return 0
 
 

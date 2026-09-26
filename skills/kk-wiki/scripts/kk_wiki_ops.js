@@ -14,17 +14,31 @@
   const WEB = 'https://kist.gov-dooray.com';
   const DEFAULT_SPACE = '3538560283559420253', DEFAULT_HOME = '3538560286709555986';
   const sleep = ms => new Promise(r => setTimeout(r, ms));
-  async function j(url) { const r = await fetch(url, { credentials: 'include', headers: H }); return r.json(); }
+  const ymdLocal = (d = new Date()) => d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');   // 파일명 날짜는 한국시간(toISOString 은 UTC 라 새벽 9시 전엔 전날)
+  const newRun = () => Math.random().toString(36).slice(2, 6);
+  // 응답 판독: 로그인 풀림(HTML)·권한·없는 주소·서버 오류·API 거절을 모두 오류로(빈 결과로 넘기면 가지 누락·빈 본문 덮어쓰기로 이어진다)
+  async function j(url) {
+    const r = await fetch(url, { credentials: 'include', headers: H });
+    if (r.status === 401 || r.status === 403) throw new Error(`DOORAY: 권한 없음(HTTP ${r.status}) — 로그인 확인 → 탭 새로고침 → 코어 재주입`);
+    if (r.status === 404) throw new Error('DOORAY: 없는 페이지·주소(HTTP 404)');
+    if (r.status >= 500) throw new Error(`DOORAY: 서버 오류(HTTP ${r.status})`);
+    let d;
+    try { d = JSON.parse(await r.text()); } catch (e) { throw new Error(`DOORAY: 응답이 JSON 이 아닙니다(HTTP ${r.status}) — 로그인이 풀렸을 수 있음`); }
+    if (d && d.header && d.header.isSuccessful === false) throw new Error('DOORAY: ' + (d.header.resultMessage || d.header.resultCode || '요청 거절'));
+    return d;
+  }
 
   // 자식 목록: GET /v2/wapi/wikis/{space}/pages?parentPageId=&size=500 → result.contents[] {pageId, subject, hasChildren, restricted, version, order}
   async function children(space, pid) {
     const d = await j(`/v2/wapi/wikis/${space}/pages?parentPageId=${pid}&size=500`);
-    return (d.result && d.result.contents) || [];
+    if (!d || !d.result) throw new Error('DOORAY: 하위 목록 응답에 result 없음');
+    return d.result.contents || [];
   }
   // 페이지 상세: GET /v2/wapi/wikis/{space}/pages/{id} → result.content {subject, body{mimeType:'text/x-markdown', content}, lastUpdate{dateTime, member{name}}, create{dateTime}, version, files[], images[], restricted}
   async function getPage(space, pid) {
     const d = await j(`/v2/wapi/wikis/${space}/pages/${pid}`);
-    return (d.result && d.result.content) || null;
+    if (!d || !d.result || !d.result.content) throw new Error('DOORAY: 페이지 응답에 content 없음');
+    return d.result.content;
   }
   function norm(c, n, space) {
     return { id: n.id, title: (c && c.subject) || n.title, parent: n.parent, depth: n.depth, path: n.path, version: c && c.version,
@@ -35,14 +49,17 @@
   }
 
   const progress = { phase: 'idle', walked: 0, total: 0, pages: 0, errors: 0, t0: 0, t1: 0 };
-  let tree = null, pages = null, lastErr = null;
+  let tree = null, pages = null, lastErr = null, walkErrors = [];
 
   // 트리 walk (읽기 전용). '---' 구분선 페이지는 건너뛴다.
   async function walk(space = DEFAULT_SPACE, home = DEFAULT_HOME, { delayMs = 120 } = {}) {
     const out = [];
     async function rec(pid, depth, anc) {
       if (depth > 25) return;
-      const kids = await children(space, pid); progress.walked++;
+      let kids;
+      try { kids = await children(space, pid); }
+      catch (e) { walkErrors.push({ pid, path: anc.join('/'), error: String(e).slice(0, 100) }); progress.errors++; return; }   // 가지 실패는 기록하고 계속(가져오기가 삭제 판정을 보류한다)
+      progress.walked++;
       for (const k of kids) {
         if (!k.pageId || /^-{3,}/.test(k.subject || '')) continue;
         const node = { id: k.pageId, title: k.subject || '', parent: pid, depth, path: anc.concat([k.subject || '']), hasChildren: !!k.hasChildren, restricted: !!k.restricted, version: k.version, order: k.order };
@@ -58,7 +75,7 @@
   // 전체 수집(페이지 안에서 비동기 진행) — 호출 후 status() 로 진행 확인. 끝나면 exportSnapshot() 으로 파일 저장.
   function crawlAll({ space = DEFAULT_SPACE, home = DEFAULT_HOME, delayMs = 200 } = {}) {
     if (progress.phase === 'walk' || progress.phase === 'pages') return 'already running';
-    Object.assign(progress, { phase: 'walk', walked: 0, total: 0, pages: 0, errors: 0, t0: Date.now(), t1: 0 }); lastErr = null; tree = null; pages = null;
+    Object.assign(progress, { phase: 'walk', walked: 0, total: 0, pages: 0, errors: 0, t0: Date.now(), t1: 0 }); lastErr = null; tree = null; pages = null; walkErrors = [];
     (async () => {
       try {
         const hp = await getPage(space, home);
@@ -80,39 +97,49 @@
 
   function status() {
     const p = progress, el = Math.round(((p.t1 || Date.now()) - (p.t0 || Date.now())) / 1000);
-    return `phase ${p.phase} | walked ${p.walked} | tree ${p.total} | pages ${p.pages} | errors ${p.errors} | ${el}s` + (lastErr ? ' | ERR ' + lastErr.slice(0, 80) : '');
+    return `phase ${p.phase} | walked ${p.walked} | tree ${p.total} | pages ${p.pages} | errors ${p.errors}` + (walkErrors.length ? ` (하위 목록 실패 ${walkErrors.length})` : '') + ` | ${el}s` + (lastErr ? ' | ERR ' + lastErr.slice(0, 80) : '');
   }
 
   // export JSON 다운로드(브라우저 다운로드 폴더). ⚠️ 사용자 확인 후 호출(파일명·크기 알리고).
   function exportSnapshot({ space = DEFAULT_SPACE, home = DEFAULT_HOME, filename } = {}) {
     if (!pages) return 'no pages yet — crawlAll() 먼저';
-    const d = new Date(), ymd = d.toISOString().slice(0, 10).replace(/-/g, '');
-    const name = filename || `kist_wiki_${ymd}.json`;
-    const text = JSON.stringify({ space_id: space, home_page_id: home, exported_at: d.toISOString(), count: pages.length, pages });
+    const d = new Date(), run = newRun();
+    const name = filename || `kist_wiki_${ymdLocal(d)}_${run}.json`;
+    const text = JSON.stringify({ run_id: run, space_id: space, home_page_id: home, exported_at: d.toISOString(), count: pages.length, walk_errors: walkErrors, pages });
     const blob = new Blob([text], { type: 'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
-    return `download ${name} (${Math.round(text.length / 1024)} KB, ${pages.length} pages)`;
+    return `download ${name} (${Math.round(text.length / 1024)} KB, ${pages.length} pages) → python scripts/wiki_snapshot.py import --from-downloads --expect ${run}`;
   }
   function sizeEstimate() { return pages ? Math.round(JSON.stringify(pages).length / 1024) + ' KB' : 'no pages'; }
 
-  // 인용 전 최신 확인 — 수정일·버전만(출력 제약 안전). ids: 페이지 id 배열.
-  async function checkFresh(ids, { space = DEFAULT_SPACE } = {}) {
+  // 인용 전 최신 확인 — 수정일·버전만(출력 제약 안전).
+  //   ids: 페이지 id 배열, 또는 {id: 로컬 version} 객체(스냅샷 .md frontmatter 의 version) — 객체로 주면 줄마다 SAME/CHANGED 를 붙인다.
+  //   비동기 결과는 javascript_tool 이 {} 로 돌려줄 수 있어 lastFresh 에 두고 fmtFresh() 로 읽는다(시작할 때 비워 옛 결과를 보이지 않는다).
+  let lastFresh = null, freshRunning = false;
+  async function checkFresh(ids, { space = DEFAULT_SPACE, known = null } = {}) {
+    if (ids && !Array.isArray(ids) && typeof ids === 'object') { known = ids; ids = Object.keys(ids); }
+    lastFresh = null; freshRunning = true;
     const out = [];
-    for (const id of ids) {
-      try { const c = await getPage(space, id); out.push({ id, updatedAt: c && c.lastUpdate && c.lastUpdate.dateTime || '', version: c && c.version, title: c && c.subject || '' }); }
-      catch (e) { out.push({ id, error: String(e).slice(0, 80) }); }
-      await sleep(150);
-    }
-    lastFresh = out;   // 비동기 결과는 javascript_tool 이 {} 로 돌려줄 수 있으니 여기 두고 fmtFresh() 로 읽는다
+    try {
+      for (const id of ids) {
+        const local = known && known[id] != null ? known[id] : undefined;
+        try { const c = await getPage(space, id); out.push({ id, updatedAt: c && c.lastUpdate && c.lastUpdate.dateTime || '', version: c && c.version, title: c && c.subject || '', local }); }
+        catch (e) { out.push({ id, error: String(e).slice(0, 80), local }); }
+        await sleep(150);
+      }
+    } finally { freshRunning = false; lastFresh = out; }
     return out;
   }
-  let lastFresh = null;
-  // 최신 확인 결과 한 줄씩(출력 필터 대응: 긴 숫자는 4자리마다 '-', '=' 없음). r 를 안 주면 마지막 checkFresh 결과.
+  // 최신 확인 결과 한 줄씩(출력 필터 대응: 긴 숫자는 4자리마다 '-', '=' 없음). 인자를 안 주면 마지막 checkFresh 결과.
   function fmtFresh(r) {
-    r = r || lastFresh; if (!r) return 'checkFresh 먼저 (비동기, 2~3초)';
-    const hy = x => String(x == null ? '' : x).replace(/(\d{4})(?=\d)/g, '$1-');
-    return r.map(x => x.error ? `${hy(x.id)} | ERR ${x.error}` : `${hy(x.id)} | ${(x.updatedAt || '').slice(0, 10)} | v${x.version} | ${String(x.title || '').slice(0, 30)}`).join('\n').replace(/[=&?;]/g, ' ');
+    if (r && !Array.isArray(r) && r.error) return 'ERR ' + sanitize(r.error);
+    r = Array.isArray(r) ? r : lastFresh;
+    if (!r) return freshRunning ? '확인 중 — 2~3초 뒤 다시' : 'checkFresh 먼저 (비동기, 2~3초)';
+    const n = r.filter(x => x.local !== undefined && !x.error && String(x.local) !== String(x.version)).length, e = r.filter(x => x.error).length;
+    return `[최신 확인 ${r.length}쪽` + (r.some(x => x.local !== undefined) ? `, CHANGED ${n}` : '') + (e ? `, ERR ${e}` : '') + ']\n'
+      + r.map(x => x.error ? `${hyId(x.id)} | ERR ${sanitize(x.error)}`
+        : `${hyId(x.id)} | ${(x.updatedAt || '').slice(0, 19)} | v${x.version}` + (x.local === undefined ? '' : String(x.local) === String(x.version) ? ' | SAME' : ` | CHANGED 로컬 v${x.local}`) + ` | ${sanitize(String(x.title || '').slice(0, 30))}`).join('\n');
   }
 
   // ---------- 담당자표: 포탈 게시판 "부서별업무분장표" (그룹웨어 xClick, 게시판 id FC_BBS224) — ✅ 2026-09-25 실측 ----------
@@ -254,7 +281,11 @@
     })();
     return 'started';
   }
-  function staffStatus() { return `phase ${staffProgress.phase} | ${staffProgress.done}/${staffProgress.total}` + (staffErr ? ' | ERR ' + staffErr.slice(0, 100) : '') + (staffData ? ` | teams ${staffData.length}, tables ${staffData.filter(x => x.tables.length).length}, errors ${staffData.filter(x => x.error).length}` : ''); }
+  function staffStatus() {
+    const d = staffData;
+    return `phase ${staffProgress.phase} | ${staffProgress.done}/${staffProgress.total}` + (staffErr ? ' | ERR ' + staffErr.slice(0, 100) : '')
+      + (d ? ` | teams ${d.length}, tables ${d.filter(x => x.tables.length).length}, image ${d.filter(x => !x.error && !x.tables.length && x.contentImgs).length}, 표 인식 실패 ${d.filter(x => !x.error && !x.tables.length && !x.contentImgs).length}, errors ${d.filter(x => x.error).length}` : '');
+  }
   // 차분 갱신(수시 변경 대응, 2026-09-25): known = {팀명: 글번호}(`wiki_staff.py known` 출력) 를 주면 목록을 다시 읽어 글번호가 커진(또는 새로 생긴) 팀만 kkWiki.changed 에 남긴다.
   //   비동기라 javascript_tool 은 {} 를 돌려주므로 staffChangedStatus() 로 결과를 읽고, staffCollect({ list: kkWiki.changed }) 로 그 팀만 수집한다.
   let staffChangedList = null;
@@ -292,27 +323,28 @@
   // 덤프 문자열(wiki_staff.py import 형식)
   function staffDump() {
     if (!staffData) return '';
-    const L = [`=== KKWIKI-STAFF v1 | exported ${new Date().toISOString()} | board ${STAFF_BBS} | teams ${staffData.length} ===`];
+    const run = newRun();
+    const L = [`=== KKWIKI-STAFF v1 | exported ${new Date().toISOString()} | board ${STAFF_BBS} | teams ${staffData.length} | run ${run} ===`];
     for (const t of staffData) {
       L.push(`## 팀: ${t.team} | 글번호 ${t.no} | 게시일 ${t.date} | 게시자 ${t.poster || ''} | 제목 ${String(t.title || '').replace(/\|/g, '/')} | id ${t.id} | url ${t.url || shareUrl(t.id)}` + (t.stale ? ' | 오래됨 예' : ''));
       const tb = (t.tables || []).slice().sort((a, b) => b.length - a.length)[0];
       if (tb && tb.length > 1) { for (const row of tb) L.push('| ' + row.map(c => c.replace(/\|/g, '/')).join(' | ') + ' |'); }
-      else L.push(t.error ? `(표 없음 — ${t.error})` : `(표 없음 — 이미지 게시글, 이미지 ${t.contentImgs || 0}개: 링크에서 직접 확인)`);
+      else L.push(t.error ? `(표 없음 — 수집 오류: ${t.error})` : t.contentImgs ? `(표 없음 — 이미지 게시글, 이미지 ${t.contentImgs}개: 링크에서 직접 확인)` : `(표 없음 — 표 인식 실패: 본문 ${t.textLen || 0}자, 머리행 규칙 확인)`);
       L.push('');
     }
     L.push('=== END ===');
+    staffDump.lastRun = run;
     return L.join('\n');
   }
   // 현재 문서를 덤프 <pre> 로 바꾼다(그룹웨어 화면은 사라짐 → 읽은 뒤 새로고침). 사용자 화면이 바뀌므로 미리 알릴 것.
   // 담당자표 덤프를 파일로 다운로드 — get_page_text 로 읽어 다시 적는 대신 다운로드 폴더에서 `wiki_staff.py import --from-downloads` (2026-09-27, LLM 토큰 절약)
   function staffDownload(filename) {
     const s = staffDump(); if (!s) return 'no staff data';
-    const d = new Date(), ymd = d.toISOString().slice(2, 10).replace(/-/g, '');
-    const name = filename || `kiki_staff_dump_${ymd}.txt`;
+    const run = staffDump.lastRun, name = filename || `kiki_staff_dump_${ymdLocal().slice(2)}_${run}.txt`;
     const blob = new Blob([s], { type: 'text/plain;charset=utf-8' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
-    return `download ${name} (${Math.round(s.length / 1024)} KB, ${staffData.length} teams) — 다운로드 폴더에서 python wiki_staff.py import --from-downloads [--keep]`;
+    return `download ${name} (${Math.round(s.length / 1024)} KB, ${staffData.length} teams) → python scripts/wiki_staff.py import --from-downloads --expect ${run} [--keep]`;
   }
   function staffRender() {
     const s = staffDump(); if (!s) return 'no staff data';
@@ -323,10 +355,9 @@
   // 출력 도우미 (kk-mail 과 동일 제약)
   function sanitize(s) { return String(s == null ? '' : s).replace(/https?:\S+/gi, '[url]').replace(/[=&?;]/g, ' ').replace(/\d{8,}/g, '#').replace(/\//g, '>'); }
   function hyId(id) { return String(id).replace(/(\d{4})(?=\d)/g, '$1-'); }
-  function fmtFresh(list) { return (list || []).map(x => `${hyId(x.id)} | ${(x.updatedAt || '').slice(0, 19)} | v${x.version} | ${sanitize((x.title || x.error || '').slice(0, 40))}`).join('\n'); }
 
-  window.kkWiki = { children, getPage, walk, crawlAll, status, exportSnapshot, sizeEstimate, checkFresh, fmtFresh, sanitize, hyId, fmtFresh,
+  window.kkWiki = { children, getPage, walk, crawlAll, status, exportSnapshot, sizeEstimate, checkFresh, fmtFresh, sanitize, hyId,
     staffFrame, staffList, bbsListPage, teamFromTitle, staffChanged, staffChangedStatus, get changed() { return staffChangedList; }, staffCollect, staffStatus, staffDump, staffRender, staffDownload, shareUrl, readArticleViaIframe, get staff() { return staffData; }, staffProgress,
-    get tree() { return tree; }, get pages() { return pages; }, progress, staffShowImage, _version: 'kk-wiki-ops/1.6' };
+    get tree() { return tree; }, get pages() { return pages; }, progress, staffShowImage, _version: 'kk-wiki-ops/1.7' };
   return window.kkWiki._version + ' =^.^=';
 })();

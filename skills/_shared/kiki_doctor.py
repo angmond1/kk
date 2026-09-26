@@ -59,6 +59,9 @@ def kiki_root():
 
 
 def downloads_dir():
+    d = os.environ.get("KIKI_DOWNLOADS", "").strip()      # make_report.py·wiki_snapshot.py 와 같은 규칙(환경변수 → 레지스트리 → ~/Downloads)
+    if d:
+        return os.path.expanduser(d)
     if IS_WIN:
         try:
             import winreg
@@ -122,7 +125,14 @@ def run():
                     rep["common_filled"] = filled
     rep["configs"] = cfgs or "없음 (첫 실행 때 Claude 가 만든다)"
     tok = None
-    for p in [os.path.join(root, "token.txt")] + [os.path.join(d, x) for d in _cfg_dirs() for x in ("token.txt", "kiki.env")]:
+    try:                                                   # 업로드 스크립트와 같은 판정(값은 읽기만, 출력 안 함)
+        sys.path.insert(0, os.path.join(SKILLS, "kk-pay", "scripts"))
+        import dooray_drive as _dd
+        t, src = _dd._find_token()
+        tok = {"file": os.path.normpath(src) if src and os.path.exists(src) else (src or os.path.join(root, "token.txt")), "has_token": bool(t), "length": len(t)}
+    except BaseException:                                  # requests 가 없으면 dooray_drive 가 SystemExit — 아래 간이 판정으로
+        tok = None
+    for p in ([] if tok else [os.path.join(root, "token.txt")] + [os.path.join(d, x) for d in _cfg_dirs() for x in ("token.txt", "kiki.env")]):
         if os.path.exists(p):
             txt = io.open(p, encoding="utf-8-sig", errors="ignore").read()
             body = [l.strip() for l in txt.splitlines() if l.strip() and not l.lstrip().startswith("#")]
@@ -132,6 +142,9 @@ def run():
                 break
     rep["token"] = tok or {"file": os.path.join(root, "token.txt"), "has_token": False, "length": 0}
     rep["downloads_dir"] = downloads_dir()
+    rep["downloads_exists"] = os.path.isdir(rep["downloads_dir"])
+    if not rep["downloads_exists"]:
+        rep["notes"].append(f"다운로드 폴더가 없음: {rep['downloads_dir']} — Chrome 이 다른 폴더에 저장하면 환경변수 KIKI_DOWNLOADS 로 지정(kk-budget·kk-wiki 브라우저 경로)")
     conv = os.path.join(SKILLS, "kk-pay", "scripts", "convert.py")
     if os.path.exists(conv):
         try:
@@ -164,7 +177,7 @@ def text(rep):
         L.append("공통 항목 채움: " + " ".join(f"{k}{'✓' if v else '✗'}" for k, v in rep["common_filled"].items()))
     t = rep["token"]
     L.append(f"token: {'있음(길이 ' + str(t['length']) + ')' if t['has_token'] else '없음'} — {t['file']}")
-    L.append(f"다운로드 폴더: {rep['downloads_dir']}")
+    L.append(f"다운로드 폴더: {rep['downloads_dir']} ({'있음' if rep.get('downloads_exists') else '없음'})")
     if "convert_engines" in rep:
         L.append("변환 엔진: " + (json.dumps(rep["convert_engines"], ensure_ascii=False) if not isinstance(rep["convert_engines"], str) else rep["convert_engines"]))
     w = rep["wiki"]
@@ -173,6 +186,10 @@ def text(rep):
         L.append("참고: " + n)
     for i in rep["install"]:
         L.append("설치 필요: " + i)
+    L.append(f"[요약] {'문제 없음' if rep['ok'] and not rep['notes'] else ''}"
+             + (f"설치 필요 {len(rep['install'])}" if rep["install"] else "")
+             + (f"{', ' if rep['install'] else ''}참고 {len(rep['notes'])}" if rep["notes"] else "")
+             + f" | token {'있음' if rep['token']['has_token'] else '없음'} | 스냅샷 {rep['wiki']['pages'] if isinstance(rep['wiki'], dict) else 0}쪽")
     return "\n".join(L)
 
 

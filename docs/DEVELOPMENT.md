@@ -219,13 +219,17 @@ skill 문서·스크립트 주석·데모 데이터·답변 예시에 **실제 �
 |---|---|---|
 | 브라우저 코어 주입 | 원본 .js 전체를 매번 전송 | `.min.js`(주석 제거본, `tools/build_min.py` 생성·`sync-check` 가 최신 검사) — 30~40% 적은 글자 |
 | 환경 점검 | 명령 대여섯 개 | `_shared/kiki_doctor.py` 한 번 |
-| 담당자표 갱신 | 덤프를 LLM 이 읽고 다시 적음(2~3만 자 ×2) | `staffDownload()` → `wiki_staff.py import --from-downloads` |
-| 위키 브라우저 수집 | 다운로드 경로를 물어 import | `wiki_snapshot.py import --from-downloads` |
-| 예산 수집 | 과제마다 조회·숫자 옮겨 적기·JSON 손작성 | `collectAll()` → `fmtBudget()` 표 + `downloadSnapshot()` → `make_report.py --from-downloads --save-snapshot` |
-| 회의비 후보·인원 | LLM 이 거래처명 보고 골라 계산 | `fmtMeeting()`(★후보·인원·명세서 필요)·`headcount()`; 확정은 사용자 |
-| 회의록 엑셀 | 한글 든 파이썬 한 줄을 셸에 | `meeting_log_xlsx.py append/titles/path` |
-| 지급신청 파일명·정리 | LLM 이 셸 rename/Move-Item 작성(`]`·공백 함정) | `kk_pay_files.py plan/apply/archive` |
-| 스팸 1차 선별·첫 실행 현황 | 목록 전체를 LLM 이 판별 | `spamHints/fmtSpam`(점수·근거) + `fmtFolders/fmtRules` — 최종 판단은 LLM |
+| 담당자표 갱신 | 덤프를 LLM 이 읽고 다시 적음(2~3만 자 ×2) | `staffDownload()` → `wiki_staff.py import --from-downloads --expect <run>`(읽기 실패 팀·판독본 유지, 팀 감소·잘린 덤프 거부) |
+| 위키 브라우저 수집 | 다운로드 경로를 물어 import | `wiki_snapshot.py import --from-downloads --expect <run>` |
+| 예산 수집 | 과제마다 조회·숫자 옮겨 적기·JSON 손작성 | `collectAll()` → `collectStatus()` 의 `| OK` → `fmtBudget()` 표 + `downloadSnapshot()` → `make_report.py --from-downloads --expect <run> --save-snapshot` |
+| 회의비 후보·인원 | LLM 이 카드내역 전체를 읽고 인원 암산 | `fmtMeeting()`(영수증함 건만·인원 하한·50만 초과 표시)·`headcount()`; **업종·명세서 판단은 LLM**, 확정은 사용자 |
+| 회의록 엑셀 | 한글 든 파이썬 한 줄을 셸에 | `meeting_log_xlsx.py append`(필수 항목·중복 기록 거부)`/titles`(한 줄씩, `--full`)`/path` |
+| 지급신청 파일명·정리 | LLM 이 셸 rename/Move-Item 작성(`]`·공백 함정) | `kk_pay_files.py plan/apply/archive`(80자·전부 검사 후 적용·실패 시 되돌림·바뀐 이름 자동 추적) + `dooray_drive.py upload` 파일명 검사 |
+| 스팸 후보·첫 실행 현황 | 받은편지함 전체를 LLM 이 판별 | `fmtExternal`(사내 발신 제외 — 판단은 LLM) + `overview()/fmtOverview()` |
+**스크립트에서 LLM 으로 되돌린 것(2026-09-27 전체 흐름 검수, 실데이터 평가)** — 판단이 필요한 분류를 키워드 규칙으로 옮기면 틀린 결과가 '확정된 것처럼' 보여 더 위험하다:
+- 회의비 업종 판별(`FOOD`/`RECEIPT` 정규식): 실제 카드내역 거래처 70곳에서 식당·카페의 절반만 잡고(순대·치킨 체인·카츠·BBQ·호르몬 등 누락, '식당·카페 아님?' 오표시) 호프·와인(주류 — 회의비 불가)을 후보로 올렸다 → 코드는 영수증함 여부·인원 하한·50만 초과만, 업종·명세서 판단은 LLM.
+- 스팸 점수(`spamHints`): 받은편지함 3주치 226통에서 약탈적 저널·학회 모객·피싱 약 10통 중 1통만 '스팸의심', 지갑 펌웨어 피싱은 0점(거짓 안심) → 사내 발신만 걸러 외부 목록을 주고 판단은 LLM.
+**검수 원칙(같은 검수에서 정함)**: ① 실패는 결과처럼 보이면 안 된다 — 포매터는 `null`(아직)·`{error}`(실패)·결과를 구분해 찍는다(세션 만료가 '카드 0건'·'규칙 없음'·'폴더 0개'로 보이던 결함) ② 브라우저→파이썬 파일 전달은 실행 번호(`run`)로 짝짓는다(같은 날 옛 다운로드를 조용히 쓰던 결함) ③ 쓰기 스크립트는 전부 검사 후 적용, 도중 실패는 되돌림 ④ 중대 자산(담당자표)은 가져오기가 기존 데이터를 줄이면 저장하지 않는다 ⑤ 오프라인 결함 주입 시험은 `tools/selftest.sh`.
 스크립트로 옮기지 **않은** 것: fam_0704/0703 지급신청서 자동작성과 mcs_0003 검수창 입력(NEXACRO 쓰기 단계 — 화면 상태에 따라 분기가 많고 실제 상신 없이 끝까지 검증할 수 없어, 지금은 절차서의 검증된 JS 조각을 그대로 쓴다. 사용자 감독 하에 1건씩 실증하며 함수화할 것).
 
 ## 부록: 작업 절차 (세션 재현용)

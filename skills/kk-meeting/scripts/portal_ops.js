@@ -31,7 +31,11 @@
     var r = await fetch(path, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'text/xml; charset=UTF-8' }, body: body });
     var t = await r.text();
     // 세션 만료·잘못된 경로면 XML 대신 HTML(로그인·오류 페이지)이 온다 → 빈 결과로 넘어가지 않게 throw (2026-09-27 실측: authTk 가 틀려도 200 XML, 세션이 없으면 HTML)
-    if (!r.ok || t.indexOf('<Root') < 0) throw new Error('PORTAL: 통합정보 응답이 XML 이 아닙니다(HTTP ' + r.status + ') — 세션 만료 가능성. e.kist.re.kr 로그인 확인 → 통합정보 탭 새로고침 → 코어 재주입');
+    if (!r.ok || t.indexOf('<Root') < 0) {
+      if (r.status === 404) throw new Error('PORTAL: 요청 주소가 없습니다(HTTP 404 ' + path + ') — 통합정보 화면·주소가 바뀌었을 수 있음(코어 갱신 필요, 로그인 문제 아님)');
+      if (r.status >= 500) throw new Error('PORTAL: 통합정보 서버 오류(HTTP ' + r.status + ') — 잠시 뒤 1회 다시');
+      throw new Error('PORTAL: 통합정보 응답이 XML 이 아닙니다(HTTP ' + r.status + ') — 세션 만료 가능성. e.kist.re.kr 로그인 확인 → 통합정보 탭 새로고침 → 코어 재주입');
+    }
     var ec = /<Parameter id="ErrorCode"[^>]*>(-?\d+)</.exec(t);
     if (ec && +ec[1] < 0) { var em = /<Parameter id="ErrorMsg"[^>]*>([\s\S]*?)</.exec(t); throw new Error('PORTAL ErrorCode ' + ec[1] + (em ? ': ' + decodeEnt(em[1]).slice(0, 200) : '')); }
     return t;
@@ -121,51 +125,63 @@
   // ---------- 출력 조각 (Claude in Chrome javascript_tool 제약: ~1,000자 truncation, 8자리 이상 숫자·URL 가림, a=b 꼴 차단) ----------
   // 카드 목록을 12~15줄씩 읽는다. 승인번호는 4자리마다 '-', 날짜는 YYYY-MM-DD, 금액은 천단위 콤마 → 8자리 연속 숫자가 없다. '=' 도 없다.
   //   idx | 날짜 | 거래처 | 금액 | 승인 XXXX-XXXX | 상태 | 카드책임자 | (법인/연구비)
+  // 2-스텝 결과(window.__c) 그대로 넘긴다: null = 아직(또는 .then 에 오류 처리를 안 붙임) / {error} = 실패 / 배열 = 결과.
+  var NOT_YET = '(결과 없음 — 조회가 아직이면 2~3초 뒤 다시. 계속 이러면 .then(r=>…, e=>window.__c={error:String(e)}) 로 오류까지 저장했는지 확인)';
+  function errLine(x) { return 'ERR ' + String(x.error).replace(/https?:\S+/g, '[url]').replace(/[=&?;]/g, ' ').slice(0, 300); }
+  // 반환 문자열은 1,000자에서 잘린다(실측) → 줄 수가 아니라 글자 수로 끊고 머리줄에 다음 조각 번호를 적는다
+  function fitRows(rows, reserve) { var out = [], n = reserve || 150; for (var i = 0; i < rows.length; i++) { n += rows[i].length + 1; if (n > 960) break; out.push(rows[i]); } return out; }
   function fmtCards(rows, from, to) {
+    if (rows == null) return NOT_YET;
+    if (!Array.isArray(rows) && rows.error) return errLine(rows);
     rows = rows || []; from = from || 0; to = to == null ? from + 15 : to;
     var hy = function (x) { return String(x == null ? '' : x).replace(/(\d{4})(?=\d)/g, '$1-'); };
     var dt = function (d) { d = String(d || ''); return /^\d{8}$/.test(d) ? d.slice(0, 4) + '-' + d.slice(4, 6) + '-' + d.slice(6) : d; };
     var won = function (a) { if (a && typeof a === 'object') a = a.hi; var n = parseFloat(String(a == null ? '' : a).replace(/[^0-9.\-]/g, '')); return isNaN(n) ? String(a == null ? '' : a) : Math.round(n).toLocaleString('en-US'); };
-    var lines = rows.slice(from, to).map(function (c, k) {
+    var lines = fitRows(rows.slice(from, to).map(function (c, k) {
       return [from + k, dt(c.date), String(c.custnm || '').slice(0, 16), won(c.amount), '승인 ' + hy(c.apprno), c.status || '', c.holder || '', c.cardKind || ''].join(' | ').replace(/[=&?;]/g, ' ');
-    });
-    return '[' + from + '-' + Math.min(to, rows.length) + ' of ' + rows.length + ']\n' + lines.join('\n');
+    }));
+    var end = from + lines.length;
+    return '[' + from + '-' + end + ' of ' + rows.length + ']' + (end < Math.min(to, rows.length) ? ' ▶ 다음 조각 ' + end : '') + '\n' + lines.join('\n');
   }
-  // ---------- 회의비 후보 표시·인원 산정 (판단·확정은 사용자와 Claude, 계산과 1차 선별은 코드로 — 2026-09-27) ----------
-  //   meetingHints(rows) → 각 행에 candidate(식당·카페 & 영수증함)·headcount(⌈금액÷5만⌉+1)·receipt(명세서 jpg 필요 여부)·note / fmtMeeting(rows) 채팅용 조각
-  var FOOD = /식당|밥|국밥|국수|면옥|냉면|우동|라멘|덮밥|돈까스|돈가스|초밥|스시|횟집|해물|치킨|닭|오리|고기|갈비|삼겹|족발|보쌈|곱창|샤브|뷔페|buffet|한식|중식|일식|양식|분식|떡볶이|김밥|피자|pizza|버거|burger|파스타|pasta|샐러드|브런치|레스토랑|restaurant|다이닝|dining|키친|kitchen|bistro|비스트로|포차|주점|호프|맥주|와인|디저트|카페|cafe|coffee|커피|스타벅스|starbucks|투썸|테라로사|커피빈|이디야|메가엠지씨|컴포즈|빽다방|폴바셋|블루보틀|베이커리|bakery|제과|파리바게|뚜레쥬르|던킨|도넛|베이글|케이크|빵/i;
-  var RECEIPT = /카페|cafe|coffee|커피|마트|mart|편의점|gs25|세븐일레븐|이마트24|호텔|hotel|베이커리|bakery|제과|파리바게|뚜레쥬르|던킨|도넛|빵|케이크|디저트/i;
-  var CLEAR_CAFE = /스타벅스|starbucks|투썸|테라로사|커피빈|coffeebean/i;
+  // ---------- 회의비 후보 표 (2026-09-27 전체 흐름 검수로 다시 설계) ----------
+  //   코드는 결정적인 것만 붙인다: 미처리(영수증함) 여부 · 인원 하한 ⌈금액÷5만⌉+1 · 50만 초과(일상감사·차상위자) · 취소/삭제.
+  //   식당·카페·주점(주류·유흥 = 회의비 불가) 여부와 명세서(jpg) 필요 여부는 Claude 가 거래처명을 보고 판단한다 —
+  //   상호 키워드 규칙은 실제 카드내역 70곳에서 식당·카페의 절반만 잡고(순대·치킨 체인·카츠·BBQ 누락) 호프·와인을 후보로 올려 폐기했다.
+  //   meetingHints(rows) → 각 행에 pending·headcount·note / fmtMeeting(rows, from, to, {all}) → 기본은 영수증함 건만(idx 는 window.__c 의 원래 번호).
   function headcount(amount) {
     if (amount && typeof amount === 'object') amount = amount.hi;
     var n = parseFloat(String(amount == null ? '0' : amount).replace(/[^0-9.\-]/g, '')) || 0;
     return Math.ceil(n / 50000) + 1;
   }
+  function amountOf(a) { if (a && typeof a === 'object') a = a.hi; return parseFloat(String(a == null ? '' : a).replace(/[^0-9.\-]/g, '')) || 0; }
   function meetingHints(rows) {
-    return (rows || []).map(function (r) {
-      var c = String(r.custnm || ''), food = FOOD.test(c), pending = !r.status || /영수증함/.test(String(r.status));
-      return Object.assign({}, r, { candidate: food && pending, headcount: headcount(r.amount),
-        receipt: food ? (RECEIPT.test(c) && !CLEAR_CAFE.test(c) ? '명세서 jpg' : '카드전표 갈음') : '',
-        note: !pending ? '처리됨' : (food ? '' : '식당·카페 아님?') });
+    return (Array.isArray(rows) ? rows : []).map(function (r, i) {
+      var st = String(r.status || ''), pending = !st || /영수증함/.test(st), notes = [];
+      if (!pending) notes.push(/취소|삭제/.test(st) ? '취소·삭제' : '처리됨');
+      if (pending && amountOf(r.amount) > 500000) notes.push('50만↑ 일상감사·차상위자');
+      return Object.assign({}, r, { idx: i, pending: pending, headcount: headcount(r.amount), note: notes.join(', ') });
     });
   }
-  function fmtMeeting(rows, from, to) {
-    rows = meetingHints(rows); from = from || 0; to = to == null ? from + 15 : to;
+  function fmtMeeting(rows, from, to, opt) {
+    if (rows == null) return NOT_YET;
+    if (!Array.isArray(rows) && rows.error) return errLine(rows);
+    opt = opt || {}; from = from || 0; to = to == null ? from + 15 : to;
+    var all = meetingHints(rows), list = opt.all ? all : all.filter(function (c) { return c.pending; });
     var hy = function (x) { return String(x == null ? '' : x).replace(/(\d{4})(?=\d)/g, '$1-'); };
     var dt = function (d) { d = String(d || ''); return /^\d{8}$/.test(d) ? d.slice(0, 4) + '-' + d.slice(4, 6) + '-' + d.slice(6) : d; };
-    var won = function (a) { if (a && typeof a === 'object') a = a.hi; var n = parseFloat(String(a == null ? '' : a).replace(/[^0-9.\-]/g, '')); return isNaN(n) ? String(a == null ? '' : a) : Math.round(n).toLocaleString('en-US'); };
-    var lines = rows.slice(from, to).map(function (c, k) {
-      return [(c.candidate ? '★' : '') + (from + k), dt(c.date), String(c.custnm || '').slice(0, 16), won(c.amount), c.cardKind || '', c.candidate ? c.headcount + '명 이상' : '', c.receipt, c.note, '승인 ' + hy(c.apprno)].join(' | ').replace(/[=&?;]/g, ' ');
-    });
-    var n = rows.filter(function (c) { return c.candidate; }).length;
-    return '[' + from + '-' + Math.min(to, rows.length) + ' of ' + rows.length + ', ★후보 ' + n + ']\n' + lines.join('\n');
+    var won = function (a) { return Math.round(amountOf(a)).toLocaleString('en-US'); };
+    var lines = fitRows(list.slice(from, to).map(function (c) {
+      return [c.idx, dt(c.date), String(c.custnm || '').slice(0, 18), won(c.amount), c.cardKind || '', c.pending ? c.headcount + '명↑' : String(c.status || ''), c.note, '승인 ' + hy(c.apprno)].join(' | ').replace(/[=&?;]/g, ' ');
+    }), 170);
+    var nP = all.filter(function (c) { return c.pending; }).length, end = from + lines.length;
+    return '[' + (opt.all ? '전체' : '영수증함') + ' ' + from + '-' + end + ' of ' + list.length + ' | 조회 ' + all.length + '건 중 영수증함 ' + nP + ']' + (end < Math.min(to, list.length) ? ' ▶ 다음 조각 ' + end : '') + ' 인원은 하한, 업종·명세서는 거래처명으로 판단\n' + lines.join('\n');
   }
   window.kkmeeting = {
     authTk: authTk, ready: ready, nexBody: nexBody, ds: ds, post: post, parseRows: parseRows,
     queryCards: queryCards, queryCardsBoth: queryCardsBoth, queryProjects: queryProjects,
     queryPreApprovals: queryPreApprovals, matchPreApproval: matchPreApproval, fmtCards: fmtCards, esc: esc,
     meetingHints: meetingHints, fmtMeeting: fmtMeeting, headcount: headcount,
-    _version: 'kk-meeting-portal/1.2',
+    _version: 'kk-meeting-portal/1.3',
   };
   return window.kkmeeting._version + ' =^.^=';
 })();

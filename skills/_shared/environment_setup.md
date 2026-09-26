@@ -37,7 +37,7 @@ kiki 는 Chrome 창 두 종류를 쓴다. **skill 마다 쓰는 창이 정해져
 ### 3. 토큰 (`token.txt`) *(kk-pay 카드 RPA 업로드 · kk-meeting RPA 업로드 옵션만)*
 - 위치: **`<kiki_root>/token.txt`**(설치 스크립트가 생성, 예 `C:\kiki\token.txt`). `kiki_root` 는 `~/.claude/kiki/kiki.config.json` 에 기록돼 있다. (구형 `~/.claude/kiki/kiki.env` 도 계속 읽힌다.)
 - 토큰이 비어 있으면 **절대경로를 보여주며** 안내: *"https://kist.gov-dooray.com/setting/api/token 에서 개인 인증 토큰을 만들어 `<kiki_root>\token.txt`(예 `C:\kiki\token.txt`) 의 `Dooray token:` 다음 줄에 붙여넣고 저장한 뒤 '두레이 토큰 저장했다' 라고 알려주세요. ⚠️ 채팅창에 토큰을 붙여넣지 마세요(대화 기록 노출)."* 원하면 파일을 열어준다(`notepad`/`open -e`).
-- 사용자가 넣었다고 하면 `python <skill>/scripts/dooray_drive.py check`(kk-pay·kk-meeting 에 있음) 로 **값은 출력하지 않고** 길이·파일 위치만 확인(파일을 Read 하면 값이 대화에 남는다). 채팅에 값이 붙여넣어졌으면 즉시 파일로 옮기고 노출 위험을 알린다. 상세 `personal_config.md`.
+- 사용자가 넣었다고 하면 `python <skill>/scripts/dooray_drive.py check --live`(kk-pay·kk-meeting 에 있음) 로 **값은 출력하지 않고** 길이·파일 위치 + 실제 인증(읽기 1회)만 확인(파일을 Read 하면 값이 대화에 남는다). 토큰이 없으면 종료 코드 1, 만료·오타면 `ERR … 401`. 안내 줄 위나 머리글 없이 붙여넣어도 읽힌다. 채팅에 값이 붙여넣어졌으면 즉시 파일로 옮기고 노출 위험을 알린다. 상세 `personal_config.md`.
 - 조회 전용(kk-budget·kk-inspect)·세션쿠키(kk-mail)·세금계산서 직접작성은 토큰 불요.
 
 ### 4. Python 패키지 — **필요한 시점에, 그때그때** (부트스트랩에서 일괄 설치 X)
@@ -88,3 +88,10 @@ kiki 는 Chrome 창 두 종류를 쓴다. **skill 마다 쓰는 창이 정해져
 1. **요약 줄만 읽고 기대치와 대조한다** — 스크립트·코어는 마지막에 건수·경고·실패·기준일을 한 줄로 찍는다. 전체 결과를 다시 읽거나 숫자를 다시 계산하지 않는다(그러면 절약이 사라지고 LLM 산술이 더 틀린다).
 2. **어긋나면 원인 줄을 보고 입력·상태를 바로잡아 딱 한 번 다시 돌린다** — 세션 만료면 로그인, 파일 없음이면 경로, 기간·사번이 빠졌으면 채워서. 무한 재시도 금지.
 3. **그래도 안 되면 문서의 수동 경로로 가고, 사용자에게 "스크립트가 X 때문에 실패해 수동으로 했다" 고 알린다** — 조용히 대신 하지 않는다(원인을 고칠 기회가 사라진다). 결과와 기대치가 다른데 원인을 모르면 그대로 사용자에게 보인다.
+
+**브라우저 코어 2-스텝의 약속(2026-09-27 전체 흐름 검수)** — 실패가 '0건'·'없음'으로 보이지 않게:
+- 저장은 항상 오류까지: `window.__x=null; <코어 호출>.then(r=>window.__x=r, e=>window.__x={error:String(e)}); 'started'`. 오류 처리를 빼면 세션 만료가 영원히 `null` 로 남아 원인이 안 보인다.
+- 반환은 **1,000자에서 잘린다**(실측) — 목록 포매터는 줄 수가 아니라 글자 수로 끊고 머리줄에 `▶ 다음 조각 K` 를 적는다 → 같은 포매터를 from=K 로 다시 부른다(`[TRUNCATED]` 가 보이면 포매터를 거치지 않은 것).
+- 포매터(`fmtList`·`fmtExternal`·`fmtOverview`·`fmtCards`·`fmtMeeting`·`fmtBudget`·`fmtFresh`)는 그 변수를 그대로 받는다: `(결과 없음 …)` = 아직(2~3초 뒤 다시; 두 번 넘게 이어지면 오류 처리 누락) / `ERR …` = 실패(`PORTAL:` 통합정보 세션, `DOORAY:` 두레이 로그인 → 로그인·탭 새로고침·재주입 후 1회) / `[… of N]` = 결과(N=0 은 정말 0건).
+- 브라우저에서 내려받은 파일을 파이썬이 쓸 때는 코어가 돌려준 명령의 `--expect <run>` 을 그대로 붙인다 — 그 실행의 파일만 쓰고, 없으면(Chrome 저장 창·'여러 파일 다운로드 허용' 대기) 20초 기다린 뒤 **옛 파일을 쓰지 않고** 멈춘다.
+- 쓰기 스크립트(`kk_pay_files.py apply/archive`, `dooray_drive.py upload`, `wiki_staff.py import`, `meeting_log_xlsx.py append`)는 먼저 전부 검사하고 하나라도 걸리면 **아무것도 바꾸지 않는다** — 일부만 바뀐 채 멈추지 않는다. 마지막 줄 `[요약]`·`[OK]` 를 본다.

@@ -24,7 +24,7 @@ description: KIST 과제 예산 수집·리포트 자동화 skill (kiki 패키�
 2. `document.title==="과제별관리"` + `window.application.authTk` 존재 확인. (없으면 로그인 요청)
    - ⚠️ `location.href`/쿠키 반환은 Chrome MCP 보안에 막힘 → 그 필드 빼고 반환.
    - ⚠️ 반환 객체의 **키 이름**에 `authTk`/`token`/`cookie` 가 들어가면 값이 아니어도(길이조차) `[BLOCKED: Sensitive key]` → `ready:true` 불리언만 반환.
-3. `scripts/portal_ops.min.js` Read → `javascript_tool` 로 inject (`window.kkBudget`, 반환 `kk-budget-portal/1.2 =^.^=`; (주입은 주석을 뺀 `portal_ops.min.js` 를 쓴다 — 내용 동일, 글자 수 30~40% 적음. 원본 `portal_ops.js` 는 읽을 필요 없다)).
+3. `scripts/portal_ops.min.js` Read → `javascript_tool` 로 inject (`window.kkBudget`, 반환 `kk-budget-portal/1.3 =^.^=`; (주입은 주석을 뺀 `portal_ops.min.js` 를 쓴다 — 내용 동일, 글자 수 30~40% 적음. 원본 `portal_ops.js` 는 읽을 필요 없다)).
 
 ## 3. 부트스트랩 (`kk-budget 설정해줘`, 첫 1회) — 순차 질문
 
@@ -45,7 +45,7 @@ description: KIST 과제 예산 수집·리포트 자동화 skill (kiki 패키�
 1. 준비(§2) + portal_ops inject. 🔴 새 브라우저·새 날·정오 이후엔 먼저 `navigate('https://e.kist.re.kr')` 로 로그인을 확인한 뒤 업무화면 딥링크(코어는 세션이 없으면 `PORTAL:` 오류를 던진다 → 로그인 후 탭 새로고침·재주입).
 2. 대상 = `kk-budget.config.json` 의 `track_projects`(비어 있거나 파일이 없으면 `kiki.config.json` `projects` 전체; 사용자 지정 일부도 가능).
    - 사용자가 과제를 **별칭**(과제명 일부·주제어)으로 부르면 `projects[].name` **부분일치**로 과제번호를 해석한다 — 되묻지 말고, 보고 첫 줄에 `과제번호 + 정식 과제명` 을 밝혀 확인 가능하게.
-3. **과제별 fetch — 한 번에**: `window.__r=null; window.kkBudget.collectAll({acccds:[…], userName:'<user.name>'}).then(r=>window.__r=r); 'started'`(acccds 를 비우면 참여 과제 전부) → 2~3초 뒤 `window.kkBudget.collectStatus()` 가 `done N/N` 이면 → **`window.kkBudget.fmtBudget()`**(채팅용 표, 백만원) 로 결과를 보고, **`window.kkBudget.downloadSnapshot()`** 로 스냅샷 JSON 을 다운로드 폴더에 저장한다(LLM 이 숫자를 옮겨 적지 않는다 — 전사 오류 0). 검산(`A == D + exec + pendingDone + pendingProg`)·조회 실패·목록에 없는 과제는 `warnings`/`not_found` 로 나오므로 보고에 그대로 옮긴다.
+3. **과제별 fetch — 한 번에**: `window.__r=null; window.kkBudget.collectAll({acccds:[…], userName:'<user.name>'}).then(r=>window.__r=r, e=>window.__r={error:String(e)}); 'started'`(acccds 를 비우면 참여 과제 전부) → 2~3초 뒤 `window.kkBudget.collectStatus()` — 끝이 **`| OK`** 면(= `done N/N`, 경고 0, 목록에 없는 과제 0) → **`window.kkBudget.fmtBudget()`**(채팅용 표, 백만원; 인자 없이 — 코어가 이번 실행 결과를 기준으로 보여 준다) 로 결과를 보고, **`window.kkBudget.downloadSnapshot()`** 로 스냅샷 JSON 을 다운로드 폴더에 저장한다(LLM 이 숫자를 옮겨 적지 않는다 — 전사 오류 0). 반환 문자열 끝의 명령(`… --expect <run>`)을 그대로 5단계에 쓴다. 검산(`A == D + exec + pendingDone + pendingProg`)·조회 실패·목록에 없는 과제는 `warnings`/`not_found` 로 나오므로 보고에 그대로 옮긴다. 진행 중이면 `fmtBudget`·`downloadSnapshot` 이 `수집 중 k/N` 을, 실패면 `ERR …` 를 돌려준다(옛 결과를 보이지 않는다).
    - 코어가 `PORTAL:` 오류를 던지면 세션 만료 — `e.kist.re.kr` 로그인 → 탭 새로고침 → 재주입.
    - **과책 아닌 과제**: 과제 전체 카테고리 A/D는 정상 조회됨. 단 개인집계용 집행내역(적요)·인건비 상세는 권한 제한 가능 → 보고에 명시.
 4. **개인집계**(config `personal_share` 과제, optional): 집행내역 **적요+신청인**에 `filter_names` 포함 건 합산(완료+계류). 팝업은 **좌표 클릭 말고 `scripts/exec_detail.js` 주입 후 `kkExe.init()/cats()/open(dsRow,'exec')/parse(names)/close()`** (셀클릭 핸들러 직접 호출 — 해상도·행위치 무관, 🔴 닫기는 `kkExe.close()` 로만). `merge_act2_into_act1` 적용. → `references/budget_fetch_spec.md` 의 집행내역 경로.
@@ -53,7 +53,7 @@ description: KIST 과제 예산 수집·리포트 자동화 skill (kiki 패키�
    - `cats()` 는 카테고리(`cd` 있는 행)만 준다 — 소계/합계행은 팝업 대상 아님.
    - **재수집(증분)**: 직전 `yymmdd_{과제번호}_person.json` 이 있으면 `cats()` 의 exec/pd/pp 를 비목별로 먼저 대조 → **변동 비목 + 새로 생긴 계류(pd/pp 0→값)** 만 팝업 재오픈(개인귀속 비목은 변동 없어도 1회 확인 권장), 동일 비목은 이전 값 재사용하고 JSON·보고에 **'재사용' 명시**(총액이 같은 상쇄거래는 못 잡는다는 caveat 포함).
    - 이전 대비 **건수·금액 diff 는 두 스냅샷 JSON 값으로 계산해서** 적는다(기억·암산으로 쓰면 틀린다).
-5. **스냅샷 보관 + 엑셀 — 한 명령**: `python scripts/make_report.py --from-downloads --save-snapshot`(다운로드 폴더의 최근 `kiki_budget_*.json` → `~/.claude/kiki/kk-budget/data/yymmdd.json` 보관 + `{kiki_root}/budget/yymmdd.xlsx` 생성; 다른 위치는 `--out <xlsx>`). 다운로드 폴더가 다르면 환경변수 `KIKI_DOWNLOADS`. 개인집계(4)를 한 경우엔 `yymmdd_{과제번호}_person.json` 을 따로 적는다(비목별 총집행·건수·인물별 합·비고·caveats·diff).
+5. **스냅샷 보관 + 엑셀 — 한 명령**: `python scripts/make_report.py --from-downloads --expect <run> --save-snapshot`(`downloadSnapshot()` 이 알려 준 run 의 `kiki_budget_*.json` 만 쓴다 — 다운로드가 늦으면 20초까지 기다리고, 끝내 없으면 **같은 날 이전 실행분을 쓰지 않고** 오류로 멈춘다. → 엑셀 `{kiki_root}/budget/yymmdd.xlsx` 를 만든 뒤 `~/.claude/kiki/kk-budget/data/yymmdd.json` 보관; 다른 위치는 `--out <xlsx>`). 다운로드 폴더가 다르면 환경변수 `KIKI_DOWNLOADS`. 과제 0건 스냅샷은 엑셀·보관 모두 거부한다(그날 정상본을 덮지 않게). 개인집계(4)를 한 경우엔 `yymmdd_{과제번호}_person.json` 을 따로 적는다(비목별 총집행·건수·인물별 합·비고·caveats·diff).
    - 검증(openpyxl 으로 열어 셀 확인). Excel 이 그 파일을 열고 있으면 `PermissionError` → 닫아달라 안내 후 재시도.
    - 일부 과제·비목만 뽑을 땐 `collectAll({acccds:[…], categories:[…]})` 로 좁힌다(없는 비목은 `-` 로 표시).
    - Windows Bash: 경로를 `"C:\...\"` 처럼 **역슬래시로 끝내 따옴표로 감싸면 `unexpected EOF`** → `/c/kiki/budget/` 형식.
@@ -70,9 +70,8 @@ description: KIST 과제 예산 수집·리포트 자동화 skill (kiki 패키�
 
 ## 결과 점검 (스크립트·코어 결과를 쓰기 전)
 공통 3줄은 `../_shared/environment_setup.md` '결과 점검' 절(요약 줄만 대조 → 어긋나면 원인 고쳐 1회 재실행 → 그래도 안 되면 수동 경로 + 사용자에게 알림). 이 skill 의 기대치:
-- `collectStatus()` 가 `done N/N` 이고 N = 대상 과제 수, `warnings 0` 이어야 한다. 경고가 있으면 `fmtBudget()` 의 ⚠ 줄을 그대로 보고에 싣는다.
-- `fmtBudget()` 값이 모두 `-` 거나 0.0 이면 세션 만료·과제번호 오류를 의심한다(코어 `PORTAL:` 오류 → 로그인·재주입 1회).
-- `make_report.py` 요약 줄의 과제 수가 N 과 같아야 한다. 다르면 다운로드 폴더의 오래된 파일을 읽은 것 — `downloadSnapshot()` 을 다시 하고 1회 재실행.
+- `collectStatus()` 끝이 `| OK` 여야 한다(`done N/N`, N = 대상 과제 수, 경고 0, 목록에 없음 0). `error …| ERR …` 면 원인대로: `PORTAL:` = 세션 만료(로그인 → 탭 새로고침 → 재주입 후 1회), `목록에 없음` = 과제번호 확인. 경고만 있으면 `fmtBudget()` 의 ⚠ 줄을 그대로 보고에 싣는다.
+- `make_report.py` 요약 줄 `[OK] 저장: … (과제 N, …, run <run>)` 의 run 이 `collectStatus()` 의 run 과 같아야 한다(`--expect` 를 쓰면 스크립트가 보장). `방금 내려받은 파일(run …)이 … 없습니다` 면 Chrome 의 저장 창·'여러 파일 다운로드 허용' 을 사용자에게 눌러 달라고 한 뒤 같은 명령 1회.
 
 ## 6. 안전 규칙
 - **조회·로컬 엑셀쓰기 전용** — 포털 제출/변경/결재 없음 → 자동. 토큰 불필요(SSO 세션).
@@ -83,7 +82,7 @@ description: KIST 과제 예산 수집·리포트 자동화 skill (kiki 패키�
 `kk-budget.config.example.json` 참고. 키: `track_projects`(추적 과제 acccd 목록, 비우면 kiki.config `projects` 전체) / `track_categories` / `personal_share`(과제+filter_names+allocations+merge_act2_into_act1) / `output_dir` / `filename_pattern`. 본인 이름(과책 판별)·참여과제는 공통 `kiki.config.json` 의 `user.name`·`projects`.
 
 ## 참고
-- `scripts/portal_ops.js`(주입은 `.min.js`) — `queryProjects`·`queryBudgetTable`·**`collectAll`·`collectStatus`·`downloadSnapshot`·`fmtBudget`**(한 번에 수집·표·다운로드). `scripts/make_report.py --from-downloads` 가 그 JSON 을 엑셀로.
+- `scripts/portal_ops.js`(주입은 `.min.js`) — `queryProjects`·`queryBudgetTable`·**`collectAll`·`collectStatus`·`downloadSnapshot`·`fmtBudget`**(한 번에 수집·표·다운로드, run id 로 짝짓기). `scripts/make_report.py --from-downloads --expect <run>` 가 그 JSON 을 엑셀로.
 - [scripts/exec_detail.js](scripts/exec_detail.js)(주입은 `.min.js`) — 집행/계류 내역 팝업 헬퍼(`window.kkExe`): 셀클릭 핸들러 직접 호출·금액컬럼 자동판별·합계행 제외·이름 경계검증.
 - [references/budget_fetch_spec.md](references/budget_fetch_spec.md) — bdg_2030 fetch endpoint·컬럼 1:1 매핑·예산항목 코드·함정.
 - [references/budget_report_format.md](references/budget_report_format.md) — 채팅 표/엑셀 양식·직접비·개인집계·검산.

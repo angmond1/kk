@@ -21,7 +21,7 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from wiki_snapshot import snapshot_root, latest_download, downloads_dir  # noqa: E402
+from wiki_snapshot import snapshot_root, pick_download, downloads_dir  # noqa: E402
 
 
 def staff_dir(root: str) -> str:
@@ -175,8 +175,10 @@ def parse_dump(text: str) -> dict:
     | 팀장 | ◦ 재무업무 총괄 | 김키키 (NNNN) |
     (표 없음 — 이미지 게시글)
     """
-    m = re.search(r"=== KKWIKI-STAFF v1 \| exported ([^|]+)\| board ([^|]+)\| teams (\d+) ===", text)
-    meta = {"exported": (m.group(1).strip() if m else ""), "board": (m.group(2).strip() if m else ""), "teams_declared": int(m.group(3)) if m else 0}
+    m = re.search(r"=== KKWIKI-STAFF v1 \| exported ([^|]+)\| board ([^|]+)\| teams (\d+)(?: \| run (\w+))? ===", text)
+    meta = {"exported": (m.group(1).strip() if m else ""), "board": (m.group(2).strip() if m else ""), "teams_declared": int(m.group(3)) if m else 0,
+            "run": (m.group(4) or "") if m else "", "has_header": bool(m), "has_end": "=== END ===" in text,
+            "ocr": "화면 확대 캡처로 판독" in text}
     teams = []
     cur = None
     for line in text.splitlines():
@@ -215,52 +217,101 @@ def _old_mark(t: dict) -> str:
     return " ⚠오래됨" if t.get("old") else ""
 
 
-def cmd_import(root: str, paths: list, since: str = "2025-01-01", keep: bool = False) -> None:
+def _kind(t: dict) -> str:
+    """새 덤프 팀 항목의 성격: table / image(이미지 게시글) / error(수집 오류) / unparsed(표 인식 실패)."""
+    if t.get("rows"):
+        return "table"
+    note = t.get("note") or ""
+    if "수집 오류" in note or re.search(r"timeout|Error|오류", note):
+        return "error"
+    if "표 인식 실패" in note:
+        return "unparsed"
+    return "image"
+
+
+def cmd_import(root: str, paths: list, since: str = "2025-01-01", keep: bool = False, force: bool = False) -> None:
     """여러 덤프를 합친다(뒤 파일이 같은 팀을 덮어씀 — OCR 보정본·재수집본 반영용).
-    기간 정책(사용자 2026-09-25): since(기본 2025-01-01) 이후 글이 있는 부서가 기본이고, 그 이후 글이 없는 존속 부서는 그 전 최신 글을 쓰되 old=True(⚠오래됨)로 표시한다."""
-    data = None
-    jp0 = os.path.join(staff_dir(root), "staff.json")
-    if keep and os.path.exists(jp0):                       # 차분 갱신: 기존 팀을 유지한 채 새 덤프의 팀만 덮어씀
-        data = json.load(open(jp0, encoding="utf-8"))
+    기간 정책(사용자 2026-09-25): since(기본 2025-01-01) 이후 글이 있는 부서가 기본이고, 그 이후 글이 없는 존속 부서는 그 전 최신 글을 쓰되 old=True(⚠오래됨)로 표시한다.
+    보호(2026-09-27 — 담당자표는 중대 자산):
+      · 수집 오류·표 인식 실패로 표가 빈 팀은 기존 표를 유지한다(새 글이면 '새 글 읽기 실패' 표시).
+      · 이미지 게시글인데 같은 글번호의 기존 표(OCR 판독본)가 있으면 그 표를 유지한다. 글번호가 바뀌었으면 새 글로 두고 OCR 필요를 알린다.
+      · --keep 이 없는데 기존 팀이 새 덤프에서 빠지면 저장하지 않는다(일부만 든 덤프면 --keep, 정말 없어진 팀이면 --force).
+      · 머리줄의 팀 수와 읽은 팀 수가 다르거나 끝 표시(=== END ===)가 없으면 잘린 덤프로 보고 저장하지 않는다(--force 로 무시)."""
+    d0 = staff_dir(root)
+    jp = os.path.join(d0, "staff.json")
+    prev = json.load(open(jp, encoding="utf-8")) if os.path.exists(jp) else None
+    prev_by = {t["team"]: t for t in (prev or {}).get("teams", [])}
+    new_teams, order, problems = {}, [], []
+    meta = {}
     for path in paths:
         d = parse_dump(io.open(path, encoding="utf-8-sig").read())
-        # 같은 덤프 안에 같은 팀이 두 번 있으면 뒤 것이 이긴다(보정 덤프와 같은 규칙)
-        seen = {}
+        mt = d["meta"]
+        if mt.get("has_header"):
+            meta = mt
+            seen_n = len({t["team"] for t in d["teams"]})
+            if (mt["teams_declared"] and seen_n != mt["teams_declared"]) or not mt.get("has_end"):
+                problems.append(f"{os.path.basename(path)}: 머리줄 {mt['teams_declared']}팀인데 {seen_n}팀을 읽음" + ("" if mt.get("has_end") else ", 끝 표시(=== END ===) 없음") + " — 덤프가 잘렸을 수 있음")
         for t in d["teams"]:
-            seen[t["team"]] = t
-        d["teams"] = list(seen.values())
-        if data is None:
-            data = d
-        else:
-            by = {t["team"]: i for i, t in enumerate(data["teams"])}
-            for t in d["teams"]:
-                if t["team"] in by:
-                    data["teams"][by[t["team"]]] = t
-                else:
-                    data["teams"].append(t)
-    if not data or not data["teams"]:
-        raise SystemExit("[kk-wiki] 덤프에서 팀을 찾지 못했습니다 (형식: '## 팀: ...' 줄 필요)")
+            if mt.get("ocr") or "_ocr" in os.path.basename(path):
+                t["ocr"] = True
+            if t["team"] not in new_teams:
+                order.append(t["team"])
+            new_teams[t["team"]] = t                      # 같은 팀이 여러 번이면 뒤 것이 이긴다(보정 덤프와 같은 규칙)
+    if not new_teams:
+        raise SystemExit("[kk-wiki] 덤프에서 팀을 찾지 못했습니다 (형식: '## 팀: ...' 줄 필요) — 아무것도 바꾸지 않았습니다")
+    if problems and not force:
+        raise SystemExit("[kk-wiki] 저장하지 않았습니다 — " + " / ".join(problems) + ". 코어로 다시 받거나(staffDownload), 확인했으면 --force")
+    kept_err, kept_ocr, need_ocr, changed = [], [], [], []
+    merged = {}
+    for name in order:
+        t, old = new_teams[name], prev_by.get(name)
+        k = _kind(t)
+        if k in ("error", "unparsed") and old and old.get("rows"):
+            o = dict(old)
+            if str(old.get("no", "")) != str(t.get("no", "")):
+                o["read_fail_no"] = t.get("no", "")
+            merged[name] = o
+            kept_err.append(f"{name}({'수집 오류' if k == 'error' else '표 인식 실패'})")
+            continue
+        if k == "image" and old and old.get("rows"):
+            if str(old.get("no", "")) == str(t.get("no", "")):
+                merged[name] = old
+                kept_ocr.append(name)
+                continue
+            need_ocr.append(f"{name}(#{t.get('no', '')})")
+        if not old or str(old.get("no", "")) != str(t.get("no", "")):
+            changed.append(name)
+        merged[name] = t
+    if keep and prev:
+        teams = [merged.get(t["team"], t) for t in prev["teams"]] + [merged[n] for n in order if n not in prev_by]
+    else:
+        dropped = [n for n in prev_by if n not in merged]
+        if dropped and not force:
+            raise SystemExit(f"[kk-wiki] 저장하지 않았습니다 — 기존 {len(prev_by)}팀 중 {len(dropped)}팀이 새 덤프에 없습니다({', '.join(dropped[:8])}{' …' if len(dropped) > 8 else ''}). "
+                             "일부 팀만 다시 받은 덤프면 --keep(기존 팀 유지), 조직 개편 등으로 정말 없어진 팀이면 --force")
+        teams = [merged[n] for n in order]
+    data = {"meta": meta or (prev or {}).get("meta", {}), "teams": teams}
     old = []
     for t in data["teams"]:
-        d0 = (t.get("asof") or t.get("date") or "")[:10]
-        t["old"] = bool(since and re.match(r"^\d{4}-\d{2}-\d{2}$", d0) and d0 < since)
+        d1 = (t.get("asof") or t.get("date") or "")[:10]
+        t["old"] = bool(since and re.match(r"^\d{4}-\d{2}-\d{2}$", d1) and d1 < since)
         if t["old"]:
-            old.append(f"{t['team']}({d0})")
+            old.append(f"{t['team']}({d1})")
     data["since"] = since or ""
     data["old_teams"] = old
-    d = staff_dir(root)
-    jp = os.path.join(d, "staff.json")
     if os.path.exists(jp):
-        hist = os.path.join(d, "_history"); os.makedirs(hist, exist_ok=True)
+        hist = os.path.join(d0, "_history"); os.makedirs(hist, exist_ok=True)
         os.replace(jp, os.path.join(hist, f"staff_{time.strftime('%y%m%d_%H%M%S')}.json"))
     data["imported_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
     json.dump(data, open(jp, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     lines = [f"# 부서별 업무분장표 — 담당자 (수집 {data['imported_at'][:10]}, {len(data['teams'])}팀, 기준 {since or '전체'}~ 우선)", "",
              "출처: KIST 포탈 > 게시판 > 부서별업무분장표 (부서별 최신 게시글). 내부 자료 — 각자 PC 에만.", ""]
     for t in data["teams"]:
-        lines.append(f"## {t['team']}  (게시글 #{t.get('no', '')}, 기준 {t.get('asof') or t.get('date', '')}{_old_mark(t)}, 게시자 {t.get('poster', '')})")
+        lines.append(f"## {t['team']}  (게시글 #{t.get('no', '')}, 기준 {t.get('asof') or t.get('date', '')}{_old_mark(t)}{' · 이미지 판독' if t.get('ocr') else ''}, 게시자 {t.get('poster', '')})")
         if t.get("url"):
             lines.append(f"링크: {t['url']}")
+        if t.get("read_fail_no"):
+            lines.append(f"_⚠ 새 게시글 #{t['read_fail_no']} 을 읽지 못해 이전 표를 유지 — 다시 수집 필요_")
         if t["rows"]:
             lines.append("| 직무구분 | 직무 내용 | 담당 |"); lines.append("|---|---|---|")
             for r in t["rows"]:
@@ -268,9 +319,15 @@ def cmd_import(root: str, paths: list, since: str = "2025-01-01", keep: bool = F
         else:
             lines.append(f"_{t.get('note') or '표 없음'} — 포탈 게시판에서 게시글 #{t.get('no', '')} 직접 확인_")
         lines.append("")
-    io.open(os.path.join(d, "staff.md"), "w", encoding="utf-8", newline="\n").write("\n".join(lines))
+    io.open(os.path.join(d0, "staff.md"), "w", encoding="utf-8", newline="\n").write("\n".join(lines))
     n_tbl = sum(1 for t in data["teams"] if t["rows"])
-    print(f"[kk-wiki] 담당자표 저장: {len(data['teams'])}팀 (표 있음 {n_tbl}, 이미지·본문만 {len(data['teams']) - n_tbl}) → {d}")
+    n_prev = len(prev_by)
+    print(f"[kk-wiki] 담당자표 저장: {len(data['teams'])}팀 (표 있음 {n_tbl}, 이미지·본문만 {len(data['teams']) - n_tbl}) → {d0}"
+          f" | 이전 {n_prev}팀 → {len(data['teams'])}팀, 새 글 {len(changed)}" + (f", 이전 표 유지 {len(kept_err)}" if kept_err else "") + (f", 판독본 유지 {len(kept_ocr)}" if kept_ocr else ""))
+    if kept_err:
+        print(f"  ⚠ 읽기 실패로 이전 표를 유지한 팀: {', '.join(kept_err)} — 탭을 앞에 두고 그 팀만 다시 수집(staffCollect({{list}}))")
+    if need_ocr:
+        print(f"  ⚠ 새 이미지 게시글 — 판독(OCR) 필요: {', '.join(need_ocr)} (이전 판독본은 _history 에)")
     if old:
         print(f"  ⚠ {since} 이후 글이 없어 그 전 글을 쓴 팀 {len(old)}: {', '.join(old)} (부서 존속 여부 확인)")
 
@@ -304,7 +361,7 @@ def cmd_find(root: str, terms: list, top: int) -> None:
     hits.sort(key=lambda x: (bool(x[1].get("old")), -x[0]))   # 최근 글 있는 팀 먼저, 그 안에서 점수순 (⚠오래됨 팀은 뒤로)
     print(f"[kk-wiki] 담당자 '{' AND '.join(terms)}' → {len(hits)}건 (수집 {data.get('imported_at', '')[:10]})")
     for score, t, r in hits[:top]:
-        print(f"- {t['team']} | {r['role']} | {r['staff']} | 기준 {t.get('asof') or t.get('date', '')}{_old_mark(t)} | {r['duties'][:90]}" + (f"\n    링크 {t['url']}" if t.get('url') else ""))
+        print(f"- {t['team']} | {r['role']} | {r['staff']} | 기준 {t.get('asof') or t.get('date', '')}{_old_mark(t)}{' | 이미지 판독' if t.get('ocr') else ''}{' | ⚠새 글 미반영' if t.get('read_fail_no') else ''} | {r['duties'][:90]}" + (f"\n    링크 {t['url']}" if t.get('url') else ""))
     noimg = [t["team"] for t in data["teams"] if not t["rows"]]
     if noimg:
         print(f"  ※ 표가 이미지라 검색 안 되는 팀: {', '.join(noimg)}")
@@ -343,15 +400,19 @@ def main(argv=None):
     ap.add_argument("--top", type=int, default=15)
     ap.add_argument("--since", default="2025-01-01", help="이 날짜 이후 글이 없는 팀에 ⚠오래됨 표시 (빈 문자열이면 표시 안 함)")
     ap.add_argument("--keep", action="store_true", help="import: 기존 staff.json 의 팀을 유지하고 새 덤프의 팀만 덮어씀(차분 갱신)")
-    ap.add_argument("--from-downloads", action="store_true", help="import: 다운로드 폴더의 최근 kiki_staff_dump_*.txt(코어 staffDownload 결과)를 staff/ 로 복사해 가져온다")
+    ap.add_argument("--from-downloads", action="store_true", help="import: 다운로드 폴더의 kiki_staff_dump_*.txt(코어 staffDownload 결과)를 staff/ 로 복사해 가져온다")
+    ap.add_argument("--expect", default="", help="import --from-downloads: 코어가 알려 준 run id — 그 run 의 덤프만 쓴다(옛 파일 오사용 방지)")
+    ap.add_argument("--force", action="store_true", help="import: 기존 팀이 새 덤프에서 빠지거나 덤프가 잘려 보여도 그대로 저장(조직 개편 등 확인된 경우만)")
     a = ap.parse_intermixed_args(argv)   # `import --keep <덤프>` 처럼 옵션이 파일 앞에 와도 되게
     root = snapshot_root(a.root)
     if a.cmd == "import":
         paths = list(a.args)
         if a.from_downloads:
-            src = latest_download("kiki_staff_dump_*.txt")
+            src, why = pick_download("kiki_staff_dump_*.txt", a.expect, hint="코어 staffDownload()")
             if not src:
-                raise SystemExit("다운로드 폴더(" + downloads_dir() + ")에 24시간 내 kiki_staff_dump_*.txt 가 없습니다 — 브라우저 코어 staffDownload() 먼저")
+                raise SystemExit("[kk-wiki] " + why)
+            if not a.expect:
+                print(f"[kk-wiki] ⚠ --expect 없이 가장 최근 덤프를 씁니다: {os.path.basename(src)} — 방금 내려받은 파일이 맞는지 확인")
             import shutil
             d = staff_dir(root); os.makedirs(d, exist_ok=True)
             dst = os.path.join(d, "staff_dump_" + time.strftime("%y%m%d_%H%M") + ".txt")
@@ -359,7 +420,7 @@ def main(argv=None):
             paths = [dst] + paths
         if not paths:
             raise SystemExit("import <dump.txt> [보정덤프.txt ...]  또는  import --from-downloads [--keep]")
-        cmd_import(root, paths, a.since, a.keep)
+        cmd_import(root, paths, a.since, a.keep, a.force)
     elif a.cmd == "find":
         if not a.args:
             raise SystemExit("find <단어...>")

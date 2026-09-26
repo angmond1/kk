@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
+r"""
 kk-meeting 회의록 엑셀 헬퍼.
 
 표준(2026-09-24~): `{root}\{yymm}_회의록.xlsx` — 한 폴더, 월별 1파일(yymm = 지급신청 처리 연월). 그 달 처리 건은 모두 같은 파일에 행 추가.
@@ -91,7 +91,7 @@ DEFAULT_ROOT = default_root()
 
 
 def expected_path(yymm: str, root: Optional[str] = None) -> str:
-    """`{root}\{yymm}_회의록.xlsx` 경로 반환 (한 폴더, 월별 1파일)."""
+    r"""`{root}\{yymm}_회의록.xlsx` 경로 반환 (한 폴더, 월별 1파일)."""
     root = root or DEFAULT_ROOT
     return os.path.join(root, f"{yymm}_회의록.xlsx")
 
@@ -219,7 +219,18 @@ def read_log(path: str) -> list[dict]:
     return out
 
 
-def all_titles(root: Optional[str] = None) -> list[dict]:
+def find_duplicate(path: str, data: dict) -> Optional[dict]:
+    """같은 회의(사용일자·장소·계정·금액이 모두 같은 행)가 그 파일에 이미 있으면 그 행(dict), 없으면 None."""
+    if not os.path.exists(path):
+        return None
+    key = (str(data.get("date_text", "")).strip(), str(data.get("place", "")).strip(), str(data.get("acccd", "")).strip(), _to_amount(data.get("amount", 0)))
+    for r in read_log(path):
+        if (str(r["date_text"] or "").strip(), str(r["place"] or "").strip(), str(r["acccd"] or "").strip(), _to_amount(r["amount"])) == key:
+            return r
+    return None
+
+
+def all_titles(root: Optional[str] = None, skipped: Optional[list] = None) -> list[dict]:
     """중복 방지용 — 폴더의 모든 `*_회의록.xlsx` 를 읽어
     [{file, date_text, amount, place, acccd, title, content}] 를 반환한다.
     새 회의록을 쓰기 전 사용자가 준 주제를 title 들과 비교(같거나 유사하면 조정 제안)."""
@@ -235,7 +246,9 @@ def all_titles(root: Optional[str] = None) -> list[dict]:
         try:
             wb = openpyxl.load_workbook(os.path.join(root, fn), data_only=True)
             ws = wb["회의록"] if "회의록" in wb.sheetnames else wb.active
-        except Exception:
+        except Exception as e:
+            if skipped is not None:
+                skipped.append(f"{fn}({type(e).__name__})")
             continue
         for r in ws.iter_rows(min_row=2, values_only=True):
             r = list(r) + [None] * 9
@@ -250,10 +263,13 @@ def all_titles(root: Optional[str] = None) -> list[dict]:
 
 if __name__ == "__main__":
     # 명령줄 (Claude 가 한글이 든 파이썬 한 줄을 셸에 넣지 않게 — 2026-09-27):
-    #   python meeting_log_xlsx.py append <data.json> [--yymm YYMM] [--root DIR]   → 행 추가, "순번 N | 파일" 출력
-    #   python meeting_log_xlsx.py titles [--root DIR]                              → 과거 회의 제목·내용 JSON(중복 검사용)
-    #   python meeting_log_xlsx.py path <YYMM> [--root DIR]                         → 그 달 파일 경로(없으면 생성)
+    #   python meeting_log_xlsx.py append <row.json> [--yymm YYMM] [--root DIR] [--dup-ok]  → 행 추가, "순번 N | 파일" + [요약]
+    #   python meeting_log_xlsx.py titles [--root DIR] [--full]                           → 과거 회의 한 줄씩(중복 검사용). --full 이면 내용까지 JSON
+    #   python meeting_log_xlsx.py path <YYMM> [--root DIR]                                → 그 달 파일 경로(없으면 생성)
     import json as _json, time as _time
+    _USAGE = ("사용: python meeting_log_xlsx.py append <row.json> [--yymm YYMM] [--root DIR] [--dup-ok]\n"
+              "      python meeting_log_xlsx.py titles [--root DIR] [--full]\n"
+              "      python meeting_log_xlsx.py path <YYMM> [--root DIR]")
     _a = sys.argv[1:]
     def _opt(name):
         return _a[_a.index(name) + 1] if name in _a and _a.index(name) + 1 < len(_a) else None
@@ -261,14 +277,34 @@ if __name__ == "__main__":
     try:
         if _a and _a[0] == "append" and len(_a) >= 2:
             _data = _json.load(open(_a[1], encoding="utf-8-sig"))
+            if not isinstance(_data, dict):
+                print("ERR row.json 은 객체 하나({date_text, amount, place, acccd, int_members, ext_members, ext_org, title, content})여야 합니다"); sys.exit(1)
+            _miss = [k for k in ("date_text", "amount", "place", "acccd", "title") if not str(_data.get(k) or "").strip() or (k == "amount" and not _to_amount(_data.get(k)))]
+            if _miss:
+                print("ERR 필수 항목이 비어 기록하지 않았습니다:", ", ".join(_miss)); sys.exit(1)
             _p = open_or_create(_opt("--yymm") or _time.strftime("%y%m"), _root)
-            print("순번", append_row(_p, _data), "|", _p)
+            _dup = find_duplicate(_p, _data)
+            if _dup and "--dup-ok" not in _a:
+                print(f"ERR 같은 회의(사용일자·장소·계정·금액)가 이미 순번 {_dup['seq']} 으로 기록돼 있어 다시 쓰지 않았습니다 — 정말 별개 회의면 --dup-ok")
+                sys.exit(1)
+            _seq = append_row(_p, _data)
+            print("순번", _seq, "|", _p)
+            print(f"[요약] 추가 1건 — 이 파일 {len(read_log(_p))}건(직전 순번 {_seq - 1})")
         elif _a and _a[0] == "titles":
-            print(_json.dumps(all_titles(_root), ensure_ascii=False, indent=1))
+            _skip = []
+            _rows = all_titles(_root, _skip)
+            if "--full" in _a:
+                print(_json.dumps(_rows, ensure_ascii=False, indent=1))
+            else:
+                print(f"[회의록 {len(_rows)}건 | 파일 {len({r['file'] for r in _rows})}개 | {_root or DEFAULT_ROOT}] 월 | 사용일자 | 계정 | 제목")
+                for _r in _rows:
+                    print(f"{_r['file'][:4]} | {_r['date_text'][:18]} | {_r['acccd']} | {_r['title'][:70]}")
+            if _skip:
+                print("⚠ 읽지 못한 회의록 파일(열려 있거나 손상 — 중복 검사에서 빠짐):", ", ".join(_skip))
         elif _a and _a[0] == "path" and len(_a) >= 2:
             print(open_or_create(_a[1], _root))
         else:
-            print(__doc__)
+            print(_USAGE)
             sys.exit(1)
     except RuntimeError as e:
         print("ERR", e)
