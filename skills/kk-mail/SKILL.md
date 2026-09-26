@@ -124,6 +124,12 @@ description: |
 
 ---
 
+## 결과 점검 (스크립트·코어 결과를 쓰기 전)
+공통 3줄은 `../_shared/environment_setup.md` '결과 점검' 절(요약 줄만 대조 → 어긋나면 원인 고쳐 1회 재실행 → 그래도 안 되면 수동 경로 + 사용자에게 알림). 이 skill 의 기대치:
+- 목록 머리줄 `[a-b of N]` 에서 N 이 0이면 결과의 `error` 부터 본다(오류면 원인, 없으면 조건을 넓혀 1회 재검색).
+- `fmtSpam` 점수는 힌트다 — 표에 전체를 보이고 판단은 정책 문서로.
+- `createRule`·`reportSpam`·`moveMails` 응답의 `header.isSuccessful`(또는 `blocked`)을 확인하고, 실패면 같은 요청을 반복하지 않는다.
+
 ## 안전 규칙 (필수 준수)
 
 - **모든 쓰기(스팸신고·이동·규칙생성·삭제)는 사용자 confirm 후.** Claude는 분류·제안만 자동. **단 confirm 전에 대상 메일을 본문 표로 먼저 보여준다(위 ⛔ 공통 mandate).**

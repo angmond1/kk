@@ -110,27 +110,33 @@ def main():
         print('대상 없음. 사용: python convert_evidence.py <폴더/파일>  |  --pdf2jpg <pdf>')
         return 1
     bad = 0
+    n_ok = n_skip = n_err = 0
     for t in targets:
         if not os.path.exists(t):
             print('ERR 파일이 없습니다:', t)
-            bad = 1
+            bad = 1; n_err += 1
             continue
         ext = os.path.splitext(t)[1].lower()
         try:
             if ext in IMG_EXT:
                 for o in img_to_jpg(t):
                     print('img->jpg :', o)
+                n_ok += 1
             elif ext == '.pdf' and pdf2jpg:
                 print('pdf->jpg :', pdf_to_jpg(t))
+                n_ok += 1
             elif ext in SKIP_HINT:
                 print('건너뜀  :', os.path.basename(t), '—', SKIP_HINT[ext])
-                bad = 1
+                bad = 1; n_err += 1
+            else:
+                n_skip += 1
         except RuntimeError as e:                   # 패키지 없음 등 — 한 번 알리고 멈춘다
             print('ERR', e)
             return 1
         except Exception as e:
             print('ERR', os.path.basename(t), '->', e)
-            bad = 1
+            bad = 1; n_err += 1
+    print(f'[요약] 변환 {n_ok} / 그대로(pdf·jpg 등) {n_skip} / 실패 {n_err}')
     return bad
 
 

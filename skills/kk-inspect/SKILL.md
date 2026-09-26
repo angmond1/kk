@@ -7,6 +7,12 @@ description: KIST 통합정보시스템 소액검수신청(검수신청관리, m
 
 KIST 통합정보시스템의 **소액검수신청 (검수신청관리, `mcs_0003`)** 을 반자동 처리한다. 증빙을 파악해 검수창에 입력·파일첨부까지 자동으로 하고, 최종 신청(저장)만 사용자가 confirm 한다. KIST 연구원이면 누구나 자기 `~/.claude/kiki/kk-inspect.config.json`(repo 밖)으로 쓸 수 있게 설계됐다 — skill 본체에는 어떤 개인정보도 들어있지 않다.
 
+## 결과 점검 (스크립트·코어 결과를 쓰기 전)
+공통 3줄은 `../_shared/environment_setup.md` '결과 점검' 절(요약 줄만 대조 → 어긋나면 원인 고쳐 1회 재실행 → 그래도 안 되면 수동 경로 + 사용자에게 알림). 이 skill 의 기대치:
+- `convert_evidence.py` 마지막 `[요약]` 줄에서 실패가 0 이어야 한다. 실패 파일은 이유를 사용자에게 보이고 첨부에서 제외.
+- `rename_evidence.py` 는 `개명 저장:` 한 줄과 파일 존재를 확인. fam_0711 조회에서 본인 건이 0건이면 카드종류(5/3)·카드책임자를 바꿔 1회 재조회.
+- 검수창 입력 뒤 4단계 검증 JSON 이 기대값(검수일=다음 영업일, 지역·건물, 취득가)과 같아야 신청 안내로 넘어간다.
+
 ## ⛔ 안전장치 (항상 지킬 것)
 이 규칙들은 KIST 포털 정책과 직결되니 예외 없이 지킨다.
 - **신청(저장)은 사용자 본인** confirm 후. 결재성 저장은 본인 원칙. **파일첨부는 자동화 가능** (2026-06-07 codex + 2026-06-19 chrome-devtools-mcp 단일채널 실증): mcs_0003_pop2 는 `window.open` 별도 chrome page → 공통 가이드 [`../_shared/nexacro_file_upload.md`](../_shared/nexacro_file_upload.md) **§4 패턴 B + §4-6**. **★권장 = chrome-devtools-mcp 한 채널**(자체 격리 Chrome 에 KIST 1회 로그인 후 `navigate_page`/`select_page`/`take_snapshot`→`upload_file`). ⚠️ `upload_file` 은 **cwd workspace root 안 파일만** → 증빙이 밖(`D:\…`)이면 cwd 하위로 복사. 컴포넌트 = `fileDiv1`. 상세: `references/mcs0003_fields.md` "파일첨부 자동화" 절.

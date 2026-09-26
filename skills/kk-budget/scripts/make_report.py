@@ -147,7 +147,7 @@ def main(json_path, out_path):
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     wb.save(out)
-    print(f"[OK] 저장: {out}")
+    print(f"[OK] 저장: {out} (과제 {len(projs)}, 비목 {len(cats)}, 기준일 {ds})")
     return out
 
 
