@@ -21,9 +21,9 @@
 ## 덤프 형식 (`staffRender()` → `get_page_text` → `wiki_staff.py import`)
 ```
 === KKWIKI-STAFF v1 | exported <ISO> | board FC_BBS224 | teams N ===
-## 팀: 재무팀 | 글번호 77956 | 게시일 08-18 17:58 | 게시자 장승현 | 제목 [재무팀] 업무분장 안내('26.08.18.) | id NEW… | url https://ngw.kist.re.kr/xclick_kist/dispatcherArticleView.jsp?articleId=NEW…&userid=SESSIONNOCHECK
+## 팀: 재무팀 | 글번호 NNNNN | 게시일 08-18 17:58 | 게시자 김키키 | 제목 [재무팀] 업무분장 안내('26.08.18.) | id NEW… | url https://ngw.kist.re.kr/xclick_kist/dispatcherArticleView.jsp?articleId=NEW…&userid=SESSIONNOCHECK
 | 직무구분 | 직무 내용 | 담당 |
-| 팀장 | ◦ 재무업무 총괄 | 장승현 (6026) |
+| 팀장 | ◦ 재무업무 총괄 | 김키키 (NNNN) |
 (표 없음 — 이미지 게시글, 이미지 1개: 링크에서 직접 확인)
 === END ===
 ```
@@ -39,7 +39,7 @@
 - 2026-09-25 실측: 가치혁신팀 7행(`구분|세부내용|담당자` 'T.내선'), 총무복지팀 25행(`구분|내용|담당자|내선번호`), 국제협력팀 30행(`번호|대분류|중분류|소분류(업무내용)|담당자`). 한 팀 10분 안팎. 끝나면 탭을 새로고침해 되돌린다. 답에 붙일 땐 "이미지 판독" 표시.
 
 ## 차분 갱신 (수시 변경 대응 — 사용자 "담당자표 갱신해줘" 한마디에 바로)
-1. `python scripts/wiki_staff.py known` → `{"재무팀":77956,…}` 한 줄(팀별 마지막으로 읽은 글번호).
+1. `python scripts/wiki_staff.py known` → `{"재무팀":NNNNN,…}` 한 줄(팀별 마지막으로 읽은 글번호).
 2. `ngw.kist.re.kr` 탭(빈 화면 `XClickController?isDispath=true` 도 됨) 에 코어 주입 → `window.kkWiki.staffChanged({…known…})` → 2~3초 뒤 `staffChangedStatus()`.
    - "(변경 없음)" 이면 끝. (2026-09-25 실측: 빈 화면 탭에 코어 1.4 주입 → 4초 만에 "(변경 없음 — 담당자표가 최신)" + excluded 3건 표시, 게시판 메뉴 클릭 없이 동작) 바뀐 팀이 있으면 `staffCollect({ list: window.kkWiki.changed })` → `staffStatus()` done → `staffRender()` → `get_page_text` → `staff_dump_yymmdd.txt` 저장.
 3. 이미지 게시글이면 위 OCR 절차로 `_ocr.txt` 보정. `python scripts/wiki_staff.py import --keep <새 덤프> [<_ocr.txt>]` → 기존 팀은 그대로, 바뀐 팀만 교체. `status` 로 확인.

@@ -7,8 +7,6 @@
 
   "track_categories": ["재료비", "시설장비비", "활동비1", "활동비2", "내부인건비2", "학생인건비"],
 
-  "show_direct_subtotal": true,
-
   "personal_share": [
     {"_help": "(optional) 공동과제 본인 지분. filter_names=집행내역 적요에 잡을 이름(연구자/행정원/혼합, 복수). merge_act2_into_act1=활동비2를 활동비1 풀에 합산.",
      "acccd": "", "filter_names": [], "allocations": {"재료비": 0, "활동비1": 0, "내부인건비2": 0}, "merge_act2_into_act1": true}

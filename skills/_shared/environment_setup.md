@@ -35,8 +35,8 @@ kiki 는 Chrome 창 두 종류를 쓴다. **skill 마다 쓰는 창이 정해져
 
 ### 3. 토큰 (`token.txt`) *(kk-pay 카드 RPA 업로드 · kk-meeting RPA 업로드 옵션만)*
 - 위치: **`<kiki_root>/token.txt`**(설치 스크립트가 생성, 예 `C:\kiki\token.txt`). `kiki_root` 는 `~/.claude/kiki/kiki.config.json` 에 기록돼 있다. (구형 `~/.claude/kiki/kiki.env` 도 계속 읽힌다.)
-- 토큰이 비어 있으면 **절대경로를 보여주며** 안내: *"https://kist.gov-dooray.com/setting/api/token 에서 개인 인증 토큰을 만들어 `C:\kiki\token.txt` 의 `Dooray token:` 다음 줄에 붙여넣고 저장한 뒤 '두레이 토큰 저장했다' 라고 알려주세요. ⚠️ 채팅창에 토큰을 붙여넣지 마세요(대화 기록 노출)."* 원하면 파일을 열어준다(`notepad`/`open -e`).
-- 사용자가 넣었다고 하면 파일을 읽어 **값은 출력하지 않고** 형식(공백 없음·길이)만 확인. 채팅에 값이 붙여넣어졌으면 즉시 파일로 옮기고 노출 위험을 알린다. 상세 `personal_config.md`.
+- 토큰이 비어 있으면 **절대경로를 보여주며** 안내: *"https://kist.gov-dooray.com/setting/api/token 에서 개인 인증 토큰을 만들어 `<kiki_root>\token.txt`(예 `C:\kiki\token.txt`) 의 `Dooray token:` 다음 줄에 붙여넣고 저장한 뒤 '두레이 토큰 저장했다' 라고 알려주세요. ⚠️ 채팅창에 토큰을 붙여넣지 마세요(대화 기록 노출)."* 원하면 파일을 열어준다(`notepad`/`open -e`).
+- 사용자가 넣었다고 하면 `python <skill>/scripts/dooray_drive.py check`(kk-pay·kk-meeting 에 있음) 로 **값은 출력하지 않고** 길이·파일 위치만 확인(파일을 Read 하면 값이 대화에 남는다). 채팅에 값이 붙여넣어졌으면 즉시 파일로 옮기고 노출 위험을 알린다. 상세 `personal_config.md`.
 - 조회 전용(kk-budget·kk-inspect)·세션쿠키(kk-mail)·세금계산서 직접작성은 토큰 불요.
 
 ### 4. Python 패키지 — **필요한 시점에, 그때그때** (부트스트랩에서 일괄 설치 X)
@@ -71,7 +71,7 @@ kiki 는 Chrome 창 두 종류를 쓴다. **skill 마다 쓰는 창이 정해져
 - 콘솔 한글: Windows PowerShell 5.1 은 BOM 없는 스크립트의 한국어를 깨뜨린다(`install.ps1` 은 BOM 포함). Python 출력은 `PYTHONIOENCODING=utf-8` 이 설정돼 있어 깨져 보여도 파일 내용은 정상.
 - Windows Git Bash: `"C:\kiki\budget\"` 처럼 **역슬래시로 끝나는 경로를 큰따옴표로 감싸면** 닫는 따옴표가 이스케이프돼 `unexpected EOF` → `/c/kiki/budget/` 형식을 쓴다.
 - Windows 콘솔 cp949: python 이 `—`(em dash) 등 cp949 밖 문자를 print 하면 `UnicodeEncodeError` 로 **죽는다**(PYTHONIOENCODING 미설정 셸) → 스크립트 첫머리 `sys.stdout.reconfigure(encoding='utf-8')`, 한 줄 검증도 동일.
-- 상세 비교표 → `INSTALL.md` §6.
+- 상세 비교표 → repo 의 `INSTALL.md` §6(설치본에는 없음).
 
 ## 안내 문구 표준
 - 멈춰야 할 때: 무엇이/왜 안 됐는지 + 사용자가 할 일 한 문장으로. (조용히 실패 금지)
@@ -79,6 +79,6 @@ kiki 는 Chrome 창 두 종류를 쓴다. **skill 마다 쓰는 창이 정해져
 
 ## 막혔을 때 (처음부터 안내하지 말고, 증상이 나올 때만)
 - **포탈 팝업 창(검수창·지급신청 별도창·회의록 팝업)이 안 뜸** → Chrome 팝업 차단. 설정 → 개인정보 보호 및 보안 → 사이트 설정 → 팝업 및 리디렉션 → "팝업 전송 및 리디렉션 허용" 에 `https://p.kist.re.kr` 추가. **Claude 전용 새 창(chrome-devtools 프로필)도 별도 설정** 필요(팝업이 안 뜨면 이것부터 의심). 근거: wiki 데이터정보팀 「1-7 HTTPS 적용에 따른 브라우저 설정 안내」(2026-06-26). 평소 포탈을 쓰던 PC 는 대개 이미 돼 있다.
-- **`upload_file` 이 "not within any configured workspace roots"** → chrome-devtools 는 Claude 를 연 폴더(cwd) 하위 파일만 올린다 → 증빙을 `<kiki_root>/_tmp/` 로 복사해 그 경로로 올린다(`nexacro_file_upload.md` §4-6).
+- **`upload_file` 이 "not within any configured workspace roots"** → chrome-devtools 는 Claude 를 연 폴더(cwd) 하위 파일만 올린다 → 증빙을 `<cwd>/_tmp/`(Claude 를 연 폴더 아래, gitignore 됨) 로 복사해 그 경로로 올린다(`nexacro_file_upload.md` §4-6).
 - **HTTPS 접속이 안 됨** → 캐시·쿠키 삭제 후 브라우저 재시작(위 wiki 안내 ③).
 - **엑셀 저장 `PermissionError`** → 파일이 열려 있음. 닫아달라 안내 후 재시도.

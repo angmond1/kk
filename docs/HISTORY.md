@@ -4,7 +4,7 @@
 > 재사용 가능한 빌드 방법론·NEXACRO/dooray 패턴은 [DEVELOPMENT.md](DEVELOPMENT.md), skill 별 캡처 상세는 각 skill 의 `references/`.
 
 ## 배포
-- KIST 구성원용 행정 자동화 skill 패키지. GitHub `angmond1/kk` **private** + collaborator 초대.
+- KIST 구성원용 행정 자동화 skill 패키지. GitHub `angmond1/kk` **공개**(2026-09-27~).
 
 ## repo 구조
 ```
@@ -16,7 +16,7 @@ kiki/
     _shared/   security_policy · kist_portal · dooray_wapi · dooray_api_guide
                · project_codes · environment_setup · personal_config · nexacro_file_upload
                · kiki.config.example.json · token.txt.example · kiki.env.example(구형)   # 형제 공통 (install 시 항상 복사)
-    kk-mail/ · kk-pay/ · kk-meeting/ · kk-budget/ · kk-inspect/       # SKILL.md + references/ + scripts/ + <skill>.config.example.json
+    kk-mail/ · kk-wiki/ · kk-pay/ · kk-meeting/ · kk-budget/ · kk-inspect/   # SKILL.md + references/ + scripts/ + <skill>.config.example.json
   assets/    로고
 ```
 
@@ -42,7 +42,7 @@ kiki/
 
 ## 남은 일
 1. 버전 git tag / CHANGELOG 정식화 (현재 `VERSION` 파일 + 이 이력).
-2. collaborator 초대·온보딩, 파일럿 피드백 수렴 — 타 사용자 PC zeroshot 은 `tools/fresh-test.sh` 로 사전 검증.
+2. 온보딩·파일럿 피드백 수렴 — 타 사용자 PC zeroshot 은 `tools/fresh-test.sh` 로 사전 검증.
 3. 미실증: kk-meeting fam_0704_02 본화면 첨부 패턴(A/C 판별) / kk-inspect **자산** 건 검색팝업 5종(생산업체·자산표준분류·사용자·사용책임자·지급계정) / kk-budget 집행내역 fetch endpoint(현재 DOM 팝업 경로).
 4. 미해결: `chkPopup`(이름→사번) 직접 fetch 빈 응답(세션 의존) → 사번 `kiki.config` 운용 / `fam_0100`·`fam_0711` 서버 미필터 → 클라 필터로 대응 중.
 5. (후순위) 정식 plugin marketplace 형식 검토.
@@ -51,6 +51,7 @@ kiki/
 재사용 패턴(NEXACRO 부모탭 JS 완전자동·fetch backend 직접호출·form 직접제어·hwp 자동화·과제분류코드·데이터 master·임시저장↔결재상신 분리·killfocus 동기화 등)은 전부 **[DEVELOPMENT.md](DEVELOPMENT.md)** 에 통합. skill 별 화면·필드 캡처 상세는 각 skill 의 `references/`.
 
 ## 빌드 이력 (요약)
+- **2026-09-27 v0.4.1 (배포 전 전수 검토·안전화)**: 하위 검토 5갈래(kk-pay·_shared / kk-meeting / kk-inspect·kk-budget / kk-wiki·kk-mail / 설치 스크립트·문서) 결과 반영. **코드**: 모든 파이썬 스크립트 출력 UTF-8 강제(한국어 Windows 콘솔 깨짐·기호 오류) · kk-pay `convert.py` 가 열려 있던 Word/Excel/한글을 닫던 문제(`DispatchEx` 새 프로세스)·덮어쓰기·투명 png 검정·회전·여러 쪽 tif·원본 자동 휴지통 제거 · `dooray_drive.py` TLS 검증 기본·API 오류 판정·`check/structure/upload` 명령·토큰 값 미출력 · 포탈 코어 3종 1.1(XML 아님·ErrorCode<0 throw, XML 이스케이프, 카드번호 뒤 4자리만, `fmtCards`) · kk-inspect `rename_evidence.py`(파일명이 PowerShell 명령으로 실행되던 취약점, 덮어쓰기·금지 문자)·`convert_evidence.py` · kk-budget `make_report.py`(목록 입력·BOM·인자 없음) · kk-meeting 엑셀 폴더가 `C:\kiki` 고정이던 것을 kiki_root 로, hwpx 파일명 안전·덮어쓰기 금지·제어문자, 면제 코드 I·S·B·F, 양식 hwpx 미리보기 이미지·저장자 등 개인정보 제거, 구형 한글 COM 스크립트·.hwp 양식 삭제 · kk-wiki `wiki_snapshot.py` crawl/import 가 기존 스냅샷을 지우지 않게(실패 시 중단·`raw/_old` 보관·절반 미만 거부 `--force`)·TLS·리다이렉트 호스트·intermixed 인자, 코어 1.5(`fmtFresh`, 제목 `|`) · kk-mail 코어 1.6(검색 오류 전파, 조건 없는 규칙 차단, 하이픈 id 읽음 복원, listInbox 기간 전체, pick /g). **설치**: `install.ps1` 위치 인자로 skill 이름이 root 로 잡히던 결함(`PositionalBinding=$false`), `install.sh` 상위 폴더 없는 root, kiki_root 기존 값 유지 알림, 옛 kk-dining 설정 안 경로 치환, 파이썬 스텁 오탐, JSON 안전 기록, `.gitignore` `/wiki/`·`/dining/`, `fresh-test.sh` 는 `git archive HEAD`. **문서**: 실명·내선·실제 거래처·금액·승인번호 자리표시 통일, 공개 repo 문구, kk-wiki 표·행 추가, 문서 간 모순(RPA 비대상 회의비 업로드 옵션 제거, 사전결재 폐지 대상 한정, 비목 17-448=S·I·F·B, 지급신청자 검색 동명이인 확인, 검수 지역 첫 실행 확인, chrome-devtools 한 채널, 첨부 임시 폴더 `<cwd>/_tmp`, `upload_file` 인자) 정리, `AGENTS.md`(Codex 진입) 추가. ⚠️ 검토 중 사고 2건: 하위 검토가 실제 `C:\kiki\wiki` 스냅샷(raw·pages 377)을 지워 재수집으로 복구(담당자표·OCR 무손실), 다른 검토가 실제 설치본 `_shared`·`kk-mail` 을 HEAD 로 재복사(내용 동일). 교훈: 하위 작업에 실데이터 접근을 도구·환경 수준에서 막고, 파괴적 명령은 기본이 보관이어야 한다.
 - **2026-09-27 (kk-mail 팝업 보기, 코어 1.5)**: 사용자 요청 — 찾은 메일 링크를 누르면 쓰던 메일함 화면에 뜨는 대신 팝업으로. 새 창 버튼 캡처로 `/mail/popup/mails/{id}`(목록 없이 한 통, 폴더 무관) 확인 → 답의 링크를 이 주소로. "N번 띄워줘" 는 코어 `openMail` 이 임시 버튼을 만들고 Claude 가 실제 클릭(`computer left_click`)해 Dooray 와 같은 크기 팝업 창을 연다(스크립트만의 window.open 은 Chrome 팝업 차단기가 막음, 실측). `popupStatus`·`closePopups`. 같은 메일을 원래 방식과 나란히 띄워 비교한 뒤 사용자 확정.
 - **2026-09-27 (kk-mail 제목 키워드, 코어 1.4)**: 사용자 지시 — 스팸 처리·자동분류에서 발신 주소 말고 제목도 거르라고 하면 제목 전체가 아니라 매번 그대로인 핵심 구절만 쓴다(세금계산서 알림 → `○○업체(유)로부터 전자세금계산서`, 거래명세서 → `거래명세서_○○업체`, 모객 메일 → `○○ Materials Science Conference`·`Journal of ○○ Science`). 코어에 `subjectKeyword`(받는 곳 태그·번호·날짜·회차·머리말·인사말·광고 문구·공지 꼬리를 잘라 원문에서 이어진 구간만 후보로)·`checkSubjectKeywords`(block/warn)·`previewSubjectRule`(검색 API 로 넓게 받고 제목 포함으로 재필터, 보낸 메일 제외) 추가, `createRule` 은 block 이면 만들지 않음(`overrideKeywordCheck`). SKILL '제목 키워드 고르기'(3·4 공통)·classification_policy·wapi_reference 반영. 오프라인 시험 통과, 실측: 거래명세서·세금계산서 알림 177건 제목에서 같은 구절 추출, 미리보기 건수 = 검색 방식 네 가지 합집합.
 - **2026-09-26 v0.4.0 (kk-dining → kk-meeting 개명)**: 사용자 지시로 skill 이름을 `kk-meeting` 으로 바꿈. repo(폴더 `git mv`, `kk-meeting.config.example.json`, 문서·스크립트 주석·설치 스크립트·이 이력의 옛 항목까지 94곳 치환), 설치본(`~/.claude/skills`·`~/.codex/skills`) 폴더 교체, 개인 설정 `kk-dining.config.json` → `kk-meeting.config.json`. 설치 스크립트에 옛 폴더 삭제·설정 파일 개명 단계 추가(install.sh/install.ps1), CLAUDE/CODEX 에 갱신 안내. 같은 날 2차 지시로 **데이터 폴더 `{kiki_root}/dining/` → `meeting/`, 스크립트 `make_dininglog*.py` → `make_meetinglog*.py`, 코어 객체 `window.kkdining` → `window.kkmeeting`** 까지 교체(설치 스크립트가 기존 `dining/` 폴더 이름을 `meeting/` 으로 바꿈, 개인 설정의 경로도 교체). 이 이력에서 2026-09-26 이전 항목의 `kk-meeting` 은 당시 이름 `kk-dining`.

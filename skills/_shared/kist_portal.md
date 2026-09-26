@@ -90,7 +90,7 @@ fetch 실패해도 포기 말고 화면 캡처+좌표로 2차 시도:
 | 이름→사번 (chkPopup) | `/popup/common/getRqstNoMgt/chkPopupValueSetting.do` (`empSchPopup`) | Parameters만: `keyTableNm=VI_HRM_BAS_MGT`·`keyColNm=HOLD_OFFI`·`keyColVal=1`·`UP_COMM_COL_NM=EMP_NM`·`UP_COMM_CD={이름}`·`USE_RESNO=N` | 응답 **Parameters** `EMP_NO`(사번)·`EMP_NM`·`DEPT_NM`·`result` |
 | 예실대비표 (bdg_2030) | `getBdgInfo` → `getMainList` | `BUDGYEAR=9999`(전체/누적) · `BUDGSBJCD`(과제) · `ACCCLSCD`(회계분류, getBdgInfo 취득) | 카테고리 `LEV=1` 행 `LASTBUDGAMT`(A)·`CTRLPERFAMT`(집행)·`BALNAMT`(잔액). 상세 → kk-budget `budget_fetch_spec.md` |
 
-- ⚠️ `fam_0711`·`fam_0100`(사전결재) 등은 **검색조건을 줘도 서버가 회사/본부 전체를 반환** → 응답에서 카드책임자·날짜·거래처·발의자로 **클라이언트 필터**.
+- ⚠️ `fam_0100`(사전결재) 등은 **검색조건을 줘도 서버가 회사/본부 전체를 반환**할 수 있다 → 응답에서 날짜·거래처·발의자로 **클라이언트 필터**. `fam_0711` 은 fetch 에 `CARDRESPEREMPNO`·`SEARCHID`(사번)를 주면 그 카드책임자 건만 온다(2026-09-27 실측) — 사번 없이 부르면 전체.
 - ⚠️ `chkPopup`(이름→사번)은 화면 Enter 로는 동작하나 **동일 body 직접 fetch 는 빈 응답**(세션 의존 추정) → 사번은 `kiki.config.json` 에 1회 저장해 운용(좌표 fallback 도 가능).
 - 금액 `USEAMT` 등은 `{hi,lo}` 객체로 올 수 있음(`.hi` 사용).
 

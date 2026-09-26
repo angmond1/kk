@@ -13,9 +13,9 @@ description: KIST 회의비 처리 자동화 — 카드 회의비 추출, 사전
 ## 정보 5분류
 - **A 내장**: 회의비 판별(음식점·카페), 인원 산정(⌈금액÷5만⌉+1, **식대+음료 합산**), 회의시간 융통성(USETIME 참고), 별지1호 hwpx 셀매핑(요청 시만, 한글 불요), 회의록 엑셀 9컬럼, fam_0704 자동작성 11단계, 회의내용 가이드, 분류코드 면제(**I·S·B·F·부서운영비**).
 - **B 런타임조회**: 카드내역(fam_0711 법인+연구비)·참여과제(rdm_2011)·사전결재(fam_0100)·발의자 사번. → `scripts/portal_ops.js`
-- **C 환경준비**: **Claude 전용 새 Chrome 창**(chrome-devtools-mcp — 회의록 팝업 첨부 때문; 그 창에서 포탈 `e.kist.re.kr` 로그인 **한 번 더**, 평소 Chrome 로그인은 넘어오지 않는다고 미리 안내) + KIST 사내망(밖이면 VPN) / Python `openpyxl`(엑셀 작성 직전에 확인·설치) / (요청 시) hwpx 회의록 — **추가 설치 없음**(표준 라이브러리, 한글 불요·모든 OS; 열람은 한글 또는 무료 HOP) / (옵션) Dooray 로그인 + `token.txt`.
-- **D config**: 공통(이름·카드책임자·참여과제)은 `~/.claude/kiki/kiki.config.json`(형제 공유), kk-meeting 고유(upload_via_rpa·폴더)는 `kk-meeting.config.json`. → `../_shared/personal_config.md`.
-- **E 격리**: Dooray 토큰(`<kiki_root>/token.txt`)·사번·참석자 실명. skill 텍스트엔 0건.
+- **C 환경준비**: **Claude 전용 새 Chrome 창**(chrome-devtools-mcp — 회의록 팝업 첨부 때문; 그 창에서 포탈 `e.kist.re.kr` 로그인 **한 번 더**, 평소 Chrome 로그인은 넘어오지 않는다고 미리 안내) + KIST 사내망(밖이면 VPN) / Python `openpyxl`(엑셀 작성 직전에 확인·설치) / (요청 시) hwpx 회의록 — **추가 설치 없음**(표준 라이브러리, 한글 불요·모든 OS; 열람은 한글 또는 무료 HOP) / (Dooray 로그인·토큰 불요).
+- **D config**: 공통(이름·카드책임자·참여과제)은 `~/.claude/kiki/kiki.config.json`(형제 공유), kk-meeting 고유(폴더)는 `kk-meeting.config.json`. → `../_shared/personal_config.md`.
+- **E 격리**: 사번·참석자 실명. skill 텍스트엔 0건.
 
 ## 설치/부트스트랩 (`kk-meeting 설정해줘`)
 
@@ -24,17 +24,17 @@ description: KIST 회의비 처리 자동화 — 카드 회의비 추출, 사전
 **0. 환경 점검** — `../_shared/environment_setup.md` 0단계(새 Chrome 창·통합정보 로그인[포탈 `e.kist.re.kr` → 업무화면 `p.kist.re.kr:8081`]; python `openpyxl` 은 엑셀 작성 시점에; hwpx 는 설치 때 묻지 않는다 — 작업마다 요청 시).
 **공통 식별정보는 `~/.claude/kiki/kiki.config.json` 에서 읽는다**(없으면 1회 수집·저장, 다른 skill 재사용). kk-meeting 고유만 `kk-meeting.config.json`. (`../_shared/personal_config.md`)
 
-1. **성함·카드책임자·참여과제** *(공통 `user`/`card_holder`/`projects`)* — kiki.config 에 없으면 묻는다. 카드책임자 본인 여부 확인 + 사번 1회(없으면 fam_0711 에서). 참여과제는 `queryProjects` 자동조회 → 분류코드 포함 확인.
+1. **성함·카드책임자·참여과제** *(공통 `user`/`card_holder`/`projects`)* — kiki.config 에 없으면 묻는다. 카드책임자 본인 여부 확인. 사번은 묻지 않는다 — fam_0711 화면 `ds_search.SEARCHID` 에서 자동으로 읽는다(kiki.config 에 없으면 그 값을 저장). 참여과제는 `queryProjects` 자동조회 → 분류코드 포함 확인.
 2. **사전결재 면제 판정** *(자동 + 확인)* — 참여과제 분류코드(`projects[].code`)로 **I·S·B·F·부서운영비** 면제 자동 판정. **N(정부수탁) 과제는 소관부처에 따라 달라** 사용자가 답할 수 있게 부처 목록을 같이 보여준다: *"사전 내부결재 폐지 대상 = 과기정통부·산업통상자원부·문체부·식약처·국방부·환경부·복지부·경찰청·기상청 과제 + 주요사업(E). 이 과제의 소관부처가 이 중 하나인가요?"* → "맞나요?" 확인 (`project_code.md`). 과제별 저장 불필요.
 3. (질문 X) 카드 조회는 **법인+연구비 항상 둘 다**.
 4. (질문 X) **회의록은 엑셀에 자동 저장**. 한글(hwpx)은 설치 때 묻지 않고, **작업 완료 보고 때마다 "한글 회의록 파일도 만들까요?"** 로 묻고 원할 때만 만든다(2026-09-24 사용자 지시). 옛 `log_format: xlsx_and_hwpx` 설정이 있어도 **자동 생성하지 않는다**(무시). Claude 는 **엑셀만 조회**.
    - hwpx 는 `scripts/make_meetinglog_hwpx.py` 가 **아래아한글 없이**(모든 OS, 추가 설치 없음) 별지1호 양식(`assets/minutes_template.hwpx`)의 값 셀만 치환해 만든다 → 한글 설치 여부를 묻거나 확인할 필요가 없다. hwp(구형)는 더 이상 만들지 않는다.
    - 열람: 아래아한글 2014+ 또는 무료 오픈소스 **HOP**(Open HWP, Windows/macOS/Linux, https://github.com/golbin/hop). 한글이 없는 PC 에서 파일을 열어보고 싶어하면 HOP 을 안내(설치는 사용자 몫, **작성엔 불필요**). **HOP 0.4.4 에서 표시 확인(2026-09-24).** 회의 목적이 길면 셀 안에서 줄바꿈된다(생성기가 줄 배치 캐시를 제거해 한글이 재계산 — 2026-09-24 수정). 그래도 제목은 간결하게, 상세는 회의내용에.
-5. **"Dooray 드라이브 업로드 RPA 처리? (예/아니요)"** — 아니요(기본)면 fam_0704 직접 자동작성. 예면 토큰(`<kiki_root>/token.txt`) + 담당 행정원 폴더(공통 `payment_admin.folder_url`).
+5. (질문 X) **Dooray 업로드(RPA) 경로는 없다** — 회의비는 RPA 지급신청 대상이 아니다(kk-pay `rpa_payment_filing.md` §1) → 항상 fam_0704/0703 직접 자동작성. 옛 설정 `upload_via_rpa` 는 무시한다. 토큰도 필요 없다.
 6. **근거자료 요청** — *"회의록을 대신 쓰려면 근거자료가 필요합니다. 과제제안서·보고서 파일(hwp/hwpx/pdf/docx)을 `{kiki_root}\meeting\project_report\` 에 복사해 주세요 — 파일명에 과제번호를 넣어 주시면 매칭이 정확합니다(예 `2E11111_제안서.hwpx`)."* + 폴더 3종 지침 안내 — 아래 "경로".
 
-### 토큰 (5=예일 때만)
-`<kiki_root>/token.txt`(형제 공유, 예 `C:\kiki\token.txt`) 의 `Dooray token:` 다음 줄. **절대경로를 보여주며** 안내하고 **채팅 붙여넣기는 노출 위험을 항상 경고**. 상세 `../_shared/personal_config.md`. 발급 https://kist.gov-dooray.com/setting/api/token.
+### 토큰
+kk-meeting 은 Dooray 토큰이 필요 없다(통합정보 SSO 세션만). 토큰은 kk-pay 카드 RPA 업로드에서만 쓴다 — `../_shared/personal_config.md`.
 
 ### 경로 (설치 시 지침으로 안내)
 - 📁 **카드영수증/증빙**: 카페·마트·편의점·호텔 결제건만 명세서 jpg 필요 (식당은 카드전표 갈음). 사용자 폴더 경로 알려주거나 그때그때 첨부. → `meeting_form.md`
@@ -49,14 +49,14 @@ description: KIST 회의비 처리 자동화 — 카드 회의비 추출, 사전
 2. **후보 확정** — "맞나요? 뺄 건? (**같은 날 식당+카페 = 1건**, 금액 합산)".
 3. **증빙 영수증 확인** — **식당·명확한 커피전문점**(스벅·테라로사·투썸·커피빈) = 카드전표 갈음(불요). **카페·마트·편의점·호텔·제과겸업**(파바·던킨·뚜레쥬르)·**애매한 카페** = 거래명세서 **jpg 변환 필수** (jpeg/png/pdf 불가). 파일명 `{yymmdd}_{거래처명}.jpg`. → `meeting_form.md`
 4. **과제·비목 자동** — 사전결재/계정 매칭으로 건별 과제 추정 + 분류코드로 비목 결정 (`33-523` 기본 / `17-448` 수탁계열 / `34-448` K과제 / `17-523`·`41-523` G계정) → **확인만**. → `project_code.md`
-5. **회의 주제** — 2026-08-01 이후 건은 사전결재 연동을 생략한다. **건마다 사용자에게 회의 주제를 먼저 묻는다**(*"9/1 ○○식당 건의 회의 주제를 알려주세요"*) → 주제가 정해지면 **회의내용을 어떻게 할지 먼저 묻는다**: *"회의내용은 직접 적어 주시겠어요, 아니면 제가 `project_report\` 의 제안서·보고서를 근거로 작성할까요?"* — 사용자가 직접 주면 **그대로 기록**(임의 수정·보강 금지), "작성해 달라"고 한 경우에만 Claude 가 채운다(단계 9). **묻지 않고 처음부터 끝까지 임의로 채우지 않는다.** 장소 = 카드 거래처. 주제를 묻기 전에 아래 "중복 방지" 스캔을 먼저 해 두고, 사용자가 준 주제가 과거와 겹치면 알린다. (8/1 이전 건만 `queryPreApprovals`→`matchPreApproval` 로 목적·장소·시간 자동.)
+5. **회의 주제** — 2026-08-01 이후 건 중 **사전결재 폐지 대상 과제**(과기정통부·산업부·문체부·식약처·국방부·환경부·복지부·경찰청·기상청 과제 + 주요사업)만 사전결재 연동을 생략한다. 그 외 부처 과제는 `queryPreApprovals`→`matchPreApproval` + 회의록 사전결재 연동(button00)을 그대로 한다(`project_code.md`). **건마다 사용자에게 회의 주제를 먼저 묻는다**(*"9/1 ○○식당 건의 회의 주제를 알려주세요"*) → 주제가 정해지면 **회의내용을 어떻게 할지 먼저 묻는다**: *"회의내용은 직접 적어 주시겠어요, 아니면 제가 `project_report\` 의 제안서·보고서를 근거로 작성할까요?"* — 사용자가 직접 주면 **그대로 기록**(임의 수정·보강 금지), "작성해 달라"고 한 경우에만 Claude 가 채운다(단계 9). **묻지 않고 처음부터 끝까지 임의로 채우지 않는다.** 장소 = 카드 거래처. 주제를 묻기 전에 아래 "중복 방지" 스캔을 먼저 해 두고, 사용자가 준 주제가 과거와 겹치면 알린다. (8/1 이전 건만 `queryPreApprovals`→`matchPreApproval` 로 목적·장소·시간 자동.)
 6. **인원 산정** — **⌈금액(식대+음료 합산) ÷ 50,000⌉ + 1명**. 같은날 식당+카페는 합산 금액으로 산정 (옛 "카페 음료 잔수=인원" 폐기).
 7. **참석자** — "내부 N·외부 N — 내부 성명 / 외부 (소속) 성명 알려주세요".
    - ⭐ **2026-08-01 규정변경**: 내부는 **해당 계정의 참여연구원만** 가능. KIST 소속이어도 미참여면 **외부/미참여자에 회사명 `한국과학기술연구원`** 으로 넣는다. 외부 grid 는 **`PROJJOINYN` 필수선택**(`N`=미참여 / `Y`=참여). 판정은 서버가 하므로 내부로 시도 → 거부되면 외부로 강등하면 된다. 총원은 사전결재 인원과 맞춘다. → `fam_0704_automation.md` §9-c
 
 ### 단계 8-9: 회의내용 + 엑셀 작성
 8. **회의시간** — 카드승인시간(USETIME) 참고 융통성. 예: USETIME 14:38 → 회의 13:00~14:30 (결제 직전 종료).
-9. **회의내용**(10만원↑만) — 사용자가 직접 적어 준 경우 그대로 기록. **사용자가 작성을 부탁한 경우에만** 주제 + `project_report\` 의 제안서·보고서를 근거로 작성 후 확인(괄호 금지, 1.·2. 항목 사이 빈 줄, 항목당 하위불릿 4개 정도). 10만 미만은 목적 1줄. 작성 전 **중복 검사**(아래). **엑셀 행 추가 = 자동**(묻지 않음, fam 임시저장 직후) (`scripts/meeting_log_xlsx.py` `open_or_create(yymm)`+`append_row`): `{kiki_root}\meeting\meeting_log\{yymm}_회의록.xlsx` (월별 1파일, 하위 폴더 없음, yymm = 처리 연월). 참석자는 **실제 등록 결과**(내부 = 참여연구원으로 통과한 사람, 외부 = 미참여 KIST·외부기관)로 적는다. **hwpx 는 완료 보고에서 "한글 회의록 파일도 만들까요?" 묻고 원할 때만** `make_meetinglog_hwpx.make_batch([{'data': …, 'hwpx': 경로}])` 로 **같은 폴더**에 `{회의일 yymmdd}_{과제번호}_{과제이름 간략}_회의록.hwpx` (건당 1파일, 한글 불요). → `meeting_log_excel.md`, `meeting_form.md`
+9. **회의내용**(10만원↑만) — 사용자가 직접 적어 준 경우 그대로 기록. **사용자가 작성을 부탁한 경우에만** 주제 + `project_report\` 의 제안서·보고서를 근거로 작성 후 확인(괄호 금지, 1.·2. 항목 사이 빈 줄, 항목당 하위불릿 4개 정도). 10만 미만은 목적 1줄. 작성 전 **중복 검사**(아래). **엑셀 행 추가 = 자동**(묻지 않음, fam 임시저장 직후) (`scripts/meeting_log_xlsx.py` `open_or_create(yymm)`+`append_row`): `{kiki_root}\meeting\meeting_log\{yymm}_회의록.xlsx` (월별 1파일, 하위 폴더 없음, yymm = 처리 연월). 참석자는 **실제 등록 결과**(내부 = 참여연구원으로 통과한 사람, 외부 = 미참여 KIST·외부기관)로 적는다. **hwpx 는 완료 보고에서 "한글 회의록 파일도 만들까요?" 묻고 원할 때만** `make_meetinglog_hwpx.make_batch([{'data': …, 'hwpx': 경로}])` 로 **같은 폴더**에 `{회의일 yymmdd}_{과제번호}_{과제이름 간략}_회의록.hwpx` (건당 1파일, 한글 불요; 과제이름 조각은 `make_meetinglog_hwpx.safe_name()` 으로 정리 — `/`·`:` 같은 문자가 파일명을 깨지 않게, 같은 이름이 있으면 `_2`). → `meeting_log_excel.md`, `meeting_form.md`
 
 ### 단계 10-11: fam_0704 자동작성 + 결재상신
 10. **fam_0704 직접 자동작성**(`회의록 작성 화면`, NEXACRO `fam_0704_02`):
@@ -87,7 +87,7 @@ description: KIST 회의비 처리 자동화 — 카드 회의비 추출, 사전
 
 ## ⭐ 2026-08-01 규정 변경 + 해외 회의비 (2026-09-07 실증)
 - ⚠️ **fam_0704 신규 직후 식비안내 팝업(`imp_pop_fam_intro`)은 하단 확인을 눌러 닫고 `visible===false` 검증까지**(호출만 하고 방치 금지, 2026-09-08). 팝업 원문 = 8/1 개정 안내: **사전결재 폐지는 과기정통부·산업부·문체부·식약처·국방부·환경부·복지부·경찰청·기상청·주요사업 과제만** — 기타부처 과제는 아직 사전결재 필요(소관부처 확인). **모든 정산과제는 과제 미참여자 최소 1명 참석 필수**(외부참석자 `PROJJOINYN` 전부 Y면 집행 불가; KIST 미참여자·외부기관 인원은 외부 grid). 다과: 액체류=영수증, 과자·빵·캡슐커피=사전결재. → `references/project_code.md`, `references/meeting_form.md`.
-- **사전결재 폐지(2026-08-01~)** → 단계 5(사전결재 매칭)·회의록 사전결재 연동(button00) **생략**. 대신 회의록 **외부참석자마다 참여연구원여부 `PROJJOINYN` 필수**('N' 기본, 과제 참여연구원이면 'Y') — `cardusetime>=20260801` 이면 저장 검증에 걸림.
+- **사전결재 폐지(2026-08-01~, 폐지 대상 과제만)** → 그 과제는 단계 5(사전결재 매칭)·회의록 사전결재 연동(button00) **생략**. 기타 부처 과제는 종전대로 매칭·연동. 대신 회의록 **외부참석자마다 참여연구원여부 `PROJJOINYN` 필수**('N' 기본, 과제 참여연구원이면 'Y') — `cardusetime>=20260801` 이면 저장 검증에 걸림.
 - 회의록 팝업은 open 직후 서버가 참석자 grid 를 비동기 로드해 **먼저 채운 행을 덮어씀** → **open 후 ~6초 대기 뒤 입력, 저장 직전 rowcount 재검증**. 최소참석인원 = ⌈금액÷50,000⌉ 이상 강제.
 - **해외 회의비**(해외출장 중 법인카드): ① 금액 = fam_0711 `USEAMT` 확정 원화(임의 환산 X) ② 1인 5만원 한도는 한화 기준 ③ 회의시간은 **현지시간 그대로**(영수증 시각) ④ **첨부 4종 전부 증빙 fileDiv2(FLE_TP 02)**: 영수증 jpg(카드전표 갈음 불가)·카드사용내역서(법인카드 해외이용내역, 환율 증빙)·**해외출장신청서**(사전결재문서 fileDiv3 아님)·출장 식비 1식 반납 시 **수입의뢰서**(건별) ⑤ 해외 가맹점은 가맹점번호가 없어 저장 검증("거래처 관련 항목")에 걸림 → **거래처구분을 "거래처명"으로 바꾸고 거래처명 입력** ⑥ 출장계정≠회의비계정이면 적요에 **공동계정 사용 사유** 기재. 상세 JS → `references/fam_0704_automation.md`, 규정 → `references/meeting_form.md`.
 
@@ -103,9 +103,8 @@ description: KIST 회의비 처리 자동화 — 카드 회의비 추출, 사전
 - `references/fam_0704_automation.md` — **NEXACRO 부모탭 JS 완전자동 11단계** (DOC_CLS / 식비팝업 / 카드매핑 / popBudgList 콜백 / 통장표기 killfocus / 회의록 / 사전결재 연동 / **첨부**(회의록 팝업 `pop_fam_0703_02` 의 `fileDiv1`서명록/`fileDiv2`증빙/`fileDiv3`사전결재, 패턴 C = `extUp._input_node` 직접 노출) / 저장 / 결재상신). gfn_msg 원복 트랩 포함.
 - `references/fam_0703_automation.md` — ⭐ **연구비카드 회의비(fam_0703_02) 전용 절차서** (정찰 스니펫 / 이름표 / closure curRow 행 전환 `goRow()` / 매핑→계정→적요 순서 / DESP_LIST 오염 검증·복구 / 저장 체크리스트 / 2026-09-08 버벅거림 13건→예방).
 - `../_shared/nexacro_file_upload.md` — ⭐ **NEXACRO `ExtFileUpload` 첨부 자동화 공통 가이드**(2026-06-07 codex 실증, A/B/C 3 패턴). kk-pay·kk-meeting·kk-inspect 공유. **C(정공법, `extUp._input_node` 직접) 우선 시도** 권장.
-- `references/meeting_log_excel.md` — 회의록 엑셀 9컬럼 관리 표준 (처리일 1파일).
+- `references/meeting_log_excel.md` — 회의록 엑셀 9컬럼 관리 표준 (월별 1파일).
 - `references/meeting_form.md` — (요청 시) hwpx 별지1호 양식·셀매핑·인원·증빙·중복.
 - `references/project_code.md` — 분류코드·비목·면제(I·S·B·F·부서운영비)·발의자.
 - `references/fam0100_reference.md` — 사전결재 fetch 명세.
-- `references/hwp_automation.md` — (구형·미사용) 한글 COM 자동화·WPF팝업 — hwpx 생성기로 대체.
-- scripts: `portal_ops.js`(조회) · **`meeting_log_xlsx.py`(엑셀 헬퍼)** · **`make_meetinglog_hwpx.py`**(요청 시 hwpx — 한글 불요·모든 OS) · (구형·미사용) `make_meetinglog.py`/`popup_watcher.py`(한글 COM .hwp) · `dooray_drive.py`(옵션 업로드).
+- scripts: `portal_ops.js`(조회) · **`meeting_log_xlsx.py`(엑셀 헬퍼)** · **`make_meetinglog_hwpx.py`**(요청 시 hwpx — 한글 불요·모든 OS) · `dooray_drive.py`(kk-pay 와 공용 — kk-meeting 에서는 쓰지 않음). (구형 한글 COM 스크립트·.hwp 양식은 2026-09-27 삭제.)

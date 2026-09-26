@@ -12,6 +12,12 @@
 """
 from __future__ import annotations
 import argparse, io, json, os, re, sys
+# Windows 한국어(cp949) 콘솔·파이프에서도 한글·기호가 깨지거나 멈추지 않게 출력은 UTF-8 로 (모듈로 불러 써도 적용)
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from wiki_snapshot import snapshot_root  # noqa: E402
@@ -36,7 +42,7 @@ def load_ocr(root: str) -> list:
             continue
         fp = os.path.join(d, fn)
         try:
-            s = io.open(fp, encoding="utf-8").read()
+            s = io.open(fp, encoding="utf-8-sig").read()
         except Exception:
             continue
         fm = {}
@@ -55,7 +61,7 @@ def load_ocr(root: str) -> list:
 def read_body(root: str, p: dict) -> str:
     try:
         fp = p.get("file") or os.path.join(root, "pages", p["rel"].replace("/", os.sep))
-        s = io.open(fp, encoding="utf-8").read()
+        s = io.open(fp, encoding="utf-8-sig").read()
     except Exception:
         return ""
     m = re.match(r"---\n.*?\n---\n", s, re.S)
@@ -98,7 +104,7 @@ def main(argv=None):
     ap.add_argument("--top", type=int, default=25)
     ap.add_argument("--snip", type=int, default=2)
     ap.add_argument("--list", metavar="PATHPART", help="검색 없이 경로 목록만")
-    a = ap.parse_args(argv)
+    a = ap.parse_intermixed_args(argv)
     root = snapshot_root(a.root)
     pages = load_index(root) + load_ocr(root)
     if a.list is not None:
@@ -111,7 +117,7 @@ def main(argv=None):
     pats = compile_terms(a.terms)
     hits = []
     for p in pages:
-        if a.path and a.path.lower() not in p["path"].lower():
+        if a.path and a.path.lower() not in (p["path"] + " " + p.get("title", "")).lower():   # OCR 판독본은 제목으로도
             continue
         body = read_body(root, p)
         head = p["path"] + " " + p["title"]

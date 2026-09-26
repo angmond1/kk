@@ -54,7 +54,7 @@
 
 **🚨 이번 세션 실수 TOP — 반복 금지 (상세는 각 절):**
 1. ⚠️ **적요·사용구분은 "맨 마지막"에** — `doDecision`(계정)·검수 dblclick·사용구분 변경이 `COMDSCCONT`(적요)·`RQSTDETLCD`(사용구분)를 **자동 리셋**한다. 계정·검수 다 끝낸 뒤 설정(§4·§6). 적요는 dataset 아닌 **컴포넌트 `formDetail_Comdsccont`** 로.
-2. 🔴 **계좌 실명검증(`btn_accCstm00`)은 결재상신 필수** — 계좌번호 맞아도 미검증이면 "N번째 행의 계좌검증이 완료되지 않았습니다"로 상신 차단(통장사본 갈음 불가, **행마다**)(§8). 🔵 **공휴일·주말에는 은행 실명검증 API 자체가 안 도는 것으로 추정** (2026-06-07 토요일 시도 시 통과 안 됨) → 공휴일/주말이면 사용자 안내 후 평일로 미루기. (평일 영업시간 외 가능 여부는 미확인.)
+2. 🔴 **계좌 실명검증(`btn_accCstm00`)은 결재상신 필수** — 계좌번호 맞아도 미검증이면 "N번째 행의 계좌검증이 완료되지 않았습니다"로 상신 차단(통장사본 갈음 불가, **행마다**)(§8).
 3. ⚠️ **자동화 중 `gfn_msg`/`gfn_confirm` 무력화했으면 사용자에게 넘기기 전 반드시 원복** — 안 하면 저장/상신 검증 메시지가 삼켜져 "버튼 눌러도 안 넘어감"으로 한참 헤맴(미해결/TODO#3).
 4. ⚠️ **다건 행 전환은 `rqstGrid` row-click** 으로(`ds_rqstGrid.set_rowposition`은 상세내역이 안 바뀜 → 엉뚱한 행에 덮어씀). 전환 후 `ds_GNL.RQSTAMT`로 행 검증, 다건 적요는 저장 직전 화면 행별 확인(§10).
 5. ✅ **첨부 자동화 가능** (codex 해법, 2026-06-07): NEXACRO `ExtFileUpload` 는 DOM input 이 없어 직접 `file_upload` 실패하지만, **`extUp.addFiles()` 호출하는 임시 DOM 버튼**을 팝업에 만들고 그 버튼에 `file_upload` → 네이티브 chooser 를 DevTools 가 가로채 파일 주입. **첨부만** 원하면 콜백 `fn_endFileCallBack` (숫자 없는 쪽), `fn_endFileCallBack1` 은 `doSave("S")` 까지 이어짐(§9-1).
@@ -149,7 +149,7 @@ fire(c,'onitemchanged',{fromobject:c,postvalue:'6',prevalue:'',post:6,pre:-1}); 
 
 ## 7. 검수 연결 (검수 완료 건)
 검수신청구분 라디오 `rdTallyCheck`: 1=자산포함 / **2=비자산** / 3=검수대상아님(용매·가스류). 비자산 먼저 선택 → 조회 빠름. 승인검수번호 조회 버튼 `btnSetMapTally`.
-- ⭐ **100만원 미만 물품 = 검수 불요 — 🔴 기준 금액은 *세금(VAT) 포함 합계*** (사용자 확정 2026-09-17 "잘 기억해"): 공급가액이 아니라 세금계산서 **합계금액(=영수증함 RQSTAMT)** 이 100만원 미만일 때만. 예: 공급가 300,000+세 30,000 = **330,000 < 1,000,000 → 검수 불요** / 공급가 950,000+세 95,000 = 1,045,000 → **검수 필요**. popTally 에 해당 건이 안 뜨는 게 정상. **`rdTallyCheck='2'`(비자산) 그대로 두고 검수번호 빈칸으로 `bt_save`** 하면 검증 없이 통과(`저장하시겠습니까?`→`저장 되었습니다.` — 합계 330,000원 소모품 건으로 실측). '3=검수대상아님' 으로 바꿀 필요 없음. popTally 를 열어놓고 선택 안 할 땐 `window.application.popupframes.popTally.form.close()` 로 닫는다. popTally 목록은 **선택한 계정(과제) 기준으로 필터**되므로 다른 과제 검수는 안 보인다.
+- ⭐ **100만원 미만 물품 = 검수 불요 — 🔴 기준 금액은 *세금(VAT) 포함 합계*** (사용자 확정 2026-09-17 "잘 기억해"): 공급가액이 아니라 세금계산서 **합계금액(=영수증함 RQSTAMT)** 이 100만원 미만일 때만. 예: 공급가 300,000+세 30,000 = **330,000 < 1,000,000 → 검수 불요** / 공급가 950,000+세 95,000 = 1,045,000 → **검수 필요**. popTally 에 해당 건이 안 뜨는 게 정상. **`rdTallyCheck='2'`(비자산) 그대로 두고 검수번호 빈칸으로 `bt_save`** 하면 검증 없이 통과(`저장하시겠습니까?`→`저장 되었습니다.` — 합계 NNN,NNN원 소모품 건으로 실측). '3=검수대상아님' 으로 바꿀 필요 없음. popTally 를 열어놓고 선택 안 할 땐 `window.application.popupframes.popTally.form.close()` 로 닫는다. popTally 목록은 **선택한 계정(과제) 기준으로 필터**되므로 다른 과제 검수는 안 보인다.
 - 저장 검증 메시지를 잡고 싶으면 `f.gfn_msg/gfn_alert/gfn_confirm` 을 **호출 기록만 하고 원함수를 그대로 호출하는 래퍼**로 잠깐 감싼 뒤 저장 직후 반드시 원복(§0 실수 TOP 3 참조) — 이번 실측 `gfn_confirm:저장하시겠습니까?` → `gfn_msg:저장 되었습니다.`.
 ```js
 var rd=walk(f,'rdTallyCheck',0); rd.set_value("2");
@@ -181,7 +181,7 @@ PT.datagrid1_oncelldblclick(gT,eT);   // 더블클릭=선택 → ds_GNL.PRCT_NO 
   // → getChkDpstStat.do 호출 → 은행 실명검증 → af.ds_main_DPST 갱신
   ```
 - **✅ 검증 성공 지표 = `af.ds_main_DPST.getColumn(0,'TRANSFERSTAT_DESC')==='정상처리'`** (+ `BANK_DPSTORNM` 이 은행 조회 예금주로 채워짐). ⚠️ **`Static00`("계좌번호검증완료") 컴포넌트의 `visible` 은 부정확** — 검증 안 됐어도 켜져 있음(실측). **절대 신뢰 말고** `TRANSFERSTAT_DESC`/`BANK_DPSTORNM` 로 판단.
-- **예금주 전각공백·전각괄호 문제없음**: `에프씨인터내셔날　주`(전각공백)·`（주）대현테크`(전각괄호) 모두 은행 조회 일치로 **정상처리**. (§8 이전의 "예금주 mismatch 의심"은 기우 — 자동 매핑값이 은행 등록명과 실제 일치.)
+- **예금주 전각공백·전각괄호 문제없음**: `○○인터내셔날　주`(전각공백)·`（주）○○테크`(전각괄호) 모두 은행 조회 일치로 **정상처리**. (§8 이전의 "예금주 mismatch 의심"은 기우 — 자동 매핑값이 은행 등록명과 실제 일치.)
 - **행별**: 다건은 각 행 `rqstGrid_oncellclick`(ei.cell=2) 전환 → **계좌 로드 대기 2.5~3초**(전환 직후 바로 검증하면 `ds_main_DPST` 빈값 → 검증 실패, 실측: 신청서2 행0이 이 타이밍으로 첫 시도 실패) → `ACCOUNTNO` 채워진 것 확인 후 발화.
 - **chrome-devtools MCP `dialogAction:'accept'`** 로 성공/실패 네이티브 alert 자동 처리(Claude-in-Chrome 은 frozen 되니 chrome-devtools 권장).
 - ⚠️ **자주사용계좌 자동검증 착시 + 재오픈 리셋**: 자주사용 등록 계좌는 매핑 시 자동 검증돼 보이나(Static00 켜짐), **신청서 재작성/`doNew("Y")` 재오픈 시 미저장 검증은 리셋**됨 → `BANK_DPSTORNM` 빈값이면 재검증. 검증 후 **반드시 `bt_save` 저장**해야 상신까지 유지(저장 안 하면 상신 시 「N번째 행 계좌검증 미완료」 차단).
@@ -197,7 +197,6 @@ fire(disp,'onkillfocus',{fromobject:disp,fromreferenceobject:disp});   // killfo
 - ✅ **계좌번호 검증요청 `btn_accCstm00`** = 은행 실명검증 (⭐ **통과법 = §8-0**; Claude-in-Chrome 은 네이티브 alert 로 탭 CDP frozen → **chrome-devtools `dialogAction:'accept'` 권장**). 아래는 8-0 규명 전 기록(참고):
   - **2026-06-06 미해결(→ 8-0 해결)**: alert "계좌정보를 다시 한 번 확인해주시기 바랍니다" 는 예금주 mismatch 가 아니라 **`this` 컨텍스트 오류(fam_0702≠import2)로 검증 API 자체가 안 돌아 생긴 오인**. 예금주 전각괄호/전각공백은 실제 은행 등록명과 일치해 정상처리됨(8-0).
   - 🔴 **계좌검증 = 결재상신 필수 (2026-06-07 확정)**: 계좌번호가 통장사본과 일치해도 `btn_accCstm00` 실명검증을 **완료(검증완료 플래그)** 하지 않으면 결재상신 시 **「N번째 행의 계좌검증이 완료되지 않았습니다」** 메시지로 차단된다. **통장사본 대조만으론 갈음 불가.** 묶음(다건)이면 메시지가 행을 지정("1번째 행…") → **행마다 계좌검증 필요**.
-  - 🔵 **공휴일·주말 불가** (2026-06-07 토요일 시도 시 통과 안 됨, alert "계좌정보를 다시 한 번 확인해주시기 바랍니다"). → 작성·저장은 언제든 가능하지만 **계좌검증·상신은 평일에**. 공휴일/주말이면 사용자 안내 후 평일로 미루기. (평일 영업시간 외 가능 여부는 미확인.)
   - 💡 **예금주명(`dpstOrNm`)은 자동채움값 신뢰 말고 통장사본/거래명세서 표기에 정확히 맞출 것** (실명검증 mismatch 1순위 의심): 매핑 자동값이 `（주）○○`(전각 괄호·*주식회사*)인데 실제는 *유한회사*거나 통장/거래명세서엔 접두 없는 `○○`로 적힌 사례 → 검증요청 전 `dpstOrNm` 을 통장 예금주와 글자 그대로 일치시켜 시도.
 
 ## 9. 첨부 → 저장 → 결재상신
@@ -207,7 +206,7 @@ fire(disp,'onkillfocus',{fromobject:disp,fromreferenceobject:disp});   // killfo
 #### ⭐ 9-1-A. chrome-devtools MCP 방식 (2026-07-07 실증 — 10파일 성공, **권장**)
 Claude-in-Chrome `file_upload` 는 **세션 공유 파일만** 허용해 로컬 경로(외부 드라이브·cwd 복사본)까지 거부 → 막힘. **chrome-devtools MCP `upload_file`(filePath 자유, 단 workspace roots=세션 cwd 하위만)로 해결.** fam_0702 는 iframe(`framename=fam_0702`)이라 팝업 요소가 `take_snapshot`(a11y)·메인 `querySelector` 에 안 잡힘 → **`ExtFileUpload.extUp._input_node`(INPUT[file] multiple, 팝업 iframe 소속)를 메인 document 로 `adoptNode` 하면 snapshot 에 `button "파일 선택"` 으로 노출** → 그 uid 로 upload_file.
 ```js
-// 준비: 첨부파일을 cwd 하위(_upload_tmp\attach)로 복사(workspace roots 제약) + 그림>1.5MB Pillow 압축(q85). PDF 10p 미만.
+// 준비: 첨부파일을 cwd 하위(_tmp\attach)로 복사(workspace roots 제약) + 그림>1.5MB Pillow 압축(q85). PDF 10p 미만.
 var fu=walk(f,'importFileUpload',0); var cur=fu.extUp._input_node;
 // 1) 행 전환 (그 행 RQST_NO 로 붙음) — ei.cell=2 필수(set_rowposition 만으론 detail·ds_files 안 바뀜)
 f.ds_rqstGrid.set_rowposition(row); f.rqstGrid_oncellclick(walk(f,'rqstGrid',0), ei);  // ei.row=row,cell=2,col=2
@@ -299,7 +298,7 @@ if (!btn) {
 **동일 계정**이면 한 신청서에 최대 5건. 1건 완료 후:
 ```js
 // 행추가 버튼: text "행추가" 로 walk → onclick fire (새 ds_rqstGrid 행 + 새 row 자동 current + ds_GNL 빈 detail)
-var addBtn=/* walk: text.indexOf('행추가')>=0 */; window.__fire(addBtn,'onclick',{fromobject:addBtn});
+var addBtn=null; /* walk(document.body, n=>n.textContent.indexOf('행추가')>=0) 로 '행추가' 버튼 노드를 찾아 넣는다 */ fire(addBtn,'onclick',{fromobject:addBtn});
 var rg=f.ds_rqstGrid; rg.set_rowposition(rg.getRowCount()-1);   // 새 행
 // → §2 영수증함 매핑(다음 세금계산서 NTS_ISSUEID) → §4 적요 → §5 계정(같은 계정이라도 행마다 popBudgList 재실행) → §6 사용구분 → §7 검수 → §8 통장표기 KIST_ 반복
 ```
@@ -316,7 +315,7 @@ var rg=f.ds_rqstGrid; rg.set_rowposition(rg.getRowCount()-1);   // 새 행
 - **첨부 배치(행당 4턴)**: `[evaluate: 행 전환(ei.cell=2)+_input_node adoptNode 노출]` → `take_snapshot` → `Grep '파일 선택'` uid → **`upload_file` 2개(세금계산서·거래명세서)를 같은 응답에 병렬 호출**(CDP 직렬 처리라 ds_files 에 순서대로 2건, 이전의 순차 2턴 불필요) → `[evaluate: gfn_upload 를 tmHeader 전부 'S' 될 때까지 최대 3회 루프(6s 간격) → 성공 시 다음 행 전환+노출까지]`. 이번 4행 모두 1회에 'S'.
 - **계좌검증 배치**: 행당 `[전환 3.5s + btn_accCstm00 fire + 7s]` ≈ 10.5s → **행 2개 + 마지막 gfn_upload + input 숨김** 을 한 배치(≈27s), **나머지 행 + `bt_save` + 행별 최종검증(첨부 tmHeader·TRANSFERSTAT_DESC·INVTRSNCONT)** 을 다음 배치. **계좌검증 3행 이상을 한 배치에 넣지 말 것**(45s 초과 위험).
 - 저장·상신 뒤 남는 `저장 되었습니다` alert 는 다음 도구 호출을 막으니 **배치 직후 `handle_dialog('accept')` 1회** 를 습관처럼(§0-1 4).
-- **첨부 사본 명명**: 원본 거래명세서명은 `거래명세서_XX000000-1 KIST_김키키 박사님 ○○ .pdf` 처럼 길고 확장자 앞 공백까지 있어 시스템 첨부명이 지저분해진다 → scratchpad 에 `{YYMMDD} 세금계산서.pdf` / `{YYMMDD} 거래명세서.pdf` 로 **복사본**을 만들어 올린다(원본은 건드리지 않음). 처리완료 이동은 **원본명 그대로**(§0-0 10).
+- **첨부 사본 명명**: 원본 거래명세서명은 `거래명세서_XX000000-1 KIST_김키키 박사님 ○○ .pdf` 처럼 길고 확장자 앞 공백까지 있어 시스템 첨부명이 지저분해진다 → `<cwd>\_tmp\attach\` 에 `{YYMMDD} 세금계산서.pdf` / `{YYMMDD} 거래명세서.pdf` 로 **복사본**을 만들어 올린다(원본은 건드리지 않음). 처리완료 이동은 **원본명 그대로**(§0-0 9).
 - PDF 4쌍의 발급일·품목·금액·국세청승인번호 파악은 PyMuPDF `fitz` 로 8개 한 번에 텍스트 추출(1턴). 세금계산서 `승인번호` 24자리 = 영수증함 `NTS_ISSUEID` 와 그대로 매칭.
 
 ## 미해결 / TODO

@@ -33,7 +33,7 @@ echo ""
 echo "=== 2) 설치본 skill 폴더 개인정보 스캔 (본진 반영 전 0건이어야) ==="
 # 진짜 위험 신호만: 실명·메인테이너 ID·개인 이메일 도메인·토큰 실제값·실제 개인 home 경로.
 #   (기관 공용 메일 @kist.re.kr·@nrf.re.kr, 6자리 코드/날짜/금액/hex 는 skill 본문에 정상적으로 많아 제외.)
-hit=$(grep -rInE "이동기|\breddn\b|\bdnklee\b|@(gmail|naver|daum|hanmail|outlook|nate)\.|(DOORAY[_A-Za-z]*|[Tt]oken)['\"]?[[:space:]]*[:=][[:space:]]*['\"]?[A-Za-z0-9]{12,}|[A-Za-z]:\\\\Users\\\\(reddn|이동기)" \
+hit=$(grep -rInE "이동기|\bdnklee\b|@(gmail|naver|daum|hanmail|outlook|nate)\.|(DOORAY[_A-Za-z]*|[Tt]oken)['\"]?[[:space:]]*[:=][[:space:]]*['\"]?[A-Za-z0-9]{12,}|[A-Za-z]:\\\\Users\\\\[A-Za-z0-9가-힣._-]+\\\\" \
         "$installed"/kk-* "$installed/_shared" 2>/dev/null \
       | grep -viE "\.config\.json|\.example|dnklee@kist\.re\.kr" )
 if [ -n "$hit" ]; then

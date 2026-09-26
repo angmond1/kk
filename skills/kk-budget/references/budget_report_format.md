@@ -27,6 +27,17 @@
 - 총액=회색(muted), 잔액=검정 bold. 헤더 진파랑, 잔액 서브헤더 살구색.
 - 단위 원(`#,##0`). 출력 파일명 `yymmdd.xlsx`, 폴더 config `output_dir`(기본 `C:\kiki\budget`).
 
+## make_report 입력 JSON (`scripts/make_report.py <input.json> <out.xlsx>`)
+```json
+{"snapshot_date": "YYYY-MM-DD",
+ "track_categories": ["재료비", "시설장비비", "활동비1", "활동비2", "내부인건비2", "학생인건비"],
+ "projects": [{"acccd": "2E11111", "name": "○○ 연구", "pi": "김키키", "role": "주관",
+               "direct": {"A": 0, "D": 0},
+               "categories": {"재료비": {"A": 0, "exec": 0, "pendingDone": 0, "pendingProg": 0, "D": 0}}}]}
+```
+- `projects` 는 위처럼 목록이어도, `{"2E11111": {...}}` 사전이어도 된다. 카테고리 이름은 `portal_ops.js` `CAT_MAP` 의 표시명과 **글자 그대로** 같아야 하고, 과제에 없는 비목은 키를 빼야 `-` 로 찍힌다.
+- 값은 `kkBudget.queryBudgetTable()` 반환을 그대로 넣으면 된다(A=총액, D=잔액; exec·pendingDone·pendingProg 는 검산용).
+
 ## 검산 (수집 시 자동)
 `LASTBUDGAMT(A) = BALNAMT(D) + CTRLPERFAMT(집행B) + CTRLCAUSAMT(계류완료) + TEMPAMT(계류진행)` — 불일치 시 경고.
 

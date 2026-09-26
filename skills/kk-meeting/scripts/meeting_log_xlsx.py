@@ -15,7 +15,7 @@ kk-meeting 회의록 엑셀 헬퍼.
     path = open_or_create("2606")            # {root}\2606_회의록.xlsx
     append_row(path, {
         "date_text": "4월 30일 13:00~14:30",
-        "amount": 323000,
+        "amount": 150000,
         "place": "○○식당",
         "acccd": "2E11111",
         "int_members": "김키키",
@@ -30,6 +30,13 @@ kk-meeting 회의록 엑셀 헬퍼.
 from __future__ import annotations
 import os
 import re
+import sys
+# Windows 한국어(cp949) 콘솔·파이프에서도 한글·기호가 깨지거나 멈추지 않게 출력은 UTF-8 로 (모듈로 불러 써도 적용)
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 from typing import Optional
 
 try:
@@ -41,12 +48,46 @@ except ImportError:
     openpyxl = None
     # pip install openpyxl
 
+_ILLEGAL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 HEADERS = ["순번", "사용일자", "금액", "장소(거래처)", "처리계정",
            "내부참석자", "외부참석자", "외부참석자 소속", "회의목적"]
 WIDTHS = [6, 20, 11, 18, 10, 12, 26, 18, 55]
 
-# 기본 루트 (사용자별로 다를 수 있음, config 로 오버라이드)
-DEFAULT_ROOT = r"C:\kiki\meeting\meeting_log"
+def _kiki_root() -> str:
+    """kiki 작업 폴더 — 환경변수 KIKI_ROOT → kiki.config.json(claude/codex) 의 kiki_root → 기본(C:\\kiki / ~/kiki)."""
+    r = os.environ.get("KIKI_ROOT", "").strip()
+    if r:
+        return os.path.expanduser(r)
+    for cfg in ("~/.claude/kiki/kiki.config.json", "~/.codex/kiki/kiki.config.json"):
+        p = os.path.expanduser(cfg)
+        if os.path.exists(p):
+            try:
+                import json
+                r = (json.load(open(p, encoding="utf-8-sig")).get("kiki_root") or "").strip()
+            except Exception:
+                r = ""
+            if r:
+                return os.path.expanduser(r)
+    return r"C:\kiki" if os.name == "nt" else os.path.expanduser("~/kiki")
+
+
+def default_root() -> str:
+    """회의록 엑셀 폴더 — kk-meeting.config.json 의 log_root({kiki_root} 치환) → 없으면 {kiki_root}/meeting/meeting_log."""
+    for cfg in ("~/.claude/kiki/kk-meeting.config.json", "~/.codex/kiki/kk-meeting.config.json"):
+        p = os.path.expanduser(cfg)
+        if os.path.exists(p):
+            try:
+                import json
+                lr = (json.load(open(p, encoding="utf-8-sig")).get("log_root") or "").strip()
+            except Exception:
+                lr = ""
+            if lr:
+                return os.path.expanduser(lr.replace("{kiki_root}", _kiki_root()).replace("/dining/", "/meeting/").replace("\\dining\\", "\\meeting\\"))
+    return os.path.join(_kiki_root(), "meeting", "meeting_log")
+
+
+# 하위 호환 이름 — 모듈을 불러온 시점의 기본 폴더 (함수 인자 root 가 우선)
+DEFAULT_ROOT = default_root()
 
 
 def expected_path(yymm: str, root: Optional[str] = None) -> str:
@@ -58,7 +99,7 @@ def expected_path(yymm: str, root: Optional[str] = None) -> str:
 def open_or_create(yymm: str, root: Optional[str] = None) -> str:
     """엑셀 파일을 열거나(있으면) 9컬럼 양식으로 생성(없으면). 경로 반환."""
     if openpyxl is None:
-        raise RuntimeError("openpyxl not installed; run: pip install openpyxl")
+        raise RuntimeError("openpyxl 이 없습니다: python -m pip install openpyxl  (macOS/Linux: python3 -m pip install --user openpyxl)")
     fp = expected_path(yymm, root)
     folder = os.path.dirname(fp)
     os.makedirs(folder, exist_ok=True)
@@ -82,7 +123,8 @@ def _to_amount(v) -> int:
 11,000'(같은 날 식당+카페 두 금액) → 정수 합계. 숫자 없으면 0."""
     if isinstance(v, (int, float)):
         return int(v)
-    nums = re.findall(r"\d[\d,]*", str(v or ""))
+    text = re.sub(r"\([^)]*\)", " ", str(v or ""))          # 괄호 안 내역(식대 30,000 + 음료 15,000)은 합계에 안 더한다
+    nums = re.findall(r"-?\d[\d,]*", text)
     return sum(int(n.replace(",", "")) for n in nums) if nums else 0
 
 
@@ -115,6 +157,9 @@ def append_row(path: str, data: dict) -> int:
     ws = wb["회의록"] if "회의록" in wb.sheetnames else wb.active
     seq = _next_seq(ws)
 
+    def _clean(v):                                                 # 엑셀이 거부하는 제어문자(PDF 복사 시 섞이는 수직탭·쪽나눔 등) 제거
+        return _ILLEGAL.sub(" ", v) if isinstance(v, str) else v
+    data = {k: _clean(v) for k, v in (data or {}).items()}
     title = data.get("title", "")
     content = data.get("content", "")
     purpose_cell = (f"{title}\n{content}" if content else title)
@@ -136,7 +181,10 @@ def append_row(path: str, data: dict) -> int:
     ws.cell(row=r, column=7).alignment = Alignment(wrap_text=True, vertical="top")
     ws.cell(row=r, column=8).alignment = Alignment(wrap_text=True, vertical="top")
     ws.cell(row=r, column=9).alignment = Alignment(wrap_text=True, vertical="top")
-    wb.save(path)
+    try:
+        wb.save(path)
+    except PermissionError:
+        raise RuntimeError(f"엑셀 파일이 열려 있어 저장하지 못했습니다 — Excel 에서 닫고 다시: {path}")
     return seq
 
 
@@ -185,7 +233,8 @@ def all_titles(root: Optional[str] = None) -> list[dict]:
         if not fn.endswith("_회의록.xlsx") or fn.startswith("~$"):
             continue
         try:
-            ws = openpyxl.load_workbook(os.path.join(root, fn), data_only=True).active
+            wb = openpyxl.load_workbook(os.path.join(root, fn), data_only=True)
+            ws = wb["회의록"] if "회의록" in wb.sheetnames else wb.active
         except Exception:
             continue
         for r in ws.iter_rows(min_row=2, values_only=True):

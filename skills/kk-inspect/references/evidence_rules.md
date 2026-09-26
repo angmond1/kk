@@ -29,12 +29,12 @@
 **취득가 (OBT_AMT)**: 세금계산서 합계금액(VAT포함) · 카드결제는 fam_0711 USEAMT.
 
 ## 파일 전처리 (업로드 전)
-- `png/jpeg/bmp/tiff` → `jpg` 변환 (두레이 RPA 업로드 불가 형식). pdf는 그대로. → `scripts/convert_evidence.py`
-- 무의미한 무작위 숫자 파일명 → `{YYMMDD} {원화금액} {거래처 내용} 카드영수증.jpg` 식 개명, 원본 휴지통. → `scripts/rename_evidence.py`
+- `png/jpeg/bmp/tiff/webp/gif` → `jpg` 변환 (검수창 첨부는 jpg·pdf 로 통일). pdf는 그대로. 원본은 남고 같은 이름이 있으면 `_conv`. → `scripts/convert_evidence.py`
+- 무의미한 무작위 숫자 파일명 → `{YYMMDD} {원화금액} {거래처 내용} 카드영수증.jpg` 식으로 복사본 생성(원본은 남김). 첨부가 끝난 뒤 필요 없는 원본은 confirm 후 `rename_evidence.py --trash`. → `scripts/rename_evidence.py`
 - **물품사진 파일명 = `{품목코드} {수량}ea`** (거래명세서 실제 EA 기준). 같은 품목 사진이 **여러 장이면 `{품목코드} {수량}ea-{순번}`**. (2026-07-03 사용자 규칙)
 - **⚠️ 첨부 파일명 특수문자 금지 (2026-09-08 실전)**: `+` 포함 파일명은 검수창이 `특수문자는 첨부파일에서 사용 불가능합니다` alert 로 **거부**한다. `+`·`&`·`%`·`#`·`/` 등은 `-` 또는 공백으로 치환 (예 `CH-Ag.Ag+ 4ea.jpg` → `CH-Ag-Ag 4ea.jpg`). 하이픈·공백·확장자의 점은 OK. **품명/모델 필드도** 저장 실패 예방 위해 `+` 제거 권장 (`Ag Ag+` → `Ag Ag ion`, `CH-Ag.Ag+` → `CH-Ag-Ag`). 단위가 kit/set 이어도 사진 파일명은 `{수량}ea` 로 통일 (사용자 규칙).
-  - 예: AFE5T050GC(1EA·1장) → `AFE5T050GC 1ea.jpg` / AKCELL2(1EA·2장) → `AKCELL2 1ea-1.jpg`·`AKCELL2 1ea-2.jpg` / ACE4THQ050(10EA·2장) → `ACE4THQ050 10ea-1.jpg`·`ACE4THQ050 10ea-2.jpg`.
+  - 예: ABC-100(1EA·1장) → `ABC-100 1ea.jpg` / DEF-200(1EA·2장) → `DEF-200 1ea-1.jpg`·`DEF-200 1ea-2.jpg` / GHI-300(10EA·2장) → `GHI-300 10ea-1.jpg`·`GHI-300 10ea-2.jpg`.
   - ⚠️ 원본 파일명의 `(1)`·`(2)` 는 **수량일 수도 사진 순번일 수도** 있다(품목당 1장이면 수량, 여러 장이면 순번). 헷갈리지 말고 **거래명세서의 실제 EA** 로 `{수량}ea` 를 붙인다 — 원본 파일명 그대로 올리지 말 것.
 
 ## 첨부 대상 (검수신청)
-세금계산서/영수증 PDF + 거래명세서 PDF + 물품 사진 JPG(품목별). 카드 무형 건은 카드명세 jpg + 영수증 pdf. (첨부·신청은 사용자가 직접)
+세금계산서/영수증 PDF + 거래명세서 PDF + 물품 사진 JPG(품목별). 카드 무형 건은 카드명세 jpg + 영수증 pdf. (첨부는 confirm 후 자동, 신청 버튼은 사용자가 직접)

@@ -30,17 +30,18 @@ KIST 행정 자동화 skill 6종(`kk-mail`·`kk-wiki`·`kk-pay`·`kk-meeting`·`
 ### Step 1 — kiki 폴더 위치 정하기 + 패키지 확보
 1. **먼저 묻는다**(AskUserQuestion 등 선택 프롬프트): *"kiki 를 어디에 둘까요? ① 기본 `C:\kiki`(권장, macOS/Linux `~/kiki`) ② 직접 지정"*. 이 폴더가 **skill 원본 + 엑셀·회의록·검수 파일 + `token.txt`** 의 집(`kiki_root`)이 된다.
 2. 패키지를 그 폴더에 확보한다(이미 받아둔 폴더가 있으면 그 폴더를 root 로 쓰거나 위 폴더로 옮긴다):
-   - **git 있으면** `git clone https://github.com/angmond1/kk.git <root>` (권한 오류면 조용히 실패하지 말고: `gh auth login` 또는 collaborator 초대 여부(메인테이너 `dnklee@kist.re.kr`) 확인 요청, 또는 아래 ZIP 로).
-   - **git 없으면** 사용자에게 안내: 브라우저에서 GitHub 페이지(로그인·collaborator 필요) `Code ▾ → Download ZIP` → `<root>` 에 풀기 → 완료를 알려달라. (`kk-main` 하위 폴더가 생겨도 그 안에서 진행하면 된다.)
+   - **git 있으면** `git clone https://github.com/angmond1/kk.git <root>` (공개 repo 라 로그인 불요. 실패하면 조용히 넘기지 말고 사내망/프록시를 확인하거나 아래 ZIP 로).
+   - **git 없으면** 사용자에게 안내: 브라우저에서 GitHub 페이지 `Code ▾ → Download ZIP` → `<root>` 에 풀기 → 완료를 알려달라. (`kk-main` 하위 폴더가 생겨도 그 안에서 진행하면 된다.)
    - 동료에게 받은 폴더면 그대로.
 3. ⚠️ **이후 작업은 그 폴더 안에서**(Claude Code 는 그 폴더를 작업 루트로). 다른 폴더에서 계속하면 이 지침이 적용되지 않아 추측 설치가 된다. 작업 루트를 옮기는 법: Claude Code 는 그 폴더에서 `claude` 를 다시 실행(Desktop 은 그 폴더를 프로젝트로 열기). 못 옮기면 스크립트와 이 파일을 **절대경로**로 실행·Read 하며 계속한다.
 
 ### Step 2 — skill 설치 (OS 자동 감지)
 현재 OS 를 판단해 **하나만** 실행한다. `-Root`/`--root` 에 Step 1 의 폴더를 넘긴다(패키지 폴더 = root 면 생략 가능).
+- 설치 폴더가 곧 kiki 작업 폴더면 `{root}/wiki`(kk-wiki 내부 자료)·`budget`·`meeting`·`inspect` 는 `.gitignore` 로 제외된다(그래도 `git add -A` 로 올리지 않도록 주의).
 - 기존 설치본 갱신이면: 2026-09-26 부터 `kk-dining` 은 **`kk-meeting`** 으로 이름이 바뀌었다. 설치 스크립트가 옛 `~/.claude/skills/kk-dining` 폴더를 지우고 개인 설정 `~/.claude/kiki/kk-dining.config.json` 을 `kk-meeting.config.json` 으로 바꾼다(수동 설치면 직접). 데이터 폴더도 `{kiki_root}/dining/` → `{kiki_root}/meeting/` 으로 바뀌었다(설치 스크립트가 기존 `dining/` 폴더 이름을 `meeting/` 으로 바꾼다. 수동 설치면 직접).
 - **Windows** (PowerShell) — 신규 PC 는 실행정책이 `Restricted` 라 `./install.ps1` 이 막힌다. **Bypass 로 호출**:
   ```powershell
-  powershell -ExecutionPolicy Bypass -File .\install.ps1 -Root C:\kiki            # 전체 (또는 끝에 kk-mail kk-pay ...)
+  powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1 -Root "C:/kiki"   # 전체 (또는 끝에 kk-mail kk-pay ...). -Root 는 꼭 이름을 붙여서
   ```
 - **macOS / Linux** (bash):
   ```bash
@@ -59,7 +60,7 @@ KIST 행정 자동화 skill 6종(`kk-mail`·`kk-wiki`·`kk-pay`·`kk-meeting`·`
 
 ### Step 4 — 토큰 파일 안내 (Dooray 토큰)
 설치로 `<root>/token.txt` 가 생겼다. **절대경로를 그대로 보여주며** 안내한다:
-> "Dooray 드라이브 업로드(kk-pay 카드결제건 RPA)를 쓰려면 토큰이 필요합니다. https://kist.gov-dooray.com/setting/api/token 에서 개인 인증 토큰을 만들어 **`C:\kiki\token.txt`** 의 `Dooray token:` 다음 줄에 붙여넣고 저장한 뒤 '두레이 토큰 저장했다' 라고 알려주세요. 지금 안 해도 되고 kk-pay 쓸 때 해도 됩니다.
+> "Dooray 드라이브 업로드(kk-pay 카드결제건 RPA)를 쓰려면 토큰이 필요합니다. https://kist.gov-dooray.com/setting/api/token 에서 개인 인증 토큰을 만들어 **`<kiki_root>\token.txt`**(예 `C:\kiki\token.txt`) 의 `Dooray token:` 다음 줄에 붙여넣고 저장한 뒤 '두레이 토큰 저장했다' 라고 알려주세요. 지금 안 해도 되고 kk-pay 쓸 때 해도 됩니다.
 > ⚠️ 토큰·API 키를 **채팅창에 직접 붙여넣지 마세요** — 대화 기록에 남아 타인에게 노출될 수 있습니다."
 
 원하면 파일을 열어준다(Windows `notepad <경로>`, macOS `open -e <경로>`). 사용자가 "두레이 토큰 저장했다"(또는 "토큰 넣었어") 라고 하면 파일을 읽어 **값은 출력하지 말고 형식만 확인**(공백 없는 30자 안팎의 영숫자·기호 문자열; 짧거나 공백·한글이 섞이면 잘못 붙여넣은 것) 후 진행. 채팅에 토큰이 붙여넣어지면 즉시 파일로 옮기고 채팅 노출 위험을 다시 알린다.
@@ -83,6 +84,7 @@ KIST 행정 자동화 skill 6종(`kk-mail`·`kk-wiki`·`kk-pay`·`kk-meeting`·`
 |--------------|-----------|--------|
 | kk-mail | 평소 Chrome(확장) | Dooray |
 | kk-budget | 평소 Chrome(확장) | 포탈 `e.kist.re.kr` |
+| kk-wiki | 평소 Chrome(확장) 또는 토큰만(브라우저 불요) | Dooray(위키) + 담당자표는 포탈 |
 | kk-pay 카드 RPA 업로드 | 평소 Chrome(확장) + `token.txt` | 포탈 + Dooray. 새 창 없음 |
 | kk-pay 세금계산서 직접작성 · kk-meeting · kk-inspect | **Claude 전용 새 Chrome 창**(chrome-devtools) | 그 창에서 포탈 로그인 **한 번 더** |
 
@@ -94,7 +96,7 @@ KIST 행정 자동화 skill 6종(`kk-mail`·`kk-wiki`·`kk-pay`·`kk-meeting`·`
 |---|---|---|
 | skill 경로 | `~/.claude/skills/` | **동일** |
 | 설치 후 인식 | 재시작(새 세션) | **완전 종료(Quit)** 후 재실행 |
-| 브라우저 확장 연결 | `claude --chrome` / `/chrome` | Settings → "Claude in Chrome" 토글 |
+| 브라우저 확장 연결 | `claude --chrome` / `/chrome` | 좌하단 이니셜 → 설정 → 좌측 탭 "Claude in Chrome 설정" → "Claude in Chrome 사용설정" 켜기 |
 | chrome-devtools-mcp | `claude mcp add --scope user …` | **CLI 로 한 등록을 그대로 읽음** |
 | 개인설정·토큰 | `~/.claude/kiki/`, `<root>/token.txt` | **동일** |
 

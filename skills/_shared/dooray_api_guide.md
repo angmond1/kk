@@ -11,7 +11,7 @@ kk-mail의 메일 기능(조회·스팸·분류·규칙·폴더 생성/삭제)�
 - **발급 위치**: https://kist.gov-dooray.com/setting/api/token
   (Dooray Web → 개인설정 → API → 개인 인증 토큰)
 - 토큰 권한 = **발급 계정과 동일** (UI에서 못 하는 작업은 API로도 불가).
-- ⚠️ 토큰은 비밀번호급 비밀 — **skill·repo·로그에 저장 금지.** 각자 로컬 `.env` 등 안전한 곳에만.
+- ⚠️ 토큰은 비밀번호급 비밀 — **skill·repo·로그에 저장 금지.** 각자 로컬 `<kiki_root>/token.txt`(`Dooray token:` 다음 줄) 에만.
 
 ## 인증·기본
 | 항목 | 값 |

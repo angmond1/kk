@@ -10,7 +10,7 @@ KIST 통합정보시스템의 **소액검수신청 (검수신청관리, `mcs_000
 ## ⛔ 안전장치 (항상 지킬 것)
 이 규칙들은 KIST 포털 정책과 직결되니 예외 없이 지킨다.
 - **신청(저장)은 사용자 본인** confirm 후. 결재성 저장은 본인 원칙. **파일첨부는 자동화 가능** (2026-06-07 codex + 2026-06-19 chrome-devtools-mcp 단일채널 실증): mcs_0003_pop2 는 `window.open` 별도 chrome page → 공통 가이드 [`../_shared/nexacro_file_upload.md`](../_shared/nexacro_file_upload.md) **§4 패턴 B + §4-6**. **★권장 = chrome-devtools-mcp 한 채널**(자체 격리 Chrome 에 KIST 1회 로그인 후 `navigate_page`/`select_page`/`take_snapshot`→`upload_file`). ⚠️ `upload_file` 은 **cwd workspace root 안 파일만** → 증빙이 밖(`D:\…`)이면 cwd 하위로 복사. 컴포넌트 = `fileDiv1`. 상세: `references/mcs0003_fields.md` "파일첨부 자동화" 절.
-- **개인정보는 `~/.claude/kiki/kk-inspect.config.json`(repo 밖, 형제 skill 공유 네임스페이스)에만** 둔다. 이름·사번·연락처·행정원 등은 config에서 읽고, 화면·로그·이 skill 파일에 적지 않는다.
+- **개인정보는 `~/.claude/kiki/kiki.config.json`(공통)·`kk-inspect.config.json`(고유) — repo 밖 — 에만** 둔다. 이름·사번·연락처·행정원 등은 config에서 읽고, 화면·로그·이 skill 파일에 적지 않는다.
 - 계좌·카드번호 등 금융정보는 사용자가 직접. skill이 입력하지 않는다.
 - **화면은 한글이름(코드)** 로 부른다 — 소액검수신청(mcs_0003), 카드영수증조회(fam_0711). 내부 코드만 단독으로 쓰지 않는다. (`references/screen_codes.md`)
 - 형제 공통 규약 `../_shared/security_policy.md` 준수 — credential·개인식별자 skill 텍스트 금지, 모든 쓰기 confirm 후, config·token 은 `~/.claude/kiki/`(repo 밖)+gitignore.
@@ -30,7 +30,7 @@ KIST 통합정보시스템의 **소액검수신청 (검수신청관리, `mcs_000
 
 공통 개인정보는 **`~/.claude/kiki/kiki.config.json`** 에서 읽는다(이미 있으면 재질문 X). 없거나 빈 항목만 순서대로 물어 거기 저장(다른 skill 재사용) — **개인정보라 로컬에만, git/메모리에 안 올림**. 질문할 때 이 사실을 함께 말한다(*"이름·사번·연락처는 검수창 자동입력용이며 이 PC 의 config 에만 저장되고 채팅에 다시 출력하지 않습니다"*):
 - `user`: 이름 · 사번(6자리) · 연락처
-- `location`: 지역(본원=`LABT_00` / 강릉=`LABT_01` / 전북=`LABT_02`) → 건물(`references/code_tables.md` → `BD_xxx`) → 호실
+- `location`: 지역(본원=`LABT_00` / 강릉=`LABT_01` / 전북=`LABT_02`) → 건물(`references/code_tables.md` → `BD_xxx`) → 호실. **첫 실행 때 반드시 한 번 확인**(템플릿은 비어 있음 — 강릉·전북 사용자가 본원으로 신청되는 일 방지). 2-6 확인표에도 지역·건물·호실을 함께 보여준다.
 - `payment_admin.name`: 지급신청 담당 연구행정원(검수창 자동검색용)
 - `projects`: **(자동)** 통합정보 프로젝트(연구관리) 화면에서 참여 과제(번호+명) 수집. "과제 갱신" 시 재수집.
 
@@ -89,5 +89,5 @@ kk-inspect 고유(`kk-inspect.config.json`): **검수 파일 폴더**(기본 `{k
 - `references/code_tables.md` — 지역·건물·단위 코드표
 
 ## scripts
-- `scripts/convert_evidence.py` — png/jpeg/bmp/tiff → jpg 변환, pdf → jpg(필요 시). pdf는 그대로 둠.
-- `scripts/rename_evidence.py` — 무작위 파일명을 `{YYMMDD} {금액} {내용} 카드영수증.jpg` 식으로 개명 + 원본 휴지통 이동.
+- `scripts/convert_evidence.py` — png/jpeg/bmp/tiff/webp/gif → jpg 변환(원본 유지, 같은 이름 있으면 `_conv`, 회전·투명 배경 반영, 여러 쪽 tif 는 쪽마다), pdf → jpg(필요 시). pdf는 그대로 둠.
+- `scripts/rename_evidence.py` — 무작위 파일명을 `{YYMMDD} {금액} {내용} 카드영수증.jpg` 식으로 **복사**(원본은 남김, 같은 이름 있으면 거부). 필요 없는 원본은 사용자 confirm 후 `--trash`(휴지통, 복구 가능).

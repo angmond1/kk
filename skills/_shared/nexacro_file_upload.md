@@ -40,7 +40,7 @@ Object.keys(f).filter(k => f[k] && f[k].ds_files)
 ---
 
 ## 3. 패턴 A — NEXACRO popupframe (같은 page 안)
-대표: **kk-pay fam_0702** / 부모탭 화면(kk-meeting fam_0704_02 등)도 사실상 이쪽.
+대표: 부모탭 화면(kk-meeting fam_0704_02 등). (kk-pay fam_0702 는 별도 page 라 지금은 패턴 C 로 — `tax_invoice_payment.md` §9-1.)
 첨부 화면이 부모 page 안에 있으니, **부모 page 에서 임시 DOM 버튼**을 만들고 그 버튼 onclick 에서 `addFiles()` 를 호출한다.
 
 ### 3-1. 임시 트리거 버튼 주입
@@ -88,7 +88,7 @@ DevTools take_snapshot   # 또는 find / 접근성 트리
 
 ### 4-3. 그 UID 에 `upload_file` 직접
 ```
-upload_file({ uid: "<found_uid>", filePath: "<cwd>\\_tmp\\파일.pdf" })   // chrome-devtools-mcp 도구. 전체 이름은 mcp__<서버명>__upload_file (서버명은 설치방식별 상이 — environment_setup.md "도구 이름 표기 규칙"). 파일은 workspace root(cwd) 안이어야 함(§4-6)
+upload_file({ pageId: <page>, uid: "<found_uid>", filePaths: ["<cwd>\\_tmp\\파일.pdf"] })   // chrome-devtools-mcp 도구. 전체 이름은 mcp__<서버명>__upload_file (서버명은 설치방식별 상이 — environment_setup.md "도구 이름 표기 규칙"). 파일은 workspace root(cwd) 안이어야 함(§4-6)
 ```
 한 파일씩 반복 (mcs_0003 실증). 복수 동시도 가능한지는 화면별 확인.
 
@@ -130,7 +130,7 @@ Claude in Chrome(`javascript_tool`)은 입력은 되지만 **`window.open` 팝�
 | 팝업 page 선택 | `list_pages` → `popup.html?...mcs_0003_pop2.xfdl` → `select_page(pageId)` |
 | form 입력 | `evaluate_script` 로 `window.application.popupframes.mcs_0003_pop2.form...` (그 page 자체 window — 부모 `_popupWin` 불필요) |
 | 지급신청자 | 같은 form `btn_input26.click()` → `popupframes.empSchPopup.form`(ds_search.setColumn→btn_search→ds_empList→btn_confirm) |
-| 첨부 | `take_snapshot` → `btn_selectFiles`("파일추가") uid → `upload_file({uid,filePath})` 파일별 |
+| 첨부 | `take_snapshot` → `btn_selectFiles`("파일추가") uid → `upload_file({pageId, uid, filePaths:[…]})` 파일별 |
 | 신청 | 사용자(`btn_registration`) |
 
 **★ workspace root 제약 (필수 — 2026-06-19 발견)**: chrome-devtools-mcp 의 `upload_file` 은 **configured workspace roots(보통 세션 cwd) 안의 파일만** 허용. 밖(예 다른 드라이브의 증빙 폴더)이면 즉시 `Error: Access denied: ... is not within any configured workspace roots`. → **증빙을 cwd 하위 임시폴더로 복사한 뒤 그 경로로 `upload_file`**.
@@ -138,7 +138,7 @@ Claude in Chrome(`javascript_tool`)은 입력은 되지만 **`window.open` 팝�
 $dst="<cwd>\_tmp\inspect_<case>"; New-Item -ItemType Directory -Force $dst | Out-Null
 Copy-Item "<원본폴더>\<파일패턴>" $dst -Force   # 파일명에 연속 공백 있으면 wildcard
 ```
-- 파일명에 **연속 공백**(예 `9950x  MSI`) 이 있으면 정확 경로 매칭이 깨짐 → wildcard(`삼성9100*5070.jpg`) 로 복사하고 실제 `FullName` 으로 `upload_file`.
+- 파일명에 **연속 공백**(예 `○○부품  A`) 이 있으면 정확 경로 매칭이 깨짐 → wildcard(`○○부품*A.jpg`) 로 복사하고 실제 `FullName` 으로 `upload_file`.
 - mcs_0003 실측: `upload_file` 후 `tmHeader=I`(클라이언트 선택). **신청 버튼 누르면 검수 저장과 함께 서버 업로드**(0%→100%) — `gfn_upload` 별도 호출 불필요.
 - 첨부 후 임시폴더는 정리(또는 inspect_folder 로 이관).
 
@@ -186,7 +186,7 @@ if (!document.body.contains(input)) document.body.appendChild(input);
 
 ### 5-2. 그 input 에 파일 직접 주입
 - Playwright: `await page.locator("#kk_file_input").setInputFiles("D:\\…\\file.jpg");`
-- chrome-devtools-mcp: `take_snapshot` 으로 노출한 `#kk_file_input` 의 uid 확보 → `upload_file({uid, filePath})` 파일별 반복(로컬 경로 OK — 단 cwd 하위, §4-6).
+- chrome-devtools-mcp: `take_snapshot` 으로 노출한 `#kk_file_input` 의 uid 확보 → `upload_file({pageId, uid, filePaths:[…]})` 파일별 반복(로컬 경로 OK — 단 cwd 하위, §4-6).
 - Claude in Chrome `file_upload(ref, paths)` 는 **채팅에 첨부한(세션 공유) 파일만** 올라간다 → 로컬 증빙은 chrome-devtools 로. 그래서 첨부 있는 작업은 처음부터 chrome-devtools 창에서(environment_setup 0단계 1).
 ※ 이 단계는 **클라이언트 선택**만 반영(서버 업로드 X). 서버 저장은 §5-3 으로.
 
@@ -266,12 +266,12 @@ s.textContent = `[id*="_form_modalPopDiv"], [id*="modalPopDivScrollableInnerCont
 ## 9. 안전·예의
 - A 패턴 **임시 버튼은 사용자 화면에 보인다** → 작업 후 반드시 `.remove()`.
 - 잘못된 파일 붙으면 §6 으로 삭제 가능하지만, **확인 후 첨부**가 원칙(절대경로·개수·대상 행을 사용자에게 한번 보여주고 confirm 후 진행).
-- **결재상신/신청 버튼은 사용자 confirm** 후 (kiki 보안정책 C1).
+- **결재상신/신청 버튼은 사용자 confirm** 후 (kiki 보안정책 C2).
 
 ## 화면별 적용 현황
 | 화면 | skill | 패턴 | 컴포넌트 | 비고 | 상태 |
 |---|---|---|---|---|---|
-| fam_0702 | kk-pay | **A** | `importFileUpload` | C 미시도 (재시도시 C 먼저) | ✅ codex 실증 2026-06-07 |
+| fam_0702 | kk-pay | **C**(별도 page) | `importFileUpload` → `_input_node` | A 는 2026-06-07 실증, 현재 표준은 C(`tax_invoice_payment.md` §9-1) | ✅ |
 | fam_0704_02 | kk-meeting | (A 또는 C) | §2 로 확인 | 부모탭 화면 — 실행 창은 chrome-devtools(첨부가 있으니 처음부터) | 🔵 미실증 |
 | **pop_fam_0703_02** | kk-meeting | **C** | `fileDiv1`(서명록)/`fileDiv2`(증빙)/`fileDiv3`(사전결재) | RQST_NO=`CONFERENCENO + "-" + ds_param.CARDUSEMGRNO`, FLE_TP=`"02"`(증빙). 로컬 증빙은 **chrome-devtools `upload_file`**(노출한 `#kk_file_input` uid)로 — Claude in Chrome `file_upload` 는 채팅에 첨부한 파일만 | ✅ codex 실증 2026-06-07 |
 | mcs_0003_pop2 | kk-inspect | **B** | `fileDiv1` | 별도 chrome page (`window.open`) — **chrome-devtools-mcp 단일채널(§4-6) 권장**, `upload_file` 은 cwd workspace root 안 파일만(밖이면 복사) | ✅ codex 2026-06-07 / Claude(chrome-devtools) 2026-06-19 |

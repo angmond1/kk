@@ -18,6 +18,12 @@
 """
 from __future__ import annotations
 import argparse, hashlib, io, json, os, re, sys, time
+# Windows 한국어(cp949) 콘솔·파이프에서도 한글·기호가 깨지거나 멈추지 않게 출력은 UTF-8 로 (모듈로 불러 써도 적용)
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 DEFAULT_WIKI = "3538560283559420253"   # KIST-Wiki-2.0 (URL 첫 번째 id)
 DEFAULT_HOME = "3538560286709555986"   # Home 페이지
@@ -61,9 +67,22 @@ def snapshot_root(arg: str | None) -> str:
 
 
 # ---------- 토큰 (kk-pay dooray_drive.py 와 동일 규칙) ----------
+def _read_text(p: str) -> str:
+    """메모장이 UTF-16 이나 ANSI 로 저장해도 읽히게 — BOM 우선, 그다음 UTF-8, 시스템 인코딩."""
+    raw = open(p, "rb").read()
+    if raw[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        return raw.decode("utf-16", errors="ignore")
+    for enc in ("utf-8-sig", "cp949"):
+        try:
+            return raw.decode(enc)
+        except Exception:
+            continue
+    return raw.decode("utf-8", errors="ignore")
+
+
 def _token_from_file(p: str) -> str:
     try:
-        lines = [ln.rstrip("\r\n") for ln in open(p, encoding="utf-8-sig")]
+        lines = _read_text(p).splitlines()
     except Exception:
         return ""
     body = [ln.strip() for ln in lines if ln.strip() and not ln.lstrip().startswith("#")]
@@ -105,12 +124,19 @@ def api():
             import requests, urllib3
         except ImportError:
             raise SystemExit("[kk-wiki] `requests` 패키지가 필요합니다: py -3 -m pip install requests  (macOS/Linux: python3 -m pip install requests)")
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)   # KIST 사내망 SSL 검사(ePrism) 대응
         s = requests.Session()
         s.headers.update({"Authorization": f"dooray-api {load_token()}", "Accept": "application/json", "User-Agent": "kiki-kk-wiki/0.1"})
-        s.verify = False
+        # TLS 는 기본 검증(토큰이 오간다). 사내 SSL 검사 프록시 때문에 실패하면 REQUESTS_CA_BUNDLE 로 사내 인증서를 지정하거나,
+        # 정말 임시로만 KIKI_INSECURE_TLS=1 (경고 출력). 2026-09-27 KIST 사내망 실측: 검증 켠 채로 api.gov-dooray.com 정상.
+        if os.environ.get("KIKI_INSECURE_TLS", "").strip() in ("1", "true", "yes"):
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            s.verify = False
+            print("[kk-wiki] 경고: KIKI_INSECURE_TLS 로 TLS 검증을 껐습니다(토큰 노출 위험) — 임시로만 쓰세요.", file=sys.stderr)
         _session = s
     return _session
+
+
+_FAILS: list = []   # 이번 실행에서 끝내 실패한 요청 경로 (crawl 이 삭제 단계를 건너뛰는 근거)
 
 
 def api_get(path: str, params: dict | None = None) -> dict:
@@ -125,7 +151,11 @@ def api_get(path: str, params: dict | None = None) -> dict:
         except SystemExit:
             raise
         except Exception as e:
+            if "SSL" in type(e).__name__ or "certificate" in str(e).lower():
+                raise SystemExit("[kk-wiki] TLS 인증서 검증 실패 — 사내 SSL 검사 프록시라면 REQUESTS_CA_BUNDLE 에 사내 루트 인증서를 지정하세요. "
+                                 "(임시 우회: 환경변수 KIKI_INSECURE_TLS=1 — 토큰 노출 위험)")
             print(f"  retry {i}: {str(e)[:100]}", flush=True); time.sleep(2 + 2 * i)
+    _FAILS.append(path)
     return {}
 
 
@@ -200,6 +230,12 @@ def sha(t: str) -> str:
     return hashlib.sha1(norm_text(t).encode("utf-8")).hexdigest()[:16]
 
 
+def _fkey(p: str) -> str:
+    """파일 경로 비교 키 — Windows·macOS 는 대소문자를 안 가리고 macOS 는 한글을 분해해 저장하므로 정규화해 비교."""
+    import unicodedata
+    return unicodedata.normalize("NFC", os.path.abspath(p)).casefold()
+
+
 def yaml_str(s) -> str:
     return json.dumps(str(s if s is not None else ""), ensure_ascii=False)
 
@@ -255,7 +291,7 @@ def build(root: str, wiki: str, home: str, quiet: bool = False) -> dict:
               "---", ""]
         with io.open(fp, "w", encoding="utf-8", newline="\n") as f:
             f.write("\n".join(fm) + (r["body"] or "").replace("\r\n", "\n") + "\n")
-        written.add(os.path.abspath(fp))
+        written.add(_fkey(fp))
         index.append({"id": r["id"], "title": r["title"], "parent": r["parent"], "depth": r["depth"], "path": "/".join(r["path"]),
                       "rel": rel, "url": r["url"], "updatedAt": r["updatedAt"], "createdAt": r["createdAt"], "updatedBy": r["updatedBy"],
                       "version": r["version"], "len": len(r["body"] or ""), "sha": sha(r["body"]), "files": [f["name"] for f in r["files"]],
@@ -263,8 +299,8 @@ def build(root: str, wiki: str, home: str, quiet: bool = False) -> dict:
     # 잔재 md 삭제
     for dp, _, fns in os.walk(pagesdir):
         for fn in fns:
-            ap = os.path.abspath(os.path.join(dp, fn))
-            if fn.endswith(".md") and ap not in written:
+            ap = os.path.join(dp, fn)
+            if fn.endswith(".md") and _fkey(ap) not in written:
                 try:
                     os.remove(ap)
                 except Exception:
@@ -309,10 +345,32 @@ def changes_report(prev: dict, cur: dict) -> str:
     return "\n".join(out)
 
 
+def _retire_raw(rawdir: str, keep: set, force: bool, label: str) -> None:
+    """이번 수집에 없는 raw 는 '삭제된 페이지'로 보되 지우지 않고 raw/_old_<시각>/ 로 옮긴다.
+    실패한 요청이 있었거나 새 수집이 기존의 절반도 안 되면(--force 없이) 옮기지도 않는다 — 스냅샷을 통째로 잃는 사고 방지(2026-09-27)."""
+    old = [fn for fn in os.listdir(rawdir) if fn.endswith(".json")]
+    gone = [fn for fn in old if fn not in keep]
+    if not gone:
+        return
+    if _FAILS:
+        print(f"[kk-wiki] ⚠ 요청 {len(_FAILS)}건이 실패해 기존 페이지 {len(gone)}건은 그대로 둡니다(삭제 판정 보류). 다시 {label} 하세요.", flush=True)
+        return
+    if len(keep) < max(1, len(old)) / 2 and not force:
+        print(f"[kk-wiki] ⚠ 새로 받은 페이지({len(keep)})가 기존({len(old)})의 절반도 안 됩니다 — 기존 페이지를 그대로 둡니다. "
+              f"정말 줄어든 게 맞으면 `--force` 로 다시 {label} 하세요.", flush=True)
+        return
+    old_dir = os.path.join(rawdir, "_old_" + time.strftime("%y%m%d_%H%M%S"))
+    os.makedirs(old_dir, exist_ok=True)
+    for fn in gone:
+        os.replace(os.path.join(rawdir, fn), os.path.join(old_dir, fn))
+    print(f"[kk-wiki] 위키에서 사라진 페이지 {len(gone)}건은 {old_dir} 에 보관(필요 없으면 지워도 됨)", flush=True)
+
+
 # ---------- crawl (토큰) ----------
-def crawl(root: str, wiki: str, home: str) -> None:
+def crawl(root: str, wiki: str, home: str, force: bool = False) -> None:
     rawdir = os.path.join(root, "raw")
     os.makedirs(rawdir, exist_ok=True)
+    _FAILS.clear()
     seen, order, t0 = set(), [0], time.time()
     print(f"[kk-wiki] 수집 시작 → {root}", flush=True)
     keep = set()
@@ -340,15 +398,13 @@ def crawl(root: str, wiki: str, home: str) -> None:
             walk(cid, depth + 1, path + [sub])
 
     hp = get_page(wiki, home)
-    if hp:
-        save(home, hp, [hp.get("subject") or "Home"], "", 0)
+    if not hp:
+        raise SystemExit("[kk-wiki] Home 페이지를 가져오지 못했습니다 — 토큰·사내망(VPN)·space id 를 확인하세요. 기존 스냅샷은 손대지 않았습니다.")
+    save(home, hp, [hp.get("subject") or "Home"], "", 0)
     seen.add(home)
     walk(home, 0, [])
-    # 이번 수집에 없는 raw 는 삭제된 페이지 → 제거
-    for fn in os.listdir(rawdir):
-        if fn.endswith(".json") and fn not in keep:
-            os.remove(os.path.join(rawdir, fn))
-    print(f"[kk-wiki] 수집 완료: {len(keep)} 페이지, {int(time.time() - t0)}초", flush=True)
+    _retire_raw(rawdir, keep, force, "crawl")
+    print(f"[kk-wiki] 수집 완료: {len(keep)} 페이지, {int(time.time() - t0)}초" + (f" (실패 {len(_FAILS)}건 — 다시 crawl 권장)" if _FAILS else ""), flush=True)
     build(root, wiki, home)
     cfg_note(root)
 
@@ -358,7 +414,7 @@ def cfg_note(root: str):
 
 
 # ---------- import (브라우저 export) ----------
-def import_export(root: str, wiki: str, home: str, path: str) -> None:
+def import_export(root: str, wiki: str, home: str, path: str, force: bool = False) -> None:
     data = json.load(open(path, encoding="utf-8-sig"))
     pages = data.get("pages") if isinstance(data, dict) else data
     if not isinstance(pages, list):
@@ -367,18 +423,20 @@ def import_export(root: str, wiki: str, home: str, path: str) -> None:
     rawdir = os.path.join(root, "raw")
     os.makedirs(rawdir, exist_ok=True)
     keep = set()
+    n_err = 0
+    _FAILS.clear()
     for i, p in enumerate(pages):
         pid = str(p.get("id") or "")
         if not pid:
             continue
+        if p.get("error") and not (p.get("body") or ""):          # 브라우저에서 본문을 못 받은 페이지 — 기존 raw 를 덮지 않는다
+            n_err += 1; _FAILS.append(pid); continue
         p = dict(p); p["_order"] = i; p["_source"] = "browser"
         p.setdefault("_path", p.get("path")); p.setdefault("_parent", p.get("parent")); p.setdefault("_depth", p.get("depth", 0))
         io.open(os.path.join(rawdir, f"{pid}.json"), "w", encoding="utf-8").write(json.dumps(p, ensure_ascii=False))
         keep.add(f"{pid}.json")
-    for fn in os.listdir(rawdir):
-        if fn.endswith(".json") and fn not in keep:
-            os.remove(os.path.join(rawdir, fn))
-    print(f"[kk-wiki] import: {len(keep)} 페이지")
+    _retire_raw(rawdir, keep, force, "import")
+    print(f"[kk-wiki] import: {len(keep)} 페이지" + (f" (본문 없는 오류 항목 {n_err}건은 건너뜀)" if n_err else ""))
     build(root, wiki, home)
     cfg_note(root)
 
@@ -402,13 +460,14 @@ def fresh(root: str, wiki: str, home: str, ids: list, update: bool) -> None:
         os.makedirs(rawdir, exist_ok=True)
         for pid, page in changed:
             old = idx.get(pid) or {}
-            page["_path"] = old.get("path", page.get("subject", pid)).split("/") if old else [page.get("subject", pid)]
-            page["_parent"] = old.get("parent", ""); page["_depth"] = old.get("depth", 0); page["_source"] = "api"
             try:
                 prev_raw = json.load(open(os.path.join(rawdir, f"{pid}.json"), encoding="utf-8"))
-                page["_order"] = prev_raw.get("_order", 0)
             except Exception:
-                page["_order"] = 0
+                prev_raw = {}
+            # 경로는 이전 raw 의 _path 를 그대로(제목에 '/' 가 있어도 안 쪼개짐), 없으면 index 의 path
+            page["_path"] = prev_raw.get("_path") or (old.get("path", page.get("subject", pid)).split("/") if old else [page.get("subject", pid)])
+            page["_parent"] = old.get("parent", ""); page["_depth"] = old.get("depth", 0); page["_source"] = "api"
+            page["_order"] = prev_raw.get("_order", 0)
             io.open(os.path.join(rawdir, f"{pid}.json"), "w", encoding="utf-8").write(json.dumps(page, ensure_ascii=False))
         build(root, wiki, home, quiet=True)
         print(f"[kk-wiki] {len(changed)} 페이지 재수집·반영 완료")
@@ -418,7 +477,7 @@ def fresh(root: str, wiki: str, home: str, ids: list, update: bool) -> None:
 
 def attach(root: str, wiki: str, ids: list, max_mb: float) -> None:
     """첨부 파일 다운로드(토큰) → attachments/<pageId>/<파일명>. 공식 API 는 api.* → 307 → file-api.* 로 Authorization 을 직접 들고 가야 한다."""
-    import requests
+    api()   # requests 없으면 여기서 설치 안내로 멈춤
     pidx = os.path.join(root, "index.json")
     pages = json.load(open(pidx, encoding="utf-8")).get("pages", []) if os.path.exists(pidx) else []
     targets = [p for p in pages if p.get("files") and (not ids or p["id"] in ids)]
@@ -443,7 +502,9 @@ def attach(root: str, wiki: str, ids: list, max_mb: float) -> None:
             try:
                 r0 = api().get(f"{API}/wiki/v1/wikis/{wiki}/pages/{p['id']}/files/{fid}", params={"media": "raw"}, allow_redirects=False, timeout=30)
                 loc = r0.headers.get("Location") or ""
-                r1 = requests.get(loc, headers={"Authorization": api().headers["Authorization"]}, verify=False, timeout=120) if loc else r0
+                if loc and not re.match(r"^https://[a-z0-9.-]+\.gov-dooray\.com/", loc):   # 토큰은 dooray 호스트에만
+                    raise RuntimeError("리다이렉트 주소가 dooray 가 아님: " + loc[:60])
+                r1 = api().get(loc, timeout=120) if loc else r0
                 r1.raise_for_status()
                 os.makedirs(outdir, exist_ok=True)
                 open(dest, "wb").write(r1.content)
@@ -480,18 +541,19 @@ def main(argv=None):
     ap.add_argument("--home", default=None)
     ap.add_argument("--update", action="store_true")
     ap.add_argument("--max-mb", type=float, default=30.0, help="attach: 이보다 큰 첨부는 건너뜀")
-    a = ap.parse_args(argv)
+    ap.add_argument("--force", action="store_true", help="crawl/import: 새 수집이 기존의 절반 미만이어도 기존 페이지를 _old 로 보관")
+    a = ap.parse_intermixed_args(argv)
     cfg = _skill_config()
     wiki = a.wiki or cfg.get("space_id") or DEFAULT_WIKI
     home = a.home or cfg.get("home_page_id") or DEFAULT_HOME
     root = snapshot_root(a.root)
     os.makedirs(root, exist_ok=True)
     if a.cmd == "crawl":
-        crawl(root, wiki, home)
+        crawl(root, wiki, home, a.force)
     elif a.cmd == "import":
         if not a.args:
             raise SystemExit("import <export.json>")
-        import_export(root, wiki, home, a.args[0])
+        import_export(root, wiki, home, a.args[0], a.force)
     elif a.cmd == "build":
         build(root, wiki, home)
     elif a.cmd == "fresh":

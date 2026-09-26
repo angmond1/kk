@@ -77,12 +77,10 @@
 
   // ---------- 메일 조회 ----------
   // 받은편지함을 기간(days)으로 필터. 분류용 핵심 필드만 추출.
-  async function listInbox({ days = 7, size = 200 } = {}) {
-    const d = await dfetch(`/v2/wapi/mails?folderName=inbox&size=${size}&page=0&order=-createdAt`);
-    const c = (d.result && d.result.contents) ? d.result.contents : [];
-    const cutoff = Date.now() - days * 86400000;
-    const recent = c.filter(m => new Date(m.createdAt).getTime() >= cutoff);
-    return { totalInbox: d.result ? d.result.totalCount : null, fetched: c.length, recent: recent.map(summarize) };
+  async function listInbox({ days = 7, size = 500, maxPages = 10 } = {}) {
+    // 기간 안 메일 전부(페이지 넘김). 바쁜 편지함에서 200건 넘게 와도 빠지지 않는다. truncated=true 면 maxPages 를 늘릴 것.
+    const r = await listMails({ folder: 'inbox', sinceDays: days, size, maxPages });
+    return { totalInbox: r.total, fetched: r.fetched, recent: r.mails, truncated: r.pages >= maxPages && r.fetched >= size * maxPages };
   }
 
   async function listFolderMails(folderId, { size = 50 } = {}) {
@@ -94,9 +92,11 @@
   // 메일 1건 → 분류·검색 판단용 핵심 필드. (발신자/제목/날짜/읽음/첨부수/id)
   //   read   = 사용자 화면의 읽음/안 읽음 표시 (POST /mails/read|unread 로 토글)
   //   opened = 한 번이라도 열린 적 있음 (상세 GET 시 true 로 굳음, 되돌릴 수 없음) — 표시용으로는 read 를 쓸 것
+  const readCache = {};   // id → 목록에서 본 read 값 (getMails 가 id 문자열만 받아도 안 읽음 복원)
   function summarize(m) {
     const f = (m.users && m.users.from && m.users.from.emailUser) ? m.users.from.emailUser : {};
     const flags = (m.mailSummary && m.mailSummary.flags) ? m.mailSummary.flags : {};
+    if (m.id) readCache[String(m.id)] = !!flags.read;
     return {
       id: m.id,
       date: (m.createdAt || '').slice(0, 16).replace('T', ' '),
@@ -117,8 +117,9 @@
   // ⚠️ 목록엔 본문 미리보기(previewText)가 비어 있다 → 본문 단서는 getMail 로.
   async function listMails(opt = {}) {
     const size = opt.size || 500, maxPages = opt.maxPages || 6;
-    const sinceTs = opt.since ? new Date(opt.since).getTime() : (opt.sinceDays ? Date.now() - opt.sinceDays * 86400000 : 0);
-    const untilTs = opt.until ? new Date(opt.until).getTime() + 86400000 : Infinity;
+    const kst = (d, end) => new Date(/T/.test(d) ? d : d + (end ? 'T23:59:59.999+09:00' : 'T00:00:00+09:00')).getTime();   // 'YYYY-MM-DD' 는 한국시간 기준
+    const sinceTs = opt.since ? kst(opt.since, false) : (opt.sinceDays ? Date.now() - opt.sinceDays * 86400000 : 0);
+    const untilTs = opt.until ? kst(opt.until, true) : Infinity;
     const folder = opt.folder || 'inbox';
     const base = opt.folderId ? `folderId=${opt.folderId}` : `folderName=${folder}`;
     const urlOf = (m) => opt.folderId ? `/mail/folders/${opt.folderId}/${m.id}` : `/mail/systems/${folder}/${m.id}`;
@@ -173,8 +174,8 @@
   async function getMails(items, { delayMs = 300, maxChars = 8000 } = {}) {
     const out = [];
     for (const it of items) {
-      const id = typeof it === 'string' ? it : it.id;
-      const wasRead = typeof it === 'string' ? null : it.read;
+      const id = String(typeof it === 'string' ? it : it.id).replace(/-/g, '');            // fmtList 의 하이픈 id 도 됨
+      const wasRead = typeof it === 'string' ? (id in readCache ? readCache[id] : null) : it.read;
       try { out.push(await getMail(id, { wasRead, maxChars })); }
       catch (e) { out.push({ id, error: String(e).slice(0, 120) }); }
       await new Promise(r => setTimeout(r, delayMs));
@@ -317,6 +318,7 @@
     for (const kw of kws) {
       const words = kw.split(/[^0-9A-Za-z가-힣]+/).filter(w => w.length >= 2).sort((a, b) => b.length - a.length).slice(0, 2);
       const r = await searchMails(words.length ? words : [kw], opt);
+      if (r.error) return { error: r.error, hits, total: 0, mails: [] };
       const low = kw.toLowerCase();
       hits[kw] = 0;
       for (const m of r.mails) {
@@ -340,7 +342,12 @@
   // ⚠️ Dooray 제약: 배열 POST 시 "첫 1건만" 생성 → 단건 호출. from.type은 include만(not_include -200200).
   // ⚠️ 같은 도메인 두 용도 분기는 applyOrder로 — 정확주소(예 nzine@nrf.re.kr)를 도메인(nrf.re.kr)보다 작게(먼저).
   async function createRule(spec) {
-    const kwCheck = (spec.subjectKeywords && spec.subjectKeywords.length) ? checkSubjectKeywords(spec.subjectKeywords, spec.sampleSubjects) : [];
+    spec = Object.assign({}, spec || {});
+    const arr = x => x == null ? [] : [].concat(x).map(String).filter(v => v.trim());
+    spec.fromEmails = arr(spec.fromEmails); spec.subjectKeywords = arr(spec.subjectKeywords);
+    if (!spec.fromEmails.length && !spec.subjectKeywords.length) return { blocked: 'noCondition', problems: [{ level: 'block', problem: '조건이 없습니다(fromEmails 또는 subjectKeywords) — 모든 메일이 옮겨지는 규칙은 만들지 않음' }] };
+    if (!spec.toFolderName) return { blocked: 'noFolder', problems: [{ level: 'block', problem: 'toFolderName 이 없습니다' }] };
+    const kwCheck = spec.subjectKeywords.length ? checkSubjectKeywords(spec.subjectKeywords, spec.sampleSubjects) : [];
     if (!spec.overrideKeywordCheck && kwCheck.some(p => p.level === 'block')) return { blocked: 'subjectKeywords', problems: kwCheck };
     const folder = await ensureFolder(spec.toFolderName);
     if (folder.needManual) return { needManualFolder: folder.name };
@@ -382,7 +389,7 @@
     const body = { exceptFolders: opt.exceptFolders || ['draft', 'spam', 'trash'], all: Array.isArray(terms) ? terms : [String(terms)],
       page: 0, order: opt.order || '-createdAt', highlight: true, size };
     if (opt.since) body.since = iso(opt.since, false); else if (opt.sinceDays) body.since = new Date(Date.now() - opt.sinceDays * 86400000).toISOString();
-    if (opt.before) body.before = iso(opt.before, true);
+    if (opt.before || opt.until) body.before = iso(opt.before || opt.until, true);   // until 도 같은 뜻으로
     const out = { total: null, fetched: 0, pages: 0, mails: [] }, folders = {};
     for (let p = 0; p < maxPages; p++) {
       body.page = p;
@@ -406,20 +413,23 @@
   }
   // 동의어 묶음별로 검색해 합치고 중복 제거(최신순). groups = [['○○대'], ['univ'], ['○○대학교', '세미나']]
   async function searchMany(groups, opt = {}) {
-    const seen = new Map(); let totalSum = 0;
+    const seen = new Map(); let totalSum = 0; const errors = [];
     for (const g of groups) {
       const r = await searchMails(g, opt); totalSum += r.total || 0;
+      if (r.error) errors.push(String(r.error));                       // 검색 오류는 '없음'이 아니라 오류로 보고
       for (const m of r.mails) if (!seen.has(m.id)) seen.set(m.id, m);
       await new Promise(res => setTimeout(res, 200));
     }
-    return { totalSum, mails: Array.from(seen.values()).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)) };
+    const out = { totalSum, mails: Array.from(seen.values()).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)) };
+    if (errors.length) out.error = errors.join(' / ');
+    return out;
   }
 
   // ---------- 출력 도우미 (Claude in Chrome javascript_tool 제약 대응, 2026-09-24 실측) ----------
   // (1) 반환 문자열은 약 1,000자에서 [TRUNCATED] → 결과를 window 에 두고 fmtList/fmtBody 로 조각내어 회수한다.
   // (2) 출력 필터: `a=b` 꼴이 있으면 통째로 [BLOCKED: Cookie/query string], URL·긴 숫자열(메일 id)도 가려진다
   //     → sanitize: = & ? ; 제거, URL→[url], 8자리 이상 숫자→#, '/'→'>'. 메일 id 는 hyId(4자리마다 '-')로만 노출.
-  //     링크는 https://kist.gov-dooray.com/mail/systems/inbox/<id> (hyId 의 '-' 를 지워 조합).
+  //     링크는 팝업 주소 https://kist.gov-dooray.com/mail/popup/mails/<id> (hyId 의 '-' 를 지워 조합, 폴더 무관).
   function sanitize(s) {
     return String(s == null ? '' : s).replace(/https?:\S+/gi, '[url]').replace(/[=&?;]/g, ' ').replace(/\d{8,}/g, '#').replace(/\//g, '>');
   }
@@ -427,13 +437,15 @@
   // 목록 정규식 1차 선별(제목·발신자·발신주소). Claude 가 동의어·영문·약어를 넓혀 만든 정규식을 넘긴다.
   //   excludeFrom: 발신 주소 제외 정규식(예 /kist\.re\.kr$/i 로 사내 공지 제외). ⚠️ 약어는 대소문자 구분·단어경계로(짧은 약어 정규식은 다른 단어 조각에도 걸린다).
   function pick(mails, re, { excludeFrom } = {}) {
-    return (mails || []).filter(m => (re.test(m.subject) || re.test(m.fromName) || re.test(m.fromEmail)) && !(excludeFrom && excludeFrom.test(m.fromEmail)));
+    const rx = new RegExp(re.source, re.flags.replace('g', ''));   // /g 면 test() 가 lastIndex 를 남겨 건너뛰는 함정
+    const ex = excludeFrom ? new RegExp(excludeFrom.source, excludeFrom.flags.replace('g', '')) : null;
+    return (mails || []).filter(m => (rx.test(m.subject) || rx.test(m.fromName) || rx.test(m.fromEmail)) && !(ex && ex.test(m.fromEmail)));
   }
   // 목록 한 조각: idx | 날짜 | R/U | 첨부수 | 발신 | 제목 [폴더] [| 미리보기 pv자] [| id(하이픈)]. 12줄 ≈ 800자(pv 를 주면 줄을 줄일 것).
   function fmtList(mails, from = 0, to = 12, { subj = 44, who = 14, ids = false, pv = 0 } = {}) {
     mails = mails || [];
     const rows = mails.slice(from, to).map((m, k) =>
-      sanitize(`${from + k} | ${m.date.slice(5)} | ${m.read ? 'R' : 'U'} | att${m.fileCount} | ${(m.fromName || m.fromEmail).slice(0, who)} | ${m.subject.slice(0, subj)}`
+      sanitize(`${from + k} | ${m.date.slice(2)} | ${m.read ? 'R' : 'U'} | att${m.fileCount} | ${(m.fromName || m.fromEmail).slice(0, who)} | ${m.subject.slice(0, subj)}`
         + (m.folder && m.folder !== 'inbox' ? ` [${m.folder}]` : '') + (pv && m.preview ? ' | ' + m.preview.slice(0, pv) : '')) + (ids ? ' | ' + hyId(m.id) : ''));
     return `[${from}-${Math.min(to, mails.length)} of ${mails.length}]\n` + rows.join('\n');
   }
@@ -442,7 +454,7 @@
     if (!b) return 'no body';
     if (b.error) return 'ERR ' + sanitize(b.error);
     const files = b.files.length ? ` (${b.files.slice(0, 3).join(', ').slice(0, 80)})` : '';
-    const head = `${b.subject.slice(0, 40)} | ${b.date.slice(5)} | ${b.fromName || b.fromEmail} | files ${b.files.length}${files} | txt ${b.textLen}${b.restoredUnread ? ' | unread restored' : ''}`;
+    const head = `${b.subject.slice(0, 40)} | ${b.date.slice(2)} | ${b.fromName || b.fromEmail} | files ${b.files.length}${files} | txt ${b.textLen}${b.restoredUnread ? ' | unread restored' : ''}`;
     return sanitize(head + '\n' + b.text.slice(offset, offset + chars));
   }
   // ---------- 메일 팝업 보기 (2026-09-27 사용자 확정: 링크·열기 모두 팝업 방식) ----------
@@ -457,7 +469,7 @@
   let popupState = null;
   function popupUrl(x) { return POPUP_BASE + String(x && x.id ? x.id : x); }
   function openMail(m) {
-    const id = String(m && m.id ? m.id : m);
+    const id = String(m && m.id ? m.id : m).replace(/-/g, '');
     const old = document.getElementById('kk-mail-popup-btn'); if (old) old.remove();
     const b = document.createElement('button');
     b.id = 'kk-mail-popup-btn';
@@ -496,7 +508,7 @@
     reportSpam, moveMails,
     createRule, listMailRules, deleteMailRule,
     subjectKeyword, checkSubjectKeywords, previewSubjectRule,
-    _version: 'kk-mail-ops/1.5',
+    _version: 'kk-mail-ops/1.6',
   };
   return window.kkMail._version + ' =^.^=';
 })();

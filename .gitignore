@@ -23,6 +23,10 @@ _tmp/
 /budget/
 /meeting/
 /inspect/
+/wiki/
+/dining/
+/_upload_tmp/
+# ⚠️ kk-wiki 의 /wiki/ 는 KIST 내부 자료(위키 본문·담당자 이름·내선) — 절대 커밋 금지
 
 # Python 캐시
 __pycache__/

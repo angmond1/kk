@@ -5,7 +5,7 @@
 ## 인증 원칙 (핵심)
 - **메일/행정 internal wapi는 브라우저 "세션 쿠키"로 인증** (`credentials:'include'`).
   사용자가 Chrome에 본인 KIST SSO 로그인만 돼 있으면 동작 → **API 토큰·비번을 skill에 넣지 않는다.**
-- 공식 REST API(`api.gov-dooray.com`, `Authorization: dooray-api {token}`)는 메일 관리에 **불필요**(메일 조회·스팸·이동·규칙은 internal wapi 전용). 토큰이 필요한 확장 기능은 각 사용자 로컬 `.env`에서만 읽고 skill에 값 박지 않음.
+- 공식 REST API(`api.gov-dooray.com`, `Authorization: dooray-api {token}`)는 메일 관리에 **불필요**(메일 조회·스팸·이동·규칙은 internal wapi 전용). 토큰이 필요한 확장 기능은 각 사용자 로컬 `<kiki_root>/token.txt` 에서만 읽고 skill에 값 박지 않음.
 
 ## 호스트
 | 용도 | 호스트 |

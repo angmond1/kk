@@ -28,10 +28,11 @@ description: |
 2. **탭 확보 + Dooray 이동**: `tabs_context_mcp` → `navigate` `https://kist.gov-dooray.com/mail`.
    - 로그인 페이지가 뜨면(세션 만료) 사용자에게 "Dooray에 로그인해 달라" 안내 후 중단.
 3. **코어 주입(1회)**: `scripts/kk_mail_ops.js`를 Read → `javascript_tool`로 inject.
-   - 반환값이 `kk-mail-ops/1.5 =^.^=`(버전 문자열)이면 성공. 이후 `window.kkMail.*` 호출.
+   - 반환값이 `kk-mail-ops/1.6 =^.^=`(버전 문자열)이면 성공. 이후 `window.kkMail.*` 호출.
    - 코어 1.3 부터 **Dooray 검색 API**(`POST /v2/wapi/mails/search`, 검색창과 동일 호출)가 `searchMails`/`searchMany` 로 들어 있다 — 메일 찾기(기능 1 경로 A)의 기본 수집 수단. 목록 API(`listMails`)는 최신부터 페이지를 넘기므로 오래된 기간은 검색 API 로. 파라미터 실측은 `references/wapi_reference.md` "검색" 절.
    - 코어 1.4 부터 **제목 키워드 도우미**(`subjectKeyword`·`checkSubjectKeywords`·`previewSubjectRule`)가 들어 있고, `createRule` 이 제목 키워드를 점검한다(기능 3 '제목 키워드 고르기').
    - 코어 1.5 부터 **메일 팝업 보기**(`openMail` 임시 버튼 + 실제 클릭 · `popupStatus` · `closePopups`, 링크는 `/mail/popup/mails/<id>`) — 기능 1 의 6.
+   - 코어 1.6: 검색 오류는 `error` 로 돌아온다(빈 결과와 구분 — `error` 가 있으면 "없음" 이 아니라 오류로 보고), `createRule` 은 조건 없는 규칙을 만들지 않고, `listInbox` 는 기간 안 메일을 전부 넘겨 읽는다(`truncated` 확인).
    - 페이지가 새로고침되면 `window.kkMail`이 사라지므로 재주입.
    - ⚠️ **async 반환이 `{}`로 비면**(특히 `/mail` → 특정 메일 redirect 직후 탭에서 발생): `javascript_tool`이 Promise 결과를 회수 못 하는 현상. 결과를 `window.__x = ...`에 저장하고 마지막 식은 동기 마커(`"go";`)로 즉시 반환 → **다음 호출에서 `JSON.parse(JSON.stringify(window.__x))`로 동기 회수**(2-스텝). sync 반환(`1+1`)은 정상이라 이 우회로가 통한다. 쓰기(`reportSpam`/`moveMails`)도 같은 패턴으로 실행 후 결과 회수.
 4. **출력 제약(2026-09-24 실측)**: `javascript_tool` 반환 문자열은 **약 1,000자에서 잘리고**(`[TRUNCATED]`), 출력 필터가 **`a=b` 꼴이 섞인 결과를 통째로 `[BLOCKED: Cookie/query string]`** 처리하며 URL·8자리 이상 숫자열(메일 id)도 가린다. → 결과는 window 에 두고 코어의 **`fmtList(mails, from, to)` / `fmtBody(b, chars, offset)` / `sanitize()`** 로 조각내어 회수(`=` 금지, id 는 `hyId` 하이픈 꼴). 모든 기능 공통.
@@ -57,7 +58,7 @@ description: |
 2. **경로 A — 서버 검색(기본, 빠름)**: 핵심어가 하나라도 있으면 `window.__x=null; window.kkMail.searchMany([['○○대'],['univ']], {since:'2025-01-01', before:'2025-12-31'}).then(r=>window.__x=r); 'started'` → 다음 호출에서 `window.kkMail.fmtList(window.__x.mails, 0, 10, {pv:60})`. Dooray 검색창과 같은 호출이라 **제목·본문·발신자 전체**가 대상이고 폴더 무관(받은·보낸 모두, 스팸·휴지통 제외), 기간은 서버가 거른다(연도 조건까지 서버가 걸러 즉시 돌아온다). 배열 원소끼리 AND, 한 원소 안 띄어쓰기는 구절 매칭이므로 **동의어는 묶음을 따로** 넣는다. 넓은 토큰(도메인 조각 `univ` 등)은 수신자 목록에 그 주소가 든 단체 메일까지 끌어오므로(넓은 토큰을 더하면 결과가 몇 배로 는다) **구체어 먼저**, 부족할 때만 넓힌다. 미리보기(`pv`)에 본문 앞부분이 실려 1차 판단에 쓴다. 결과 항목에 `url`·`folder` 가 들어 있다.
 3. **경로 B — 목록 훑기(핵심어를 못 정할 때)**: "그 업체 이름이 기억 안 나", "첨부 있던 거" 처럼 검색어가 없으면 `listMails({folder:'inbox', since, until, size:1000, maxPages:40})` 로 기간 목록을 받아 `pick(정규식)` 후 12줄씩 읽는다. 최신부터 넘기므로 **1년 전 구간은 11페이지·20여 초**(실측) → 가능하면 A. 보낸편지함은 `folder:'sent'` 로 한 번 더.
 4. **뜻으로 고르기** — 제목·발신·날짜·첨부수·미리보기를 읽고 10건 이내로 좁힌다. 검색어·정규식은 거르기용일 뿐이다. 함정: 약어는 대소문자 구분·단어경계(짧은 약어 정규식은 다른 단어 조각에도 걸린다), 사내 공지는 `pick(mails, re, {excludeFrom:/kist\.re\.kr$/i})` 로 제외, 같은 이름의 다른 기관(거래처 "○○정밀", "○○지원팀")은 제목으로 걸러낸다.
-5. **본문 확인(필요할 때만)** — `window.__b=null; window.kkMail.getMails(window.__c.slice(0,5)).then(r=>window.__b=r); 'started'` → `window.kkMail.fmtBody(window.__b[0], 700)`(이어 읽기는 세 번째 인자 offset). 전체에 돌리지 말 것(건당 0.3초 + rate limit). 첨부 파일명은 머리줄 `files (…)`.
+5. **본문 확인(필요할 때만)** — `window.__b=null; window.kkMail.getMails(window.__x.mails.slice(0,5)).then(r=>window.__b=r); 'started'`(목록 항목을 그대로; 하이픈 id 문자열도 되지만 항목이 안전) → `window.kkMail.fmtBody(window.__b[0], 700)`(이어 읽기는 세 번째 인자 offset). 전체에 돌리지 말 것(건당 0.3초 + rate limit). 첨부 파일명은 머리줄 `files (…)`.
    - ⚠️ 본문 GET 은 서버가 그 메일을 **읽음으로 바꾼다** → `getMails` 는 목록의 `read=false` 건을 조회 직후 **`markUnread` 로 자동 복원**한다(목록 항목(`read` 포함)을 그대로 넘겨야 하며 id 문자열만 넘기면 복원 못 함). 실측 3건 복원 확인. `opened`(열어본 적 있음)는 남지만 화면 표시는 `read` 기준이라 보이지 않는다.
 6. **결과 제시** — **같은 사건끼리 묶어**(안내 → 일정 조율 → 감사 인사 순) 표(날짜·발신·제목·비고)로 보여주고 건마다 **팝업 링크** `https://kist.gov-dooray.com/mail/popup/mails/<id>` 를 단다(2026-09-27 사용자 확정). 폴더와 관계없이 id 하나로 되고, 누르면 브라우저 새 탭에 그 메일 한 통만 뜨며 쓰던 메일함 화면은 그대로 남는다. id 는 `fmtList(..., {ids:true})` 의 하이픈 id 에서 `-` 를 지운다(출력 필터가 URL·긴 숫자를 가리므로 링크는 코어가 아니라 답에서 조합). 무엇을 제외했는지 한 줄 덧붙인다. 조회 전용이라 confirm 은 필요 없다.
    - **"N번 열어줘 / 띄워줘"**(읽음 처리되므로 사용자가 말했을 때만): `window.kkMail.openMail(항목)` → 화면 오른쪽 위에 임시 버튼 'kiki 메일 팝업 열기' 가 생긴다 → `find` 로 그 버튼을 찾아 `computer` `left_click`(ref) → `popupStatus()` 가 `opened` 면 Dooray 새 창 버튼과 같은 크기의 팝업 창이 뜬 것. 스크립트만으로 창을 열면 Chrome 팝업 차단기가 막으므로(실측) 반드시 이 실제 클릭으로 연다. 클릭 한 번에 창 하나라 여러 통이면 한 통씩 반복하고, 같은 메일은 같은 창을 다시 쓴다. `blocked` 면 팝업 링크를 주고 눌러 달라고 한다. 사용자가 다 봤다고 하면 `closePopups()` 로 닫는다.
@@ -109,16 +110,16 @@ description: |
 
 #### 폴더 확보 (2·3 공통)
 `ensureFolder(name)`이 **없으면 자동 생성**한다(`create-path` 형식 확정). 폴더 생성·자동분류 규칙은 사용자 confirm 후.
-> 만에 하나 `{needManualFolder}`를 반환하면(생성 실패) Dooray UI 수동 생성을 안내 후 재시도.
+> 만에 하나 `ensureFolder` 가 `{needManual:true}`(→ `createRule` 은 `{needManualFolder}`)를 반환하면(생성 실패) Dooray UI 수동 생성을 안내 후 재시도.
 
-### 4. 스팸 처리 (기본, 누구에게나 통용) · 항상 수행
+### 4. 스팸 처리 (기본, 누구에게나 통용) · 사용자가 요청할 때 수행(첫 실행은 안내로 끝)
 받은편지함에서 **광고성/predatory 메일을 식별 → 스팸 신고 제안**.
 - 조회: `window.kkMail.listInbox({days: N})` (기본 7일).
 - 분류: `references/classification_policy.md`의 **판별 패턴**으로 광고성/predatory 식별.
 - 제안: **위 공통 mandate 대로** 걸러낸 메일 전체를 본문 표로 먼저 출력(번호·날짜·발신자 주소·제목·분류 근거) → 그 다음 **confirm**.
 - 실행: `window.kkMail.reportSpam([id,...])` (휴지통 + 학습 + 발신자 차단 + 과거 inbox 소급).
 - 스팸은 **폴더를 만들지 않는다**. 스팸함으로 보낼 뿐.
-- **제목으로도 거르기**(사용자가 요청할 때만 — 발신 주소를 자주 바꾸는 predatory 저널·학회 등): 구절은 위 '제목 키워드 고르기' 대로 고른다(예: `Journal of ○○ Science` — 광고 문구·인사말 제외). 지난 메일은 그 구절로 `previewSubjectRule` → 표 → confirm → `reportSpam`. 앞으로 올 메일까지 거르려면 그 구절로 자동분류 규칙을 만들되 대상을 `toFolderName: 'spam'`(스팸메일함)으로 한다 — 시스템 폴더를 대상으로 한 규칙은 아직 실측 전이라 첫 사용 때 confirm 후 1건으로 확인하고, 거부되면 사용자 폴더(예: 광고)로 대신하자고 제안한다.
+- **제목으로도 거르기**(사용자가 요청할 때만 — 발신 주소를 자주 바꾸는 predatory 저널·학회 등): 구절은 위 '제목 키워드 고르기' 대로 고른다(예: `Journal of ○○ Science` — 광고 문구·인사말 제외). 지난 메일은 그 구절로 `previewSubjectRule` → 표 → confirm → `reportSpam(ids, {addReject:false, applyBefore:false})`(제목으로 고른 목록엔 동료가 전달한 메일이 섞일 수 있으니 발신자 차단·과거 소급은 끄고, 필요하면 사용자가 켠다). 앞으로 올 메일까지 거르려면 그 구절로 자동분류 규칙을 만들되 대상을 `toFolderName: 'spam'`(스팸메일함)으로 한다 — 시스템 폴더를 대상으로 한 규칙은 아직 실측 전이라 첫 사용 때 confirm 후 1건으로 확인하고, 거부되면 사용자 폴더(예: 광고)로 대신하자고 제안한다.
 
 ---
 
@@ -143,7 +144,7 @@ description: |
 1. 실행 준비(위) 완료.
 2. **현재 상태 파악** — `findAllFolders()` + `listMailRules()`로 **기존 폴더·분류 규칙을 먼저 조회**(충돌 판단용). 폴더 목록 제시.
 3. **기능 안내(반드시 출력 — 여기서 첫 실행은 끝)** — 준비물이 더 필요 없다는 것(같은 Chrome·같은 Dooray 로그인, 토큰·추가 설치 없음)과 앞으로 쓸 수 있는 말을 예시로 보여준다:
-   - **1 메일 찾기(가장 많이 쓰는 기능)**: *"작년에 ○○대 세미나 갔던 거 관련 메일 찾아줘"*, *"첨부에 견적서 있던 업체 메일 어디 있지"* — 키워드 검색으로 안 잡히는 메일을 제목·본문·발신자를 뒤져 뜻으로 골라 팝업 링크로 보여준다(누르면 그 메일 한 통만 뜬다, 읽음 상태는 바꾸지 않음, 받은·보낸 메일 모두). "3번 띄워줘" 하면 작은 팝업 창으로 연다.
+   - **1 메일 찾기(가장 많이 쓰는 기능)**: *"작년에 ○○대 세미나 갔던 거 관련 메일 찾아줘"*, *"첨부에 견적서 있던 업체 메일 어디 있지"* — 키워드 검색으로 안 잡히는 메일을 제목·본문·발신자를 뒤져 뜻으로 골라 팝업 링크로 보여준다(누르면 그 메일 한 통만 뜬다 — 링크를 열면 그 메일은 읽음 처리되지만, 찾기 자체는 읽음 상태를 바꾸지 않음; 받은·보낸 메일 모두). "3번 띄워줘" 하면 작은 팝업 창으로 연다.
    - 2 폴더 분류: *"받은편지함 정리해줘"*
    - 3 자동분류 규칙: *"앞으로 nature.com 은 저널 폴더로"* (기본 조건은 발신 주소만)
    - 4 스팸 처리: *"지난주 광고 스팸 골라줘"*

@@ -12,7 +12,7 @@
 
 ## Chrome MCP 절차 (재사용 JS)
 
-**0. 진입** — `list_connected_browsers` → `select_browser` → `tabs_context_mcp({createIfEmpty:true})` → `navigate`(위 URL) → wait 7s → 제목 "검수신청관리" 확인.
+**0. 진입** — SKILL 대로 **chrome-devtools 창**(첨부까지 한 채널): `list_pages` → `navigate_page`(위 URL; 세션 없으면 먼저 `e.kist.re.kr` 로그인) → `wait_for` 7s → 제목 "검수신청관리" 확인. 도구 매핑은 `../../_shared/nexacro_file_upload.md` §4-6. (Claude in Chrome 으로 시작하면 첨부 단계에서 다시 로그인·재입력해야 한다.)
 
 **1. 팝업 열기** (window.open 후킹 + 검수신청 버튼 클릭)
 ```js
@@ -53,20 +53,21 @@
 **3. 지급신청자** (config 행정원 이름으로 검색, 비동기 → 단계 분리)
 - `form.btn_input26.click()` → wait 4s
 - 검색: `(()=>{const f=window._popupWin.application.popupframes.empSchPopup.form; f.ds_search.setColumn(0,'EMP_NM','<config.payment_admin.name>'); f.btn_search.click(); return'search';})()` → wait 3s
-- 선택+확정: `(()=>{const f=window._popupWin.application.popupframes.empSchPopup.form; if(f.ds_empList.getRowCount()===0)return'0건'; f.ds_empList.set_rowposition(0); f.btn_confirm.click(); return JSON.stringify({nm:f.ds_empList.getColumn(0,'EMP_NM'),no:f.ds_empList.getColumn(0,'EMP_NO')});})()` (이름·사번 확인. 동명이인이면 사용자에게 확인)
+- 결과 확인(확정 전): `(()=>{const f=window._popupWin.application.popupframes.empSchPopup.form; const n=f.ds_empList.getRowCount(); const rows=[]; for(let i=0;i<n;i++) rows.push({i, nm:f.ds_empList.getColumn(i,'EMP_NM'), dept:f.ds_empList.getColumn(i,'DEPT_NM')}); return JSON.stringify(rows);})()` → 이름이 정확히 같은 행이 **1건**일 때만 다음으로. 0건이면 이름 재확인, 2건 이상(동명이인·긴 이름 포함)이면 목록을 사용자에게 보여 고르게 한다.
+- 선택+확정(그 행 번호 r 로): `(()=>{const f=window._popupWin.application.popupframes.empSchPopup.form; f.ds_empList.set_rowposition(r); f.btn_confirm.click(); return f.ds_empList.getColumn(r,'EMP_NM');})()` (사번은 채팅에 출력하지 않는다)
 
 **4. 검증** (RLTDMGRNO 가 비어있어야 ORA 에러 안 남)
 ```js
 (() => {
   const form=window._popupWin.application.popupframes.mcs_0003_pop2.form;
   const p=form.ds_main_PRCT_INFO, d=form.radio2.value==='Y'?form.ds_main_ASST_INFO:form.ds_main_NOT_ASST_INFO;
-  return JSON.stringify({검수일:p.getColumn(0,'CCK_DTM'),지급신청자:p.getColumn(0,'FNSH_PTT_USER_NM'),
+  return JSON.stringify({검수일:p.getColumn(0,'CCK_DTM'),지급신청자:p.getColumn(0,'FNSH_PTT_USER_NM'),지역:form.combo2.value,건물:form.combo3.value,호실:form.output1.value,
     RLTDMGRNO:String(p.getColumn(0,'RLTDMGRNO')),자산구분:form.radio2.value,
     품명:d.getColumn(0,'PROD_NM'),취득가:d.getColumn(0,'OBT_AMT'),취득일:d.getColumn(0,'OBT_DT')});
 })()
 ```
 
-**5. 첨부 + 신청 = 사용자.** 저장 성공 시 팝업 자동 닫힘. 다음 건은 1번부터 다시.
+**5. 첨부 = 자동(confirm 후, 아래 '파일첨부 자동화') / 신청 버튼 = 사용자.** 저장 성공 시 팝업 자동 닫힘. 다음 건은 1번부터 다시.
 
 ## 비자산 필드 (`ds_main_NOT_ASST_INFO`)
 | 필드 | 컬럼 |

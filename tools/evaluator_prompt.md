@@ -1,4 +1,4 @@
-# kiki fresh-install evaluator (재사용 프롬프트 — 메인테이너 검증용, v0.2.3 설치 흐름 기준)
+# kiki fresh-install evaluator (재사용 프롬프트 — 메인테이너 검증용, v0.4.1 설치 흐름 기준)
 
 > Claude 가 general-purpose sub-agent 를 spawn 할 때 이 프롬프트를 주입한다.
 > `{{DIST}}` / `{{RUN_HOME}}` 는 `tools/fresh-test.sh` 가 출력한 경로로 치환.
@@ -22,7 +22,7 @@
 - **실제로 하지 말 것**: winget/brew/apt/pip 설치, `claude mcp add`, `~/.claude.json` 수정, 앱 재시작, 포털/Dooray/GitHub 접속. 그 시점엔 "지침이 무엇을 하라고 하는지, 그대로 할 수 있는지"만 판정한다.
 
 **시나리오 판정** (각각 지침이 막힘 없이 안내하는가 — 문서 근거를 인용):
-① git 이 없는 사용자 ② Node.js 가 없는 사용자 ③ Claude Desktop 만 있고 `claude` CLI 가 PATH 에 없는 사용자 ④ macOS 사용자 ⑤ "chrome-devtools-mcp 설치해줘" 라고만 말한 사용자 ⑥ "두레이 토큰 저장했다" 라고 말한 사용자 ⑦ 설치 직후 같은 세션에서 바로 `kk-mail 설정해줘` 를 시도한 사용자.
+① git 이 없는 사용자 ② Node.js 가 없는 사용자 ③ Claude Desktop 만 있고 `claude` CLI 가 PATH 에 없는 사용자 ④ macOS 사용자 ⑤ "chrome-devtools-mcp 설치해줘" 라고만 말한 사용자 ⑥ "두레이 토큰 저장했다" 라고 말한 사용자 ⑦ 설치 직후 같은 세션에서 바로 `kk-mail 설정해줘` 를 시도한 사용자 ⑧ `-Root` 없이 `install.ps1 kk-mail kk-pay` 처럼 일부 skill 만 고른 사용자(첫 이름이 root 로 잡히면 FAIL) ⑨ 옛 kk-dining 설치본을 갱신하는 사용자(폴더·config 이름·config 안 경로) ⑩ 처음엔 다운로드 폴더에서, 나중에 `-Root C:\kiki` 로 다시 설치한 사용자(kiki_root 가 어디를 가리키는지 알려주는가) ⑪ kk-wiki 를 쓰는 사용자(`{root}/wiki` 가 gitignore 되는가).
 
 **환경 의존은 막힘 아님**: 포털 로그인·Chrome 확장·사내망/VPN·collaborator 초대·유료 계정은 정상 전제. 안내 명확성만 평가.
 
@@ -30,10 +30,10 @@
 1. README 만 읽고 무엇을 준비해야 하는지 알 수 있는가(계정·Chrome·확장·chrome-devtools·포탈 로그인·토큰).
 2. Step 0: Python/Node 확인 명령이 맞는가, 없을 때 안내가 OS 별로 있는가.
 3. Step 1: 폴더 질문 → ZIP/clone/동료 폴더 분기가 모두 서술돼 있는가.
-4. Step 2: `install.ps1` 실제 실행 결과 — `{{RUN_HOME}}/.claude/skills/_shared` + `kk-*` 5개 복사, `{{RUN_HOME}}/.claude/kiki/kiki.config.json` 생성 + `kiki_root` 기록, root 에 `budget/ meeting/ inspect/ _tmp/` + `token.txt` 생성. 하나라도 빠지면 FAIL. `install.sh` 도 같은 항목 확인.
+4. Step 2: `install.ps1` 실제 실행 결과 — `{{RUN_HOME}}/.claude/skills/_shared` + `kk-*` 6개(kk-mail·kk-wiki·kk-pay·kk-meeting·kk-budget·kk-inspect) 복사, `{{RUN_HOME}}/.claude/kiki/kiki.config.json` 생성 + `kiki_root` 기록, root 에 `budget/ meeting/ inspect/ _tmp/` + `token.txt` 생성. 하나라도 빠지면 FAIL. `install.sh` 도 같은 항목 확인.
 5. Step 3: 확장·chrome-devtools 등록 안내가 Desktop 사용자(CLI 없음)에게 실행 가능한가.
 6. Step 4: token.txt 절대경로 안내·채팅 붙여넣기 경고·"두레이 토큰 저장했다" 처리 절차가 있는가.
-7. Step 5: 재시작 안내(Desktop 은 Quit) + README 에서 뺀 안내(권장 모델·VPN·로그인 창·한글/Office)를 주라는 지시가 있는가.
+7. Step 5: 재시작 안내(Desktop 은 Quit) + README 에서 뺀 안내(권장 모델·VPN·로그인 창)를 주라는 지시가 있는가.
 8. **설치본 무결성 스캔(실제 실행)**: `{{RUN_HOME}}/.claude/skills/**/SKILL.md` 와 `references/*.md` 가 참조하는 상대경로(`../_shared/*.md`, `references/*.md`, `scripts/*`, `assets/*`)가 설치본에 실제로 존재하는지 스크립트로 검사 → 깨진 링크 목록(0건이어야).
 9. 첫 실행 준비: `kk-budget/SKILL.md` 부트스트랩을 읽고 새 사용자가 `kk-budget 설정해줘` 했을 때 무엇을 묻게 되는지 예측 — 사번·토큰 같은 민감값을 채팅에 노출시키는 지시가 있는지 점검.
 10. 문서 간 모순: README ↔ CLAUDE.md ↔ INSTALL.md ↔ `skills/_shared/environment_setup.md` ↔ `personal_config.md` 사이의 경로·파일명·문구 불일치(token.txt/kiki.env, 폴더 기본값 `C:\kiki`/`~/kiki`, 확인 문구, 도구 등록 명령).

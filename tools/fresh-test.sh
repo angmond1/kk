@@ -24,10 +24,9 @@ eval_dir="$repo/_tmp/fresh_eval"
 dist="$eval_dir/dist"
 home="$eval_dir/$run/home"
 
-# 1) 배포본 추출 — 추적 파일만(= 실제 clone). gitignore 제외물(CLAUDE.local.md/_tmp 등) 자동 제외.
-git -C "$repo" add -A
+# 1) 배포본 추출 — HEAD 에 커밋된 파일만(= 실제 clone). 작업 트리의 미추적·gitignore 파일(wiki/ 등 개인 데이터)은 절대 섞이지 않는다.
 rm -rf "$dist"; mkdir -p "$dist"
-git -C "$repo" checkout-index -a -f --prefix="$dist/"
+git -C "$repo" archive HEAD | tar -x -C "$dist"
 
 # 2) LF 정리 — 이 Windows 환경의 autocrlf 가 입히는 CRLF 를 제거해 실제 mac/linux clone(LF) 을 재현.
 #    (실제 배포는 .gitattributes eol=lf 로 LF 보장. 여기선 git archive/checkout-index 의 로컬 autocrlf 보정.)

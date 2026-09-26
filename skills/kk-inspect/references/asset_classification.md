@@ -26,7 +26,7 @@
 6. **회색지대**(PC부품 합쳐 완성PC·50만↑ 정보기기·한 거래에 자산+비자산 혼재) → 단정 X, 근거 제시하고 사용자 확인
 
 ## 분류 애매 시
-- KIST wiki 검색: `https://kist.gov-dooray.com/wiki/3538560283559420253` (또는 로컬 크롤본 `dooray_wiki_kist/search_hybrid.py` 하이브리드 검색)
+- KIST wiki 검색: `https://kist.gov-dooray.com/wiki/3538560283559420253` (또는 kk-wiki 스냅샷 검색 `python ../kk-wiki/scripts/wiki_search.py 자산 등록`)
 - 「7-1 자산의 등록」 pageId `3565444440219897198`
 - 「연구행정원 업무지침서.pdf」 pageId `3621699491180662668` 첨부
 - 그래도 애매하면 **담당 행정원에게 확인 권유**(단정 금지).

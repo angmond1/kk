@@ -1,17 +1,28 @@
 # -*- coding: utf-8 -*-
 """
 kk-budget 예산 리포트 렌더러.
-입력: fetch 수집 JSON (snapshot_date / track_categories / projects{acccd:{name,pi,role,direct{A,D},categories:{cat:{A,completed,pending,D}}}})
+입력: fetch 수집 JSON (snapshot_date / track_categories / projects) — projects 는 {acccd:{…}} 사전 또는 [{acccd,…}] 목록 둘 다 됨.
+  과제 = {name, pi, role, direct{A,D}, categories:{표시명:{A,exec,pendingDone,pendingProg,D}}} (kkBudget.queryBudgetTable 반환 그대로; 없는 비목은 키를 빼야 '-' 로 표시)
 출력: 과제 행 x 카테고리(총액/잔액) + (한 칸 띄우고) 직접비(잔액/총액) 엑셀.
 사용: python make_report.py <input.json> <output.xlsx>
 credential-free. 개인 식별자/경로 하드코딩 없음(전부 인자/JSON).
 """
 import json
 import sys
+# Windows 한국어(cp949) 콘솔·파이프에서도 한글·기호가 깨지거나 멈추지 않게 출력은 UTF-8 로 (모듈로 불러 써도 적용)
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+import os
 from pathlib import Path
-from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from openpyxl.utils import get_column_letter
+try:
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+except ImportError:
+    sys.exit("[kk-budget] openpyxl 이 없습니다: python -m pip install openpyxl  (macOS/Linux 는 python3 -m pip install --user openpyxl)")
 
 THIN = Side(style="thin", color="999999")
 LIGHT = Side(style="thin", color="CCCCCC")
@@ -53,12 +64,15 @@ def dash(ws, row, col, label="-"):
 
 
 def main(json_path, out_path):
-    try:
-        sys.stdout.reconfigure(encoding="utf-8")  # Windows cp949 콘솔에서 한글·기호 출력 크래시 방지
-    except Exception:
-        pass
-    snap = json.load(open(json_path, encoding="utf-8"))
+    out_path = os.path.expanduser(str(out_path))
+    if "{" in out_path or "}" in out_path:
+        sys.exit("[kk-budget] 출력 경로에 치환 안 된 자리표시({kiki_root} 등)가 있습니다: " + out_path)
+    with open(os.path.expanduser(str(json_path)), encoding="utf-8-sig") as f:   # PowerShell 이 BOM 을 붙여 저장해도 읽힘
+        snap = json.load(f)
     cats = snap["track_categories"]
+    projs = snap.get("projects") or {}
+    if isinstance(projs, list):                        # [{acccd,…}] 목록도 허용 (queryProjects·kiki.config 형식)
+        projs = {str(pj.get("acccd", "")): pj for pj in projs if isinstance(pj, dict) and pj.get("acccd")}
     ds = snap["snapshot_date"]
 
     wb = Workbook()
@@ -96,7 +110,7 @@ def main(json_path, out_path):
     ws.row_dimensions[r2].height = 20
 
     row = r2 + 1
-    for code, p in snap["projects"].items():
+    for code, p in projs.items():
         txt(ws.cell(row=row, column=1, value=code), bold=True, align="center")
         txt(ws.cell(row=row, column=2, value=p.get("name", "")), bold=True)
         txt(ws.cell(row=row, column=3, value=f'{p.get("pi","")}/{p.get("role","")}'), align="center")
@@ -138,4 +152,6 @@ def main(json_path, out_path):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) < 3:
+        sys.exit("사용: python make_report.py <input.json> <output.xlsx>")
     main(sys.argv[1], sys.argv[2])

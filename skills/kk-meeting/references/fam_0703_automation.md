@@ -54,13 +54,17 @@ if (i>0) F.bt_addRow_onclick.call(F,F.bt_addRow,{});
 let idx=-1; for(let r=0;r<F.ds_rndGrid.getRowCount();r++) if(String(F.ds_rndGrid.getColumn(r,'CARDAPPRNO'))===apprNo) idx=r;
 F.ds_rqstGrid.set_rowposition(i); F.ds_rndGrid.set_rowposition(idx); F.doSetDesp('rndGrid');
 // 4-2 계정 — ⚠️ 매핑이 그 행의 예산항목/비목/책임자/적요를 초기화하므로 반드시 매핑 뒤에
-goRow(i); F.ds_main_RNDCARD.setColumn(0,'BUDGSBJCD','2E11111');   // ← 실제 계정번호 F.openBudgPopup();
+goRow(i); F.ds_main_RNDCARD.setColumn(0,'BUDGSBJCD','2E11111');   // ← 실제 계정번호
+F.openBudgPopup();
 //     popBudgList: Grid00/01/02_oncellclick — BUDGITEMCD='33', EXPITEMCD='523' 행을 코드로 검색(계정마다 행번호 다름) → doDecision()
-// 4-3 거래처구분 — 해외 가맹점(CUSTCD 없음)은 '2'=거래처명, 국내는 기본 '4'=사업자등록번호 유지
+// 4-3 거래처구분 — 해외 가맹점(CUSTCD 없음)만 '2'=거래처명으로. 국내 카드는 기본 '4'=사업자등록번호 그대로(아래 블록 건너뜀)
 //     코드표(인라인 innerdataset = cb[cb.innerdataset], codecolumn/datacolumn): ""선택 / 0 거래처코드 / 1 직원번호 / 2 거래처명 / 3 주민등록번호 / 4 사업자등록번호
-const prev=cb.value; cb.set_value('2'); F.switch1_RNDCARD_combo_custcls_onitemchanged.call(F,cb,{fromobject:cb,postvalue:'2',prevalue:prev});
-cn.set_value(name); F.switch1_RNDCARD_formDetail_Custnm_onchanged.call(F,cn,{fromobject:cn,postvalue:name});
-F.ds_rqstGrid.setColumn(i,'CUSTCLSCD','2'); F.ds_rqstGrid.setColumn(i,'CUSTNM',name);
+if (!F.ds_rndGrid.getColumn(idx,'CUSTCD')) {                       // 해외 가맹점만
+  const cb=/* §0 정찰 이름표의 거래처구분 콤보 */ null, cn=/* §0 정찰 이름표의 거래처명 입력칸 */ null;   // ← 이름 추측 금지, §0 에서 잡은 컴포넌트로 치환
+  const prev=cb.value; cb.set_value('2'); F.switch1_RNDCARD_combo_custcls_onitemchanged.call(F,cb,{fromobject:cb,postvalue:'2',prevalue:prev});
+  cn.set_value(name); F.switch1_RNDCARD_formDetail_Custnm_onchanged.call(F,cn,{fromobject:cn,postvalue:name});
+  F.ds_rqstGrid.setColumn(i,'CUSTCLSCD','2'); F.ds_rqstGrid.setColumn(i,'CUSTNM',name);
+}
 // 4-4 적요 — 마지막에
 F.ds_rqstGrid.setColumn(i,'COMDSCCONT','일시: YYYY-MM-DD / 장소: ○○식당 / 회의제목: … / 김키키 외 N명 / (필요시 사유, 예: 해외출장 중 사용으로 식비 1회분 반납 수입의뢰서 첨부)');
 ```
@@ -73,7 +77,7 @@ goRow(i); F.btn_Conference_onclick.call(F,null,{});     // → window.applicatio
 ```
 - 입력·저장은 fam_0704_automation §9 와 동일: `ds_SAVE` 컬럼 + components `set_value`, `rd_UseType` '3', 내부 `ds_datagrid1` KORNM/PAYNO/DEPTNM, 외부 `ds_datagrid2` OUTNAME/OUTCOMPANY/**PROJJOINYN 'N'**(8/1 이후 필수), `C.joinPeople=총원`, `C.doSave()`. 최소참석인원 ≥ ⌈금액÷50,000⌉.
 - 저장 판정 = `C.ds_SAVE.CONFERENCENO` 발급 여부(메시지 "저장되었습니다." 는 4초 이상 늦게 옴). **CONFERENCENO 는 지급신청서당 1개**(두 행 공유) — 카드별 구분·첨부 키는 `CONFERENCENO-CARDUSEMGRNO`.
-- 첨부(패턴 C, `../_shared/nexacro_file_upload.md`): `C.fileDiv2.extUp._input_node` 에 id 부여·노출 → chrome-devtools `take_snapshot` 으로 그 input uid → `upload_file` 파일별(로컬 증빙; 채팅에 첨부한 파일이면 Claude in Chrome `find`→`file_upload(ref, 파일들)` 다중도 가능) → `C.fileDiv2.ds_files` 행수·tmHeader `I` 확인 → `C.fileDiv2.gfn_upload('','fn_endFileCallBack1','ds_file','RQST_NO='+C.CONFERENCENO+'-'+C.ds_param.getColumn(0,'CARDUSEMGRNO'),'02')` → 6초 → 전부 `S/02` 확인 → input 숨김(id 제거) → `C.bt_close_onclick.call(C,C.bt_close,{})`.
+- 첨부(패턴 C, `../../_shared/nexacro_file_upload.md`): `C.fileDiv2.extUp._input_node` 에 id 부여·노출 → chrome-devtools `take_snapshot` 으로 그 input uid → `upload_file` 파일별(로컬 증빙; 채팅에 첨부한 파일이면 Claude in Chrome `find`→`file_upload(ref, 파일들)` 다중도 가능) → `C.fileDiv2.ds_files` 행수·tmHeader `I` 확인 → `C.fileDiv2.gfn_upload('','fn_endFileCallBack1','ds_file','RQST_NO='+C.CONFERENCENO+'-'+C.ds_param.getColumn(0,'CARDUSEMGRNO'),'02')` → 6초 → 전부 `S/02` 확인 → input 숨김(id 제거) → `C.bt_close_onclick.call(C,C.bt_close,{})`.
 - 해외 건 첨부 = 영수증 jpg(전표+영수증)·**연구비카드매입.pdf**(카드사용내역서, 환율 증빙)·수입의뢰서(식비 반납 건별)·해외출장신청서 → **전부 fileDiv2(02 증빙)**.
 - 다음 행으로 가기 전 회의록이 닫혔는지(`popupframes.pop_fam_0703_02` 없음) 확인. 회의록을 다시 열어 각 행의 회의록이 독립 보존됐는지 재검증 가능(2026-09-08 확인).
 
@@ -120,4 +124,4 @@ F.gfn_msg=F.__o_msg; F.gfn_confirm=F.__o_conf; delete F.__o_msg; delete F.__o_co
 | 11 | 식비안내 팝업 방치 | 닫기 호출만 하고 검증 X | `visible===false` 검증(사용자 지적) |
 | 12 | 컬럼명 추측(`EXPITEMCD`) | 실제는 `BUDGEXPCD` | `getColID` 로 목록 먼저 |
 | 13 | 행번호 하드코딩(popBudgList row 8/20 등) | 계정마다 행 위치 다름 | 코드(33/523)로 검색 |
-| 14 | **회의록 엑셀 미기록**(6월 이후 3개 처리일 누락, 2026-09-08 발견) | fam 자동작성에 집중해 SKILL 단계 9(엑셀 행 추가)를 건너뜀 | 임시저장 직후 `meeting_log_xlsx.append_row` 로 처리일 파일에 건별 행 추가 → 완료 보고에 엑셀 경로 포함. 누락 시 전사(jsonl)의 `CONFERENCEPERPOSE/CONTENT` 로 백필 가능 |
+| 14 | **회의록 엑셀 미기록**(6월 이후 3개 처리일 누락, 2026-09-08 발견) | fam 자동작성에 집중해 SKILL 단계 9(엑셀 행 추가)를 건너뜀 | 임시저장 직후 `meeting_log_xlsx.append_row` 로 월별 파일에 건별 행 추가 → 완료 보고에 엑셀 경로 포함. 누락 시 전사(jsonl)의 `CONFERENCEPERPOSE/CONTENT` 로 백필 가능 |

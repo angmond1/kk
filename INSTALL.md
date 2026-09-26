@@ -44,6 +44,7 @@ KIST 내부망에서 실행. KIST 밖(재택·출장)이면 **KIST VPN 접속 �
 |--------------|-----------|--------|
 | kk-mail | 평소 쓰는 Chrome(확장) | Dooray `https://kist.gov-dooray.com` |
 | kk-budget | 평소 쓰는 Chrome(확장) | 포탈 `https://e.kist.re.kr` |
+| kk-wiki | 평소 쓰는 Chrome(확장) — 토큰이 있으면 브라우저 없이 Python 만 | Dooray(위키) + 담당자표는 포탈 |
 | kk-pay — 카드결제건 RPA 업로드 | 평소 쓰는 Chrome(확장) + `token.txt` | 포탈 + Dooray(업로드 확인 페이지). **새 창 없음** |
 | kk-pay — 세금계산서 직접작성 | **Claude 전용 새 Chrome 창**(chrome-devtools) | 그 창에서 포탈 로그인 한 번 더 |
 | kk-meeting | **Claude 전용 새 Chrome 창** | 그 창에서 포탈 로그인 한 번 더 |
@@ -52,7 +53,7 @@ KIST 내부망에서 실행. KIST 밖(재택·출장)이면 **KIST VPN 접속 �
 - 로그인은 **본인이 직접**(Claude 는 대신 로그인하지 않는다). 포탈 로그인 = `e.kist.re.kr`(2026-07 변경, 구 ekist.re.kr), 업무화면은 `p.kist.re.kr:8081`.
 - KIST 포탈은 **매일 정오 전체 세션 리셋** → 오후 작업은 다시 로그인.
 
-### 0-7. Dooray 토큰 (kk-pay 카드 RPA 업로드 · kk-meeting RPA 옵션만)
+### 0-7. Dooray 토큰 (kk-pay 카드 RPA 업로드 · kk-wiki 첨부 다운로드 옵션만)
 설치 스크립트가 kiki 폴더에 `token.txt` 를 만든다(§2). 발급 https://kist.gov-dooray.com/setting/api/token → 파일의 `Dooray token:` 다음 줄에 붙여넣고 저장 → 채팅엔 "두레이 토큰 저장했다" 만. **채팅창에 토큰을 붙여넣지 말 것**(대화 기록 노출).
 
 ### 0-8. 아래아한글 · MS Office (선택)
@@ -63,7 +64,7 @@ KIST 내부망에서 실행. KIST 밖(재택·출장)이면 **KIST VPN 접속 �
 
 ## 1. 패키지 받기 — git 없어도 됨
 어디에 둘지 먼저 정한다. **기본 `C:\kiki`**(macOS/Linux `~/kiki`) 권장 — 이 폴더가 skill 원본 + 엑셀·회의록·검수 파일 + `token.txt` 의 집이 된다. 다른 경로도 가능.
-- **ZIP**: GitHub 페이지 `Code ▾ → Download ZIP` → 위 폴더에 풀기(하위 폴더 `kk-main` 이 생기면 그 안 내용을 올려도 되고 그대로 써도 된다). private repo 라 GitHub 로그인 + collaborator 초대 필요(문의 dnklee@kist.re.kr).
+- **ZIP**: GitHub 페이지 `Code ▾ → Download ZIP` → 위 폴더에 풀기(하위 폴더 `kk-main` 이 생기면 그 안 내용을 올려도 되고 그대로 써도 된다). 공개 repo 라 로그인 없이 받을 수 있다.
 - **동료에게 폴더로** 받아도 된다.
 - **git 이 있으면**: `git clone https://github.com/angmond1/kk.git C:\kiki` (인증은 `gh auth login` 또는 Git Credential Manager).
 
@@ -75,9 +76,9 @@ KIST 내부망에서 실행. KIST 밖(재택·출장)이면 **KIST VPN 접속 �
 패키지 폴더 안에서, OS 에 맞는 것 **하나**:
 ```powershell
 # Windows (PowerShell) — 신규 PC 는 실행정책이 막혀 있을 수 있으니 Bypass 로
-powershell -ExecutionPolicy Bypass -File .\install.ps1                   # 전체, root = 이 폴더
-powershell -ExecutionPolicy Bypass -File .\install.ps1 -Root C:\kiki     # 작업 폴더 지정
-powershell -ExecutionPolicy Bypass -File .\install.ps1 kk-mail kk-pay    # 일부 skill 만
+powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1                       # 전체, root = 이 폴더
+powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1 -Root "C:/kiki"      # 작업 폴더 지정(없으면 만든다). -Root 는 꼭 이름을 붙여서
+powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1 kk-mail kk-pay      # 일부 skill 만 (Git Bash 에서 불러도 같은 형식)
 ```
 ```bash
 # macOS / Linux (bash)
@@ -91,21 +92,24 @@ bash ./install.sh kk-mail kk-pay           # 일부 skill 만
 skill **과 공통 폴더 `_shared` 를 반드시 함께** 복사하고, 개인설정 폴더와 token.txt 도 만든다.
 ```powershell
 # Windows
-Copy-Item -Recurse "skills\_shared" "$env:USERPROFILE\.claude\skills\_shared"
-Copy-Item -Recurse "skills\kk-mail" "$env:USERPROFILE\.claude\skills\kk-mail"
-New-Item -ItemType Directory -Force "$env:USERPROFILE\.claude\kiki" | Out-Null
-Copy-Item "skills\_shared\kiki.config.example.json" "$env:USERPROFILE\.claude\kiki\kiki.config.json"
-Copy-Item "skills\_shared\token.txt.example" ".\token.txt"
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.claude\skills", "$env:USERPROFILE\.claude\kiki" | Out-Null
+foreach ($s in @("_shared", "kk-mail")) {                      # 원하는 kk-* 나열. 재설치 때 겹치지 않게 지우고 복사
+  if (Test-Path "$env:USERPROFILE\.claude\skills\$s") { Remove-Item -Recurse -Force "$env:USERPROFILE\.claude\skills\$s" }
+  Copy-Item -Recurse "skills\$s" "$env:USERPROFILE\.claude\skills\$s"
+}
+if (-not (Test-Path "$env:USERPROFILE\.claude\kiki\kiki.config.json")) { Copy-Item "skills\_shared\kiki.config.example.json" "$env:USERPROFILE\.claude\kiki\kiki.config.json" }   # 기존 설정은 유지
+if (-not (Test-Path ".\token.txt")) { Copy-Item "skills\_shared\token.txt.example" ".\token.txt" }
 New-Item -ItemType Directory -Force budget, meeting, inspect, _tmp | Out-Null
+# kiki.config.json 의 "kiki_root": "" 에 이 폴더의 절대경로를 적는다(역슬래시는 \\ 로)
 ```
 ```bash
 # macOS/Linux
-cp -R skills/_shared ~/.claude/skills/_shared
-cp -R skills/kk-mail ~/.claude/skills/kk-mail
-mkdir -p ~/.claude/kiki
-cp skills/_shared/kiki.config.example.json ~/.claude/kiki/kiki.config.json
-cp skills/_shared/token.txt.example ./token.txt
+mkdir -p ~/.claude/skills ~/.claude/kiki
+for s in _shared kk-mail; do rm -rf ~/.claude/skills/$s; cp -R skills/$s ~/.claude/skills/$s; done   # 원하는 kk-* 나열. 재설치 때 겹치지 않게 지우고 복사
+[ -f ~/.claude/kiki/kiki.config.json ] || cp skills/_shared/kiki.config.example.json ~/.claude/kiki/kiki.config.json   # 기존 설정은 유지
+[ -f ./token.txt ] || cp skills/_shared/token.txt.example ./token.txt
 mkdir -p budget meeting inspect _tmp
+# kiki.config.json 의 "kiki_root": "" 에 이 폴더의 절대경로를 적는다
 ```
 그리고 `~/.claude/kiki/kiki.config.json` 의 `"kiki_root"` 에 패키지 폴더 경로를 적는다(Windows 는 `C:\\kiki` 처럼 백슬래시 2개).
 
@@ -158,7 +162,7 @@ mkdir -p budget meeting inspect _tmp
 | KIST VPN | 회사 배포 클라이언트 | mac 용 클라이언트 필요(데이터정보팀 확인) |
 | Linux 추가 | — | Claude Desktop 미지원 → **Claude Code CLI** 로 사용. 휴지통은 `gio trash`(없으면 `_trash/`) |
 
-- 기능 차이는 결국 두 가지: **hwp→pdf 자동 변환 없음**, **`pywin32` 계열 스크립트(구형 hwp COM) 없음**. 그 외 5개 skill 전부 동일하게 동작하도록 만들어져 있다.
+- 기능 차이는 결국 두 가지: **hwp→pdf 자동 변환 없음**, **`pywin32` 계열 스크립트(구형 hwp COM) 없음**. 그 외 6개 skill 전부 동일하게 동작하도록 만들어져 있다.
 
 ## 7. 트러블슈팅
 - **install.ps1 이 "running scripts is disabled"** → `powershell -ExecutionPolicy Bypass -File .\install.ps1`.
@@ -171,4 +175,4 @@ mkdir -p budget meeting inspect _tmp
 - **엑셀 저장 `PermissionError`** → 그 엑셀 파일이 열려 있음. 닫고 재시도.
 - **사내망 밖** → KIST VPN 접속.
 - **`_shared` 참조 오류** → skill 폴더와 함께 `skills/_shared` 도 `~/.claude/skills/_shared` 로 복사했는지(방법 A 스크립트는 자동).
-- **clone 실패** → private repo. ZIP 다운로드로 대체(§1) 또는 `gh auth login` + collaborator 초대.
+- **clone 실패** → 사내망 프록시·git 설치를 확인하거나 ZIP 다운로드로 대체(§1). (공개 repo 라 계정·초대는 필요 없다.)

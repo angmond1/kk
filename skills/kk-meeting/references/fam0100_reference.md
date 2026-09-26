@@ -24,4 +24,4 @@
 - 응답 `&#32;` 등 엔티티 decode 필요(`decodeEnt`).
 - fetch 결과는 화면 grid 에 안 보임(정상).
 - 발의자 사번 매핑 `chkPopupValueSetting.do` 는 화면선 동작하나 직접 fetch 빈 응답 가능(세션 의존) → 사번은 설치 시 config 저장 권장.
-- 좌표 fallback: fetch 안 되면 zoom 으로 위치 찾아 클릭(고정좌표 금지), ⛔Ctrl+A(문자 a). 저장·제출은 Edge 권장.
+- 좌표 fallback: fetch 안 되면 zoom 으로 위치 찾아 클릭(고정좌표 금지), ⛔Ctrl+A(문자 a). 저장·제출은 SKILL 의 chrome-devtools 창에서.

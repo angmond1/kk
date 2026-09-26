@@ -32,8 +32,8 @@ description: KIST 과제 예산 수집·리포트 자동화 skill (kiki 패키�
 
 - **0. 환경 점검** — `../_shared/environment_setup.md` 0단계.
 - **공통 식별정보(이름·참여과제)는 `~/.claude/kiki/kiki.config.json` 에서 읽는다**(없으면 1회 수집·저장, 다른 skill 재사용). kk-budget 고유(추적 과제·카테고리·개인집계)만 `kk-budget.config.json`.
-- **(자동)** 준비(§2) → `kkBudget.queryProjects()` 로 본인 참여 과제 전체 조회(→ kiki.config `projects`).
-- **Q1 — 수집 과제 선택**: `과제번호 + 과제명`(+ PI·역할) 목록 출력 → "앞으로 예산 추적할 과제만 고르세요"(참여 전부 아님). 본인이 PI 아닌 과제(`pi != user_name`)엔 **`ⓘ 과책 아님 — 인건비 상세는 권한 제한`** 라벨.
+- **(자동)** 준비(§2) → `kkBudget.queryProjects()` 로 본인 참여 과제 전체 조회(→ kiki.config `projects`). 본인 이름은 kiki.config `user.name`.
+- **Q1 — 수집 과제 선택**: `과제번호 + 과제명`(+ PI·역할) 목록 출력 → "앞으로 예산 추적할 과제만 고르세요"(참여 전부 아님). 본인이 PI 아닌 과제(`pi != user.name`)엔 **`ⓘ 과책 아님 — 인건비 상세는 권한 제한`** 라벨.
 - **Q2 — 개인집계 여부**: "공동과제에서 본인 사용분만 따로 집계할 과제가 있나요?(없으면 건너뜀)"
   - Q2a 과제 → Q2b **적요 이름목록**("본인 사용분을 적요의 어떤 이름으로? 연구자명(복수)/행정원명/혼합 가능") → Q2c 할당 기준액 → **Q2d "활동비2를 활동비1에 합산? 따로?"**(`merge_act2_into_act1`).
 - **Q3 — 추적 카테고리**: 기본 6개[재료비·시설장비비·활동비1·활동비2·내부인건비2·학생인건비], 가감.
@@ -42,11 +42,11 @@ description: KIST 과제 예산 수집·리포트 자동화 skill (kiki 패키�
 - **(첫 시험 수집)** "설정 완료. 오늘 날짜 기준으로 1회 시험 수집합니다" → 아래 작업 1회 실행(엑셀 + 채팅 표)으로 동작 확인.
 
 ## 4. 작업 (`예산 수집해줘` / `kk-budget`)
-1. 준비(§2) + portal_ops inject.
-2. 대상 = config `projects`(또는 사용자 지정 일부). `kk-budget.config.json` 이 없으면 `kiki.config.json` `projects` 를 쓴다.
+1. 준비(§2) + portal_ops inject. 🔴 새 브라우저·새 날·정오 이후엔 먼저 `navigate('https://e.kist.re.kr')` 로 로그인을 확인한 뒤 업무화면 딥링크(코어는 세션이 없으면 `PORTAL:` 오류를 던진다 → 로그인 후 탭 새로고침·재주입).
+2. 대상 = `kk-budget.config.json` 의 `track_projects`(비어 있거나 파일이 없으면 `kiki.config.json` `projects` 전체; 사용자 지정 일부도 가능).
    - 사용자가 과제를 **별칭**(과제명 일부·주제어)으로 부르면 `projects[].name` **부분일치**로 과제번호를 해석한다 — 되묻지 말고, 보고 첫 줄에 `과제번호 + 정식 과제명` 을 밝혀 확인 가능하게.
 3. **과제별 fetch**: 각 acccd → `kkBudget.queryBudgetTable(acccd)` → `categories{표시명:{A,exec,pendingDone,pendingProg,D,rate}}` + `direct{A,D}`.
-   - ⚠️ `queryBudgetTable` 은 async → `javascript_tool` 결과가 `{}` 로 올 수 있다. **1호출 `(async()=>{window.__r={a:await kkBudget.queryBudgetTable(x)}})()` → 2호출 `window.__r` 동기 read** 가 표준(출력 ~1.3K 한도 → 비목을 `'이름|A=..|D=..'` 문자열로 압축).
+   - ⚠️ `queryBudgetTable` 은 async → `javascript_tool` 결과가 `{}` 로 올 수 있다. **1호출 `window.__r=null;(async()=>{try{window.__r={x:ID,a:await kkBudget.queryBudgetTable(ID)}}catch(e){window.__r={x:ID,err:String(e)}}})()` → 2호출 `window.__r` 동기 read(`__r.x===ID` 인지 확인 — 이전 과제 값을 잘못 읽지 않게, `err` 면 세션 만료 등 원인 표시)** 가 표준(출력 ~1.3K 한도 → 비목을 `'이름|A=..|D=..'` 문자열로 압축).
    - **검산** `A == D + exec + pendingDone + pendingProg` 불일치 시 경고.
    - **과책 아닌 과제**: 과제 전체 카테고리 A/D는 정상 조회됨. 단 개인집계용 집행내역(적요)·인건비 상세는 권한 제한 가능 → 보고에 명시.
 4. **개인집계**(config `personal_share` 과제, optional): 집행내역 **적요+신청인**에 `filter_names` 포함 건 합산(완료+계류). 팝업은 **좌표 클릭 말고 `scripts/exec_detail.js` 주입 후 `kkExe.init()/cats()/open(dsRow,'exec')/parse(names)/close()`** (셀클릭 핸들러 직접 호출 — 해상도·행위치 무관, 🔴 닫기는 `kkExe.close()` 로만). `merge_act2_into_act1` 적용. → `references/budget_fetch_spec.md` 의 집행내역 경로.
@@ -55,7 +55,7 @@ description: KIST 과제 예산 수집·리포트 자동화 skill (kiki 패키�
    - **재수집(증분)**: 직전 `yymmdd_{과제번호}_person.json` 이 있으면 `cats()` 의 exec/pd/pp 를 비목별로 먼저 대조 → **변동 비목 + 새로 생긴 계류(pd/pp 0→값)** 만 팝업 재오픈(개인귀속 비목은 변동 없어도 1회 확인 권장), 동일 비목은 이전 값 재사용하고 JSON·보고에 **'재사용' 명시**(총액이 같은 상쇄거래는 못 잡는다는 caveat 포함).
    - 이전 대비 **건수·금액 diff 는 두 스냅샷 JSON 값으로 계산해서** 적는다(기억·암산으로 쓰면 틀린다).
 5. **JSON 스냅샷**: `~/.claude/kiki/kk-budget/data/yymmdd.json` (메타는 직전 복사, 카테고리/직접비/개인집계 오늘 값). 특정인 사용분 조사는 `yymmdd_{과제번호}_person.json`(비목별 총집행·건수·인물별 합·비고·caveats·diff).
-6. **엑셀**: `python scripts/make_report.py <json> <output_dir>/yymmdd.xlsx`. 검증(openpyxl). Excel 열림 시 `PermissionError` → 닫아달라 안내 후 재시도.
+6. **엑셀**: `python scripts/make_report.py <json> <output_dir>/yymmdd.xlsx`(입력 JSON 형식은 `references/budget_report_format.md` 'make_report 입력' 절 — `projects` 는 목록·사전 모두 가능). 검증(openpyxl). Excel 열림 시 `PermissionError` → 닫아달라 안내 후 재시도.
    - 일부 과제·비목만 뽑을 땐 입력 JSON 의 `track_categories` 를 그 비목만으로. 과제에 **없는 비목은 키를 빼야** `-` 로 표시된다(`A:0,D:0` 을 넣으면 0 으로 찍혀 '예산 있음·소진'으로 오해).
    - Windows Bash: 경로를 `"C:\...\"` 처럼 **역슬래시로 끝내 따옴표로 감싸면 `unexpected EOF`** → `/c/kiki/budget/` 형식. 검증용 python 한 줄 출력은 cp949 에서 `—` 등으로 `UnicodeEncodeError` → `sys.stdout.reconfigure(encoding='utf-8')`.
 7. **보고 — 엑셀 + 채팅 표(항상)**: `references/budget_report_format.md` 양식.
@@ -74,7 +74,7 @@ description: KIST 과제 예산 수집·리포트 자동화 skill (kiki 패키�
 - git push 등은 사용자 요청 시에만.
 
 ## config (`~/.claude/kiki/kk-budget.config.json`)
-`kk-budget.config.example.json` 참고. 키: `user_name`(과책 판별) / `projects`(선택 과제) / `track_categories` / `show_direct_subtotal` / `personal_share`(과제+filter_names+allocations+merge_act2_into_act1) / `output_dir` / `filename_pattern`.
+`kk-budget.config.example.json` 참고. 키: `track_projects`(추적 과제 acccd 목록, 비우면 kiki.config `projects` 전체) / `track_categories` / `personal_share`(과제+filter_names+allocations+merge_act2_into_act1) / `output_dir` / `filename_pattern`. 본인 이름(과책 판별)·참여과제는 공통 `kiki.config.json` 의 `user.name`·`projects`.
 
 ## 참고
 - [scripts/exec_detail.js](scripts/exec_detail.js) — 집행/계류 내역 팝업 헬퍼(`window.kkExe`): 셀클릭 핸들러 직접 호출·금액컬럼 자동판별·합계행 제외·이름 경계검증.

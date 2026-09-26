@@ -3,24 +3,40 @@
 
 인증: dooray 개인 토큰 (업로드는 세션쿠키로 안 됨 → 토큰 필요).
   토큰 로드 우선순위: 환경변수 DOORAY_TOKEN → <kiki_root>/token.txt → ~/.claude|.codex/kiki/token.txt → (구형) kiki.env
-  발급: https://kist.gov-dooray.com/setting/api/token  (토큰은 repo·skill 에 저장 금지, 로컬 env 만)
+  발급: https://kist.gov-dooray.com/setting/api/token  (토큰은 repo·skill 에 저장 금지, 로컬 파일만)
 
 전사 공통(개인정보 아님, 내장 OK):
   PROJECT 3311002956353796322 / DRIVE 3311002957555545393 = RPA-지급신청자동화 (전 본부·행정원 공유)
+
+명령줄 (Claude 가 Bash 로 부른다 — 토큰 값은 어디에도 출력하지 않는다):
+  python dooray_drive.py check                                  # 토큰 파일 확인 → 'OK (길이 N, 파일 경로)' 또는 안내
+  python dooray_drive.py find <행정원이름> [본부약어]             # 행정원 RPA 폴더 검색 (본부 없으면 전체, 최대 5분)
+  python dooray_drive.py structure <폴더id|폴더링크>             # 행정원 폴더의 세금계산서/회의비 하위 폴더 유무
+  python dooray_drive.py upload <폴더id|폴더링크> <파일...>       # 업로드 (사용자 confirm 후에만 부른다)
+TLS: 기본은 인증서 검증(전사 프록시 등으로 실패하면 환경변수 KIKI_INSECURE_TLS=1 로만 끈다 — 토큰이 오가므로 평소엔 켜 둔다).
 """
 from __future__ import annotations
 import os, re, time, sys, json
 os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+# Windows 한국어(cp949) 콘솔·파이프에서도 한글·기호가 깨지거나 멈추지 않게 출력은 UTF-8 로 (모듈로 불러 써도 적용)
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 try:
-    sys.stdout.reconfigure(encoding="utf-8")
-except Exception:
-    pass
-import requests, urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    import requests
+except ImportError:
+    sys.exit("[kiki] requests 패키지가 필요합니다: python -m pip install requests  (macOS/Linux: python3 -m pip install --user requests)")
 
 API = "https://api.gov-dooray.com"
 PROJECT = "3311002956353796322"   # 웹 URL용 projectId (전사 공통)
 DRIVE = "3311002957555545393"     # API용 driveId (전사 공통)
+VERIFY_TLS = os.environ.get("KIKI_INSECURE_TLS", "").strip() not in ("1", "true", "yes")
+if not VERIFY_TLS:
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    print("[kiki] 경고: KIKI_INSECURE_TLS 가 켜져 있어 TLS 인증서를 검증하지 않습니다(토큰 노출 위험) — 사내 프록시 문제일 때만 임시로 쓰세요.", file=sys.stderr)
 
 # 본부 정식명 ↔ 관용 약어 (사용자 제공 2026-06-04). drive 본부 폴더는 'NN 정식명' 형식.
 DEPT_ALIAS = {
@@ -35,8 +51,12 @@ DEPT_ALIAS = {
 _RPA_MARK = ("세금계산서", "회의비", "지급신청 매뉴얼")
 
 
+def _default_root() -> str:
+    return r"C:\kiki" if sys.platform.startswith("win") else os.path.expanduser("~/kiki")
+
+
 def _kiki_root() -> str:
-    """kiki 작업 폴더 — 환경변수 KIKI_ROOT → kiki.config.json(claude/codex) 의 kiki_root."""
+    """kiki 작업 폴더 — 환경변수 KIKI_ROOT → kiki.config.json(claude/codex) 의 kiki_root → 기본값(C:\\kiki / ~/kiki)."""
     r = os.environ.get("KIKI_ROOT", "").strip()
     if r:
         return os.path.expanduser(r)
@@ -45,17 +65,29 @@ def _kiki_root() -> str:
         if os.path.exists(p):
             try:
                 r = (json.load(open(p, encoding="utf-8-sig")).get("kiki_root") or "").strip()
-            except Exception:
+            except Exception as e:
+                print(f"[kiki] 경고: {p} 를 읽지 못했습니다({type(e).__name__}) — 기본 kiki 폴더를 씁니다.", file=sys.stderr)
                 r = ""
             if r:
                 return os.path.expanduser(r)
-    return ""
+    return _default_root()
+
+
+def _read_text(p: str) -> str:
+    """토큰 파일을 UTF-8(BOM)·UTF-16·시스템 인코딩 순으로 읽는다(메모장이 다른 인코딩으로 저장해도)."""
+    raw = open(p, "rb").read()
+    for enc in ("utf-8-sig", "utf-16", "cp949"):
+        try:
+            return raw.decode(enc)
+        except Exception:
+            continue
+    return raw.decode("utf-8", errors="ignore")
 
 
 def _token_from_file(p: str) -> str:
-    """token.txt('Dooray token:' 다음 줄) 또는 kiki.env(DOORAY_TOKEN=...) 에서 토큰 추출. 없으면 ''."""
+    """token.txt('Dooray token:' 다음 줄 또는 같은 줄) 또는 kiki.env(DOORAY_TOKEN=...) 에서 토큰 추출. 없으면 ''."""
     try:
-        lines = [ln.rstrip("\r\n") for ln in open(p, encoding="utf-8-sig")]
+        lines = _read_text(p).splitlines()
     except Exception:
         return ""
     body = [ln.strip() for ln in lines if ln.strip() and not ln.lstrip().startswith("#")]
@@ -67,7 +99,12 @@ def _token_from_file(p: str) -> str:
             if rest:
                 return rest.strip('"').strip("'")
             return body[i + 1].strip('"').strip("'") if i + 1 < len(body) else ""
-    return body[0].strip('"').strip("'") if body else ""   # 헤더 없는 파일: 첫 줄이 토큰
+    # 머리글 없이 토큰만 있거나, 머리글 위에 붙여넣은 경우: 공백 없는 긴 한 줄을 토큰으로 본다
+    for ln in body:
+        t = ln.strip('"').strip("'")
+        if " " not in t and len(t) >= 20 and ":" not in t:
+            return t
+    return ""
 
 
 def _token_candidates() -> list:
@@ -79,19 +116,49 @@ def _token_candidates() -> list:
     return c
 
 
-def _load_token() -> str:
+def _token_hint() -> str:
+    where = os.path.join(_kiki_root(), "token.txt")
+    return (f"dooray 토큰이 필요합니다. {where} 의 'Dooray token:' 다음 줄에 토큰을 붙여넣고 저장하세요 "
+            "(발급: https://kist.gov-dooray.com/setting/api/token). 채팅창에는 붙여넣지 마세요(노출 위험).")
+
+
+def _find_token() -> tuple:
+    """(토큰, 출처) — 없으면 ('', '')."""
     t = os.environ.get("DOORAY_TOKEN", "").strip()
     if t:
-        return t
+        return t, "환경변수 DOORAY_TOKEN"
     for p in _token_candidates():
         if os.path.exists(p):
             t = _token_from_file(p)
             if t and " " not in t:
-                return t
-    where = os.path.join(_kiki_root() or "<kiki 폴더>", "token.txt")
-    raise RuntimeError(
-        f"dooray 토큰이 필요합니다. {where} 의 'Dooray token:' 다음 줄에 토큰을 붙여넣고 저장하세요 "
-        "(발급: https://kist.gov-dooray.com/setting/api/token). 채팅창에는 붙여넣지 마세요(노출 위험).")
+                return t, p
+    return "", ""
+
+
+def _load_token() -> str:
+    t, _ = _find_token()
+    if t:
+        return t
+    raise RuntimeError(_token_hint())
+
+
+def check_token() -> str:
+    """토큰 값은 절대 출력하지 않고 유무·길이·파일 위치만 돌려준다 (명령 `check`)."""
+    t, src = _find_token()
+    if not t:
+        return "토큰 없음 — " + _token_hint()
+    return f"OK (길이 {len(t)}, 출처 {src})"
+
+
+def folder_id_of(x: str) -> str:
+    """폴더 id 또는 드라이브 웹 링크(https://kist.gov-dooray.com/drive/<project>/<folderId>) → 폴더 id."""
+    s = str(x or "").strip()
+    m = re.search(r"/drive/\d+/(\d+)", s)
+    if m:
+        return m.group(1)
+    if re.fullmatch(r"\d{6,}", s):
+        return s
+    raise ValueError("폴더 id 나 드라이브 폴더 링크가 아닙니다: " + s)
 
 
 class DoorayDrive:
@@ -104,6 +171,22 @@ class DoorayDrive:
     def web_url(self, folder_id: str) -> str:
         return f"https://kist.gov-dooray.com/drive/{PROJECT}/{folder_id}"
 
+    @staticmethod
+    def _check(r, what: str) -> dict:
+        """응답 점검 — 401/403 은 토큰, 429 는 속도제한, 그 외 실패는 resultMessage 를 붙여 RuntimeError."""
+        if r.status_code in (401, 403):
+            raise RuntimeError(f"dooray 토큰이 만료됐거나 잘못됐습니다({r.status_code}). 새 토큰을 발급해 token.txt 에 다시 저장하세요: https://kist.gov-dooray.com/setting/api/token")
+        if r.status_code == 429:
+            raise RuntimeError("dooray API 속도 제한(429) — 잠시 뒤 다시 시도하세요.")
+        try:
+            d = r.json()
+        except ValueError:
+            raise RuntimeError(f"{what}: dooray 응답이 JSON 이 아닙니다(HTTP {r.status_code}) — 사내망/VPN·로그인 상태를 확인하세요.")
+        hdr = d.get("header") or {}
+        if r.status_code >= 400 or (hdr and hdr.get("isSuccessful") is False):
+            raise RuntimeError(f"{what} 실패(HTTP {r.status_code}): {hdr.get('resultMessage') or hdr.get('resultCode') or r.text[:120]}")
+        return d
+
     # ---------- 목록 ----------
     def list_files(self, parent_id: str | None = None, size: int = 100) -> list[dict]:
         out, page = [], 0
@@ -111,8 +194,8 @@ class DoorayDrive:
             params = {"page": page, "size": size}
             if parent_id:
                 params["parentId"] = parent_id
-            r = self.s.get(f"{API}/drive/v1/drives/{DRIVE}/files", params=params, verify=False, timeout=self.timeout)
-            d = r.json()
+            r = self.s.get(f"{API}/drive/v1/drives/{DRIVE}/files", params=params, verify=VERIFY_TLS, timeout=self.timeout)
+            d = self._check(r, "폴더 목록 조회")
             batch = d.get("result") or []
             out += batch
             total = d.get("totalCount", len(out))
@@ -135,8 +218,9 @@ class DoorayDrive:
 
     # ---------- 행정원 폴더 검색 ----------
     # 반환: [{name, id, web, isRPA, path}]  (isRPA=정식 RPA 폴더 여부)
-    # dept_hint 주면 그 본부 폴더만 훑어 빠름(수 초). 없으면 root 전수+본부재귀(최대 ~5분).
-    # progress: 진행 표시 콜백 (예 print). 호출측이 "검색 중…" 표시에 사용.
+    # 본부 폴더를 찾으려면 root 전체(8천여 항목, 약 90회 호출 ≈ 3분)를 한 번은 읽어야 한다 — dept_hint 가 있으면 그 본부 안만
+    # 훑어 그 뒤가 빠르고, 없으면 root 항목 + 모든 본부를 재귀(최대 ~5분). root 목록은 한 번만 읽어 재사용한다.
+    # progress: 진행 표시 콜백 (예 print). 호출측이 "검색 중…" 표시에 사용. Bash 에서 부를 땐 timeout 을 10분으로.
     def find_admin_folder(self, name: str, dept_hint: str | None = None, progress=None):
         def emit(msg):
             if progress:
@@ -153,11 +237,12 @@ class DoorayDrive:
                     hits.append({"name": nm, "id": fid, "web": self.web_url(fid),
                                  "isRPA": self._is_rpa_folder(fid), "path": path})
 
+        emit("[검색 중] drive 최상위 목록 읽는 중… (8천여 항목, 2~3분 — 멈춘 게 아닙니다)")
+        root = self.list_files(None)
         if dept_hint:
             full = DEPT_ALIAS.get(dept_hint, dept_hint)
             emit(f"[검색 중] 본부 '{dept_hint}'({full}) 폴더 탐색…")
-            depts = [f for f in self.list_files(None)
-                     if f.get("type") == "folder" and full in f.get("name", "")]
+            depts = [f for f in root if f.get("type") == "folder" and full in f.get("name", "")]
             for d in depts:
                 emit(f"[검색 중] {d.get('name')} 안에서 '{name}' 찾는 중…")
                 scan(d.get("id"), d.get("name"))
@@ -165,9 +250,7 @@ class DoorayDrive:
                 return hits
             emit("[검색 중] 본부에서 못 찾음 → 전체 검색으로 전환(최대 5분)…")
 
-        # 전수: root + 본부 재귀
-        emit("[검색 중] 전체 drive 검색… (root 8천여 항목 + 본부, 최대 5분 — 멈춘 게 아닙니다)")
-        root = self.list_files(None)
+        # 전수: root + 본부 재귀 (root 목록 재사용)
         for f in root:
             if f.get("type") != "folder":
                 continue
@@ -184,6 +267,7 @@ class DoorayDrive:
 
     # 행정원 폴더의 업로드 위치 구조: 카드(root) / 세금계산서 / 회의비 하위 폴더 id
     def folder_structure(self, admin_folder_id: str) -> dict:
+        admin_folder_id = folder_id_of(admin_folder_id)
         subs = [f for f in self.list_files(admin_folder_id) if f.get("type") == "folder"]
         def find(kw):
             for f in subs:
@@ -199,29 +283,25 @@ class DoorayDrive:
 
     # ---------- 업로드 (api → 307 → file-api, 토큰만 들고 manual follow) ----------
     def upload(self, folder_id: str, file_path: str, mime: str = "application/octet-stream") -> dict:
+        folder_id = folder_id_of(folder_id)
         fname = os.path.basename(file_path)
         with open(file_path, "rb") as f:
             content = f.read()
         first = f"{API}/drive/v1/drives/{DRIVE}/files"
         r0 = self.s.post(first, params={"parentId": folder_id},
                          files={"file": (fname, content, mime)},
-                         verify=False, allow_redirects=False, timeout=self.timeout)
+                         verify=VERIFY_TLS, allow_redirects=False, timeout=self.timeout)
         if r0.status_code != 307:
-            try:
-                return r0.json()
-            except Exception:
-                return {"_status": r0.status_code, "_raw": r0.text[:200]}
+            return self._check(r0, "업로드")
         loc = r0.headers["Location"]
-        r1 = self.s.post(loc, files={"file": (fname, content, mime)}, verify=False, timeout=60)
-        try:
-            return r1.json()
-        except Exception:
-            return {"_status": r1.status_code, "_raw": r1.text[:200]}
+        r1 = self.s.post(loc, files={"file": (fname, content, mime)}, verify=VERIFY_TLS, timeout=120)
+        return self._check(r1, "업로드")
 
 
 # ---------- 처리완료 로컬 아카이브 (이동/복사) ----------
 def archive_local(file_path: str, acccd: str, mode: str = "move", base: str | None = None) -> str:
-    """업로드 완료 파일을 <영수증폴더>/지급신청완료/{과제번호}/ 로 이동(move)·복사(copy). keep=그대로."""
+    """업로드 완료 파일을 <base>/지급신청완료/{과제번호}/ 로 이동(move)·복사(copy). keep=그대로.
+    같은 이름이 이미 있으면 ' (2)' 를 붙여 덮어쓰지 않는다. (SKILL 의 월별 신청완료 정리는 Claude 가 직접 — 이 함수는 보조)"""
     import shutil
     if mode == "keep":
         return file_path
@@ -229,6 +309,11 @@ def archive_local(file_path: str, acccd: str, mode: str = "move", base: str | No
     dest_dir = os.path.join(base, "지급신청완료", acccd)
     os.makedirs(dest_dir, exist_ok=True)
     dest = os.path.join(dest_dir, os.path.basename(file_path))
+    stem, ext = os.path.splitext(dest)
+    k = 2
+    while os.path.exists(dest):
+        dest = f"{stem} ({k}){ext}"
+        k += 1
     if mode == "copy":
         shutil.copy2(file_path, dest)
     else:
@@ -236,12 +321,59 @@ def archive_local(file_path: str, acccd: str, mode: str = "move", base: str | No
     return dest
 
 
-if __name__ == "__main__":
-    # 간이 점검: python dooray_drive.py find <이름> [본부약어]
-    c = DoorayDrive()
-    if len(sys.argv) >= 3 and sys.argv[1] == "find":
-        dept = sys.argv[3] if len(sys.argv) >= 4 else None
-        for h in c.find_admin_folder(sys.argv[2], dept, progress=lambda m: print(m, file=sys.stderr)):
+USAGE = ("usage: python dooray_drive.py check\n"
+         "       python dooray_drive.py find <행정원이름> [본부약어]\n"
+         "       python dooray_drive.py structure <폴더id|폴더링크>\n"
+         "       python dooray_drive.py upload <폴더id|폴더링크> <파일...>   (사용자 confirm 후)")
+
+
+def main(argv: list) -> int:
+    cmd = argv[1] if len(argv) >= 2 else ""
+    if cmd in ("", "-h", "--help", "help"):
+        print(USAGE)
+        return 0 if cmd else 1
+    if cmd == "check":
+        print(check_token())
+        return 0
+    if cmd == "find" and len(argv) >= 3:
+        try:
+            c = DoorayDrive()
+            dept = argv[3] if len(argv) >= 4 else None
+            hits = c.find_admin_folder(argv[2], dept, progress=lambda m: print(m, file=sys.stderr))
+        except RuntimeError as e:
+            print("ERR", e)
+            return 1
+        if not hits:
+            print("(없음) 이름을 다시 확인하거나 폴더 링크를 직접 알려 주세요.")
+        for h in hits:
             print(f"{'[정식]' if h['isRPA'] else '[비정식]'} {h['path']}/{h['name']}  {h['web']}")
-    else:
-        print("usage: python dooray_drive.py find <행정원이름> [본부약어]")
+        return 0
+    if cmd == "structure" and len(argv) >= 3:
+        try:
+            print(json.dumps(DoorayDrive().folder_structure(argv[2]), ensure_ascii=False))
+        except (RuntimeError, ValueError) as e:
+            print("ERR", e)
+            return 1
+        return 0
+    if cmd == "upload" and len(argv) >= 4:
+        bad = 0
+        try:
+            c = DoorayDrive()
+            for p in argv[3:]:
+                if not os.path.isfile(p):
+                    print("ERR 파일이 없습니다:", p)
+                    bad = 1
+                    continue
+                d = c.upload(argv[2], p)
+                rid = (d.get("result") or {}).get("id") if isinstance(d.get("result"), dict) else ""
+                print("업로드 완료:", os.path.basename(p), ("id " + str(rid)) if rid else "")
+        except (RuntimeError, ValueError) as e:
+            print("ERR", e)
+            return 1
+        return bad
+    print(USAGE)
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

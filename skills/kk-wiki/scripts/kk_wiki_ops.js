@@ -104,7 +104,15 @@
       catch (e) { out.push({ id, error: String(e).slice(0, 80) }); }
       await sleep(150);
     }
+    lastFresh = out;   // 비동기 결과는 javascript_tool 이 {} 로 돌려줄 수 있으니 여기 두고 fmtFresh() 로 읽는다
     return out;
+  }
+  let lastFresh = null;
+  // 최신 확인 결과 한 줄씩(출력 필터 대응: 긴 숫자는 4자리마다 '-', '=' 없음). r 를 안 주면 마지막 checkFresh 결과.
+  function fmtFresh(r) {
+    r = r || lastFresh; if (!r) return 'checkFresh 먼저 (비동기, 2~3초)';
+    const hy = x => String(x == null ? '' : x).replace(/(\d{4})(?=\d)/g, '$1-');
+    return r.map(x => x.error ? `${hy(x.id)} | ERR ${x.error}` : `${hy(x.id)} | ${(x.updatedAt || '').slice(0, 10)} | v${x.version} | ${String(x.title || '').slice(0, 30)}`).join('\n').replace(/[=&?;]/g, ' ');
   }
 
   // ---------- 담당자표: 포탈 게시판 "부서별업무분장표" (그룹웨어 xClick, 게시판 id FC_BBS224) — ✅ 2026-09-25 실측 ----------
@@ -286,7 +294,7 @@
     if (!staffData) return '';
     const L = [`=== KKWIKI-STAFF v1 | exported ${new Date().toISOString()} | board ${STAFF_BBS} | teams ${staffData.length} ===`];
     for (const t of staffData) {
-      L.push(`## 팀: ${t.team} | 글번호 ${t.no} | 게시일 ${t.date} | 게시자 ${t.poster || ''} | 제목 ${t.title || ''} | id ${t.id} | url ${t.url || shareUrl(t.id)}` + (t.stale ? ' | 오래됨 예' : ''));
+      L.push(`## 팀: ${t.team} | 글번호 ${t.no} | 게시일 ${t.date} | 게시자 ${t.poster || ''} | 제목 ${String(t.title || '').replace(/\|/g, '/')} | id ${t.id} | url ${t.url || shareUrl(t.id)}` + (t.stale ? ' | 오래됨 예' : ''));
       const tb = (t.tables || []).slice().sort((a, b) => b.length - a.length)[0];
       if (tb && tb.length > 1) { for (const row of tb) L.push('| ' + row.map(c => c.replace(/\|/g, '/')).join(' | ') + ' |'); }
       else L.push(t.error ? `(표 없음 — ${t.error})` : `(표 없음 — 이미지 게시글, 이미지 ${t.contentImgs || 0}개: 링크에서 직접 확인)`);
@@ -307,8 +315,8 @@
   function hyId(id) { return String(id).replace(/(\d{4})(?=\d)/g, '$1-'); }
   function fmtFresh(list) { return (list || []).map(x => `${hyId(x.id)} | ${(x.updatedAt || '').slice(0, 19)} | v${x.version} | ${sanitize((x.title || x.error || '').slice(0, 40))}`).join('\n'); }
 
-  window.kkWiki = { children, getPage, walk, crawlAll, status, exportSnapshot, sizeEstimate, checkFresh, sanitize, hyId, fmtFresh,
+  window.kkWiki = { children, getPage, walk, crawlAll, status, exportSnapshot, sizeEstimate, checkFresh, fmtFresh, sanitize, hyId, fmtFresh,
     staffFrame, staffList, bbsListPage, teamFromTitle, staffChanged, staffChangedStatus, get changed() { return staffChangedList; }, staffCollect, staffStatus, staffDump, staffRender, shareUrl, readArticleViaIframe, get staff() { return staffData; }, staffProgress,
-    get tree() { return tree; }, get pages() { return pages; }, progress, staffShowImage, _version: 'kk-wiki-ops/1.4' };
+    get tree() { return tree; }, get pages() { return pages; }, progress, staffShowImage, _version: 'kk-wiki-ops/1.5' };
   return window.kkWiki._version + ' =^.^=';
 })();

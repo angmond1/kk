@@ -1,6 +1,6 @@
 # fam_0704 회의록 작성(법인카드 회의/업무추진비) 완전자동
 
-> **부모탭 JS(`Claude in Chrome`)로 NEXACRO 자식 팝업을 제어**해 카드매핑 → 계정/비목 → 통장표기 → 적요 → 회의록 입력 → 사전결재 연동 → 저장 → 결재상신까지 사람 클릭 거의 0회로 처리. 2026-06-05 실증.
+> **부모탭 JS(chrome-devtools 창의 `evaluate_script`)로 NEXACRO 자식 팝업을 제어**해 카드매핑 → 계정/비목 → 통장표기 → 적요 → 회의록 입력 → 사전결재 연동 → 저장 → 결재상신까지 사람 클릭 거의 0회로 처리. 2026-06-05 실증.
 >
 > ⚠️ **결재선(gw 전자결재 창)**은 별도 윈도우(window.open)라 MCP 탭 그룹 밖 → **결재선 확정·최종 상신은 사용자 직접**.
 
@@ -356,7 +356,7 @@ C.fileDiv2.gfn_upload("", "fn_endFileCallBack1", "ds_file", "RQST_NO="+rqst, "02
 - **fileDiv2 (증빙)**: 카페·마트·편의점·호텔 결제건의 영수증 jpg + 거래명세서.
 - **fileDiv3 (사전결재)**: 사전결재 필요건의 내부결재문서 PDF.
 - **fileDiv1 (서명록)**: 참석자 서명록 (별도 양식, 필요시).
-- 회의록 자체는 fam_0704 본화면 저장 시 hwpx 가 다른 경로로 들어감 — 첨부 영역 아님.
+- 회의록 파일(엑셀·hwpx)은 지급신청에 첨부하지 않는다(엑셀은 중복 방지 기록, hwpx 는 요청 시 보관용).
 
 ### 주의
 - 영역별로 같은 input 컴포넌트가 따로 있으므로 fileDiv1/2/3 각각 §5-1 ~ §5-3 반복.
@@ -367,13 +367,13 @@ C.fileDiv2.gfn_upload("", "fn_endFileCallBack1", "ds_file", "RQST_NO="+rqst, "02
 - **bt_save(임시저장) → bt_approval(결재상신) 사이 사용자 confirm 필수**(irreversible).
 - 결재상신은 실제 지급 결재 제출 = 되돌리려면 결재 회수 필요. 마지막 단계에서 한 번 더 확인.
 - 결재선 확정은 **별도 gw 창 → 사용자 직접** (Claude in Chrome 제어 불가, 캡처로 확인 가능).
-- **첨부 임시 트리거 버튼**은 사용 후 반드시 `.remove()` (공통가이드 §2-6).
+- **첨부 임시 트리거 버튼**은 사용 후 반드시 `.remove()` (공통가이드 §3-3).
 
 ## 2026-08-01 규정 변경 반영 + 해외 회의비 첨부 실증 (2026-09-07)
 - **사전결재 폐지(8/1~)**: 5-d/9-d 사전결재 연동 단계 생략 가능. `doSave` 의 "사전결재문서 첨부 후 저장가능" 검증은 주석 처리(연동 `priorRole=Y` 시만 PRI_CONFER_NO 검사).
 - **외부참석자 `PROJJOINYN` 필수(8/1~)**: `doChkJoinPeople` 가 `cardusetime>="20260801"` 이면 `ds_datagrid2` 각 행 `PROJJOINYN` 검사 → 외부 협력자 `'N'`, 과제 참여연구원 `'Y'`. (`g2.setColumn(r,"PROJJOINYN","N")`)
 - ⚠️ **참석자 grid 비동기 로드 레이스**: `btn_Conference` 후 서버가 참석자 목록을 뒤늦게 로드해 3초 안에 채운 행을 **빈 결과로 덮어씀**. → 팝업 open 후 **6초 대기** 후 채우고 **저장 직전 rowcount 재검증**.
-- **최소참석인원**: 합 ≥ ⌈RQSTAMT÷50,000⌉ (469,680 → 10명 이상) 강제.
+- **최소참석인원**: 합 ≥ ⌈RQSTAMT÷50,000⌉ (예 450,000원 → 9명 이상) 강제.
 - **첨부 코드 확정**(`fn_callBack` 소스): fileDiv1 `"01"`/`fn_endFileCallBack` · fileDiv2 `"02"`/`fn_endFileCallBack1` · fileDiv3 `"03"`/`fn_endFileCallBack2`. RQST_NO=`CONFERENCENO+"-"+CARDUSEMGRNO` → **회의록 1차 `doSave`(번호 발급) 후 첨부**. chrome-devtools `upload_file` 파일별 반복(ds_files 누적; 채팅 첨부 파일이면 Claude in Chrome `file_upload` 다중 path 1회도 OK) → count 검증 → `gfn_upload` → `tmHeader=S` 확인 → input id/style 원복. 영역별 input 은 각각 `extUp._input_node`.
 - **해외 회의비**: **fileDiv2(증빙 02) = 영수증 jpg + 카드사용내역서(해외이용내역, 환율 증빙) + 식비반납 수입의뢰서 + 해외출장신청서** (⭐ 출장신청서도 증빙에 — fileDiv3 사전결재문서 아님, 2026-09-07 사용자 확정). fileDiv3 은 비움. 금액 fam_0711 `USEAMT`, 회의시간 현지시간, 출장계정≠회의비계정이면 적요에 공동계정 사유. 저장 시 "해외출장시 식비공제 확인바랍니다" 는 안내(저장됨).
 - ⚠️ **`doNew` 직후 `ds_rqstGrid` 는 이미 빈 행 1개**(CUSTNM 없음)를 갖는다 → "행이 있으면 매핑 스킵" 같은 가드는 오작동(2026-09-08 실측: 매핑 없이 계정만 빈 행에 들어감). 매핑 여부 판정은 **rowcount 가 아니라 `CUSTNM`/`CARDUSEMGRNO` 채워짐**으로. 첫 카드는 그 빈 행(curRow 0)에 `doSetDesp`, 둘째부터 `bt_addRow`.
@@ -384,7 +384,7 @@ C.fileDiv2.gfn_upload("", "fn_endFileCallBack1", "ds_file", "RQST_NO="+rqst, "02
 - 진입: `f01.ds_search.setColumn(0,"DOC_CLS","4")` + `doNew("N")` → `popupframes.fam_0703_02`. 회의록 팝업은 동일 `pop_fam_0703_02`.
 - **영수증함 = `ds_rndGrid`**(`ds_datagrid1` 없음), **상세 = `ds_main_RNDCARD`**(RAWCARD 아님). 통장표기는 **계좌탭 미사용**(아래 참조 — 법인카드의 dpstDispNm+killfocus 절차 불필요).
 - **카드매핑 = `F.ds_rqstGrid.set_rowposition(i)` + `F.ds_rndGrid.set_rowposition(idx)` + `F.doSetDesp("rndGrid")`** — 인자가 `"rndGrid"`(`"RNDCARD"` 로 부르면 아무 분기도 안 타서 조용히 실패). 내부 `curRow` 는 `this.curRow` 가 아니라 `ds_rqstGrid.rowposition` 에서 잡음.
-- ⚠️⚠️ **행 전환은 반드시 `F.ds_rqstGrid.set_rowposition(i)` + `F.rqstGrid_oncellclick.call(F,F.rqstGrid,{})`** — fam_0703_02 의 `curRow` 는 form 스크립트 **closure 변수**(`this.curRow` 아님 → `F.curRow=i` 만으론 무효). oncellclick 이 closure `curRow=rowposition` + `doGetDesp()`(그 행 DESP_LIST → `import2.ds_main_CARD` 로드)를 함께 수행. 회의록 팝업(`btn_Conference`)만 `this.curRow` 를 쓰므로 `F.curRow=i` 도 같이 세팅.
+- ⚠️⚠️ **행 전환은 반드시 `F.ds_rqstGrid.set_rowposition(i)` + `F.rqstGrid_oncellclick.call(F,F.rqstGrid,{row:i})`** — fam_0703_02 의 `curRow` 는 form 스크립트 **closure 변수**(`this.curRow` 아님 → `F.curRow=i` 만으론 무효). oncellclick 이 closure `curRow=rowposition` + `doGetDesp()`(그 행 DESP_LIST → `import2.ds_main_CARD` 로드)를 함께 수행. 회의록 팝업(`btn_Conference`)만 `this.curRow` 를 쓰므로 `F.curRow=i` 도 같이 세팅.
 - ⚠️⚠️ **DESP_LIST(행별 카드연결 문자열) 오염 사고(2026-09-08)**: 팝업(계정/회의록) 복귀 콜백 `fn_popCall`→`doSetDesp("dsc")` 가 `import2.ds_main_CARD` 내용으로 closure `curRow` 행의 DESP_LIST 를 **재구성**(형식 `C@@CARDNO@@CARDAPPRNO@@EMPNO@@EMPNO@@CARDUSEYMD@@CARDBUYYMD@@USEAMT@@VATAMT@@SVCCHRGAMT##`). closure curRow 와 rowposition 이 어긋난 채 팝업을 닫으면 **다른 행의 카드로 덮어씀**(행0 이 행1 카드로 바뀜 — CARDUSEMGRNO/RQSTAMT 는 그대로라 화면으론 안 보임). → **bt_save 직전 행마다 `DESP_LIST` 의 CARDAPPRNO 가 그 행 카드와 일치하는지 검증**; 틀리면 `ds_rndGrid` 해당 행(idx)에서 `['DESP_CLS','CARDNO','CARDAPPRNO','CARDRESPEREMPNO','CARDRESPEREMPNM','CARDUSEYMD','CARDBUYYMD','USEAMT','VATAMT','SVCCHRGAMT'].map(c=>r.getColumn(idx,c)).join('@@')+'##'` 로 재구성해 `ds_rqstGrid.setColumn(i,'DESP_LIST',…)`, 이후 oncellclick 으로 `import2.ds_main_CARD.CARDAPPRNO` 재확인.
 - 통장표기: 연구비카드는 카드사 입금이라 **계좌탭(`import2…switch2.case1.dpstDispNm`) 미사용**(컴포넌트 value undefined, `doSave` 에 통장표기 검증 없음). 값은 `ds_rndGrid.DPSTDISPNM`="과기연(연구비카드)" 로 시스템 고정.
 - `doSave` 검증 순서: 회의비 작성(회의록 유무) → 계정 → 사용일자(예산기간 내) → 예산과목 → 금액·한도 → 거래처(`CUSTCLSCD!='2'` 이면 CUSTCD/CUSTNM 필수) → 적요 → 회의록 → `gfn_confirm("저장하시겠습니까?")` → `/mis/fam/fam0703/tmSave.do`(ds_main+ds_rqstGrid). 성공 메시지 **"저장 되었습니다."(띄어쓰기 있음)**, 지급신청번호는 `ds_temp_rtnValue` 첫 컬럼, `ds_main.PRGRSSTATCD`=12(임시저장), 행 `RQSTSEQNO` 1,2 부여. gfn_msg/gfn_confirm 오버라이드는 콜백 도착(≈5초) 후 반드시 복원.

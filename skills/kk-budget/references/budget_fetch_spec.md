@@ -2,13 +2,13 @@
 
 > KIST 통합정보 예실대비표(`mis.bdg::bdg_2030`)를 좌표 없이 backend fetch로 조회한 명세.
 > 좌표·해상도·모니터 무관. `window.application.authTk` + 세션쿠키. **2026-06-02 실증 + 화면 스크린샷 1:1 대조 검증.**
-> 공통 fetch 유틸(`nexBody`/`post`/`parseRows`/`decodeEnt`)은 `../_shared/kist_portal.md` 준용.
+> 공통 fetch 유틸(`nexBody`/`post`/`parseRows`/`decodeEnt`)은 `../../_shared/kist_portal.md` 준용.
 
 ---
 
 ## fetch 3단계 흐름
-1. **`queryProjects()`** — `rdm_2011`/`doSearchMain.do` → 본인 참여 과제 `[{acccd, name(PROJNM), pi(KORNM), type(PROJTYPE)}]`.
-   - ⚠️ `type`(PROJTYPE)은 **과제유형(주관/공동)이지 본인 역할이 아님**. 본인이 과책(PI)인지는 **`pi == 본인 이름`** 으로 판별 (참여과제는 pi가 타인).
+1. **`queryProjects()`** — `rdm_2011`/`doSearchMain.do` → 본인 참여 과제 `[{acccd, name(PROJNM), pi(KORNM), projType(PROJTYPE)}]`.
+   - ⚠️ `projType`(PROJTYPE)은 **과제유형(주관/공동)이지 본인 역할이 아님**. 본인이 과책(PI)인지는 **`pi == 본인 이름`** 으로 판별 (참여과제는 pi가 타인).
 2. **`getBdgInfo(acccd)`** — `bdg2030/getBdgInfo.do` (ds_search: BUDGSBJCD, BUDGYEAR=9999) → 과제 메타 1행 + **`ACCCLSCD`**(다음 단계 필수).
 3. **`getMainList(BUDGYEAR=9999, BUDGSBJCD=acccd, ACCCLSCD)`** — `bdg2030/getMainList.do` → 카테고리별 예산 완전체.
 
@@ -79,7 +79,7 @@
 1. **async IIFE 결과가 `{}` 로 반환** — `javascript_tool` 이 `(async()=>{...})()` 의 resolve 값을 못 받는 버전이 있음 → 결과를 **전역(`window.__x` 등)에 저장**하고 잠시 대기 후 **동기 read**(`JSON.stringify(window.__x)`)로 회수.
 2. **백그라운드 탭 throttle** — Chrome 이 비활성 탭 timer 를 늦춰 팝업 연쇄가 90초+ 걸리고 **부분 집계(일부 팝업 누락)로 틀린 값**이 나옴(활동비1 이 11건→재조회 9건으로 바뀐 사례) → 작업 중 **Chrome 창을 foreground 로** 두게 안내.
 3. **예실대비표 재오픈 불안정** — 같은 탭에서 예실대비표 팝업을 두 번째로 열면 grid 가 **빈 채(0행)** 뜰 수 있음 → `rdm_2011` 로 **navigate 리셋 후 1회만** 열고, grid·집행내역 팝업 로딩은 **polling**(행 수 > 0 될 때까지 최대 N회 대기) 후 파싱.
-4. **팝업 window 후킹** — 집행내역은 별도 window → `window.open` 후킹으로 포획하고 부모/팝업 각각 후킹(공통 가이드 §4-11).
+4. (구) **팝업 window 후킹** — 예전엔 집행내역을 별도 window 로 보고 `window.open` 을 후킹했으나, 현재 표준(아래 절·`exec_detail.js`)은 같은 페이지의 `application.popupframes` 를 읽는다 — 후킹 불필요.
 
 ## ⭐ 집행내역 팝업 — 셀클릭 핸들러 직접 호출 (2026-09-18 확립, **권장 표준**)
 좌표 클릭(zoom 으로 행·열 찾기)은 과제마다 비목 구성이 달라 행 Y 가 밀리고, 한 번 어긋나면 엉뚱한 팝업이 뜨거나 아무 반응이 없다.

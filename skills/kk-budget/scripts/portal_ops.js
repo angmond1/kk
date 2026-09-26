@@ -25,9 +25,11 @@
       + '</Parameters>\n' + datasetXml + '\n</Root>';
   }
 
+  // XML 특수문자 이스케이프 — 거래처명 'H&M' 같은 값이 요청 XML 을 깨지 않게
+  function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
   function ds(id, cols, row) {
     var ci = cols.map(function (c) { return '<Column id="' + c + '" type="STRING" size="256"/>'; }).join('');
-    var rc = Object.keys(row).map(function (k) { return '<Col id="' + k + '">' + row[k] + '</Col>'; }).join('');
+    var rc = Object.keys(row).map(function (k) { return '<Col id="' + k + '">' + esc(row[k]) + '</Col>'; }).join('');
     return '<Dataset id="' + id + '"><ColumnInfo>' + ci + '</ColumnInfo><Rows><Row>' + rc + '</Row></Rows></Dataset>';
   }
 
@@ -36,7 +38,12 @@
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'text/xml; charset=UTF-8' }, body: body,
     });
-    return r.text();
+    var t = await r.text();
+    // 세션 만료·잘못된 경로면 XML 대신 HTML(로그인·오류 페이지)이 온다 → 빈 결과로 넘어가지 않게 throw (2026-09-27 실측: authTk 가 틀려도 200 XML, 세션이 없으면 HTML)
+    if (!r.ok || t.indexOf('<Root') < 0) throw new Error('PORTAL: 통합정보 응답이 XML 이 아닙니다(HTTP ' + r.status + ') — 세션 만료 가능성. e.kist.re.kr 로그인 확인 → 통합정보 탭 새로고침 → 코어 재주입');
+    var ec = /<Parameter id="ErrorCode"[^>]*>(-?\d+)</.exec(t);
+    if (ec && +ec[1] < 0) { var em = /<Parameter id="ErrorMsg"[^>]*>([\s\S]*?)</.exec(t); throw new Error('PORTAL ErrorCode ' + ec[1] + (em ? ': ' + decodeEnt(em[1]).slice(0, 200) : '')); }
+    return t;
   }
 
   function decodeEnt(s) {
@@ -56,7 +63,12 @@
     return out;
   }
 
-  function num(s) { return parseInt(String(s || '0').replace(/[^0-9-]/g, '')) || 0; }
+  // '12,345' / '1234.00' / {hi,lo} 모두 정수 원으로 (소수점 문자열에서 점만 지우면 100배가 되는 함정 방지)
+  function num(s) {
+    if (s && typeof s === 'object') return s.hi || 0;
+    var n = parseFloat(String(s == null ? '0' : s).replace(/[^0-9.\-]/g, ''));
+    return isNaN(n) ? 0 : Math.round(n);
+  }
 
   // 예산항목 코드(BUDGITEMCD) -> 표시명
   var CAT_MAP = {
@@ -110,9 +122,9 @@
 
   window.kkBudget = {
     authTk: authTk, ready: ready, nexBody: nexBody, ds: ds, post: post,
-    parseRows: parseRows, decodeEnt: decodeEnt, num: num, CAT_MAP: CAT_MAP,
+    parseRows: parseRows, decodeEnt: decodeEnt, num: num, CAT_MAP: CAT_MAP, esc: esc,
     queryProjects: queryProjects, queryBudgetTable: queryBudgetTable,
-    _version: 'kk-budget-portal/1.0',
+    _version: 'kk-budget-portal/1.1',
   };
   return window.kkBudget._version + ' =^.^=';
 })();

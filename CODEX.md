@@ -2,12 +2,12 @@
 
 > kiki 의 skill 본문은 **Claude (Claude Code / Claude in Chrome)** 기준으로 쓰여 있다. 이 문서는 **Codex Desktop / Codex CLI** 의 도구 이름·설치 경로·환경 차이만 정리하는 **Codex 어댑터**다.
 > 정본은 [CLAUDE.md](CLAUDE.md)·[INSTALL.md](INSTALL.md)·[README](README.md)·[환경 점검](skills/_shared/environment_setup.md)과 각 skill 의 `SKILL.md`다. 상세 절차는 정본을 따르고, 여기서는 Codex 차이만 적용한다.
-> 문서 동기화: **2026-09-25**, [변경 이력](docs/HISTORY.md)의 2026-09-23 v0.2.3~2026-09-24 반영. 기존 Codex 이식 실증(2026-06-07)과 이후 정본 변경을 구분하며, 미확인 동작은 따로 표시한다.
+> 문서 동기화: **2026-09-27** (v0.4.1, [변경 이력](docs/HISTORY.md)). 기존 Codex 이식 실증(2026-06-07)과 이후 정본 변경을 구분하며, 미확인 동작은 따로 표시한다.
 
 ## 1. 설치 구조 (Codex)
 **설치 폴더부터 묻는다**: 기본 `C:\kiki`(Windows) / `~/kiki`(macOS/Linux) 또는 사용자 지정 경로. 선택한 `kiki_root`에 패키지를 확보하고 그 폴더에서 진행한다(git 불요: ZIP/동료 폴더 가능). 원본 `skills/`를 아래 Codex 경로에 복사한다. 배포본 `install.ps1`·`install.sh`는 Claude 경로용이므로 Codex 설치에는 아래 복사 예를 쓴다.
 
-- **설치 때 에이전트가 Python 3·Node.js 유무를 확인하고, 없으면 한 줄 안내 후 바로 설치를 시작한다**. 정본 [CLAUDE.md Step 0](CLAUDE.md)의 범위: 전체 설치 = 둘 다 / kk-mail만 = 둘 다 불필요 / kk-budget = Python / kk-pay·kk-meeting·kk-inspect = Python + Node.js. Python 패키지는 각 skill에서 필요할 때 확인·설치한다.
+- **설치 때 에이전트가 Python 3·Node.js 유무를 확인하고, 없으면 한 줄 안내 후 바로 설치를 시작한다**. 정본 [CLAUDE.md Step 0](CLAUDE.md)의 범위: 전체 설치 = 둘 다 / kk-mail만 = 둘 다 불필요 / kk-budget·kk-wiki = Python / kk-budget = Python / kk-pay·kk-meeting·kk-inspect = Python + Node.js. Python 패키지는 각 skill에서 필요할 때 확인·설치한다.
 - Windows: `python --version`·`node --version`·`npx --version` 확인. `python`이 없어도 `py -3 --version`이 되면 재설치하지 않고 이후 실행·pip에 `py -3`·`py -3 -m pip`를 쓴다. Store 실행 별칭·설치 직후 PATH 미반영을 구분하고, 미설치 시 winget 및 UAC/수동 설치 안내는 Step 0을 따른다.
 - macOS/Linux 절차도 [CLAUDE.md Step 0](CLAUDE.md)·[INSTALL.md §6](INSTALL.md)을 따른다(실기기 미검증). macOS는 Python 미설치 시 Xcode 명령줄 도구, Node.js는 기존 Homebrew 또는 `.pkg`; Linux는 `python3` 확인 후 sudo가 필요한 명령은 사용자에게 안내하고, sudo 불가 시 사용자 경로 설치를 따른다. OS별 설치 절차를 이 문서에 중복 관리하지 않는다.
 
@@ -22,19 +22,23 @@
 ```bash
 # macOS / Linux
 mkdir -p ~/.codex/skills ~/.codex/kiki
-cp -R skills/_shared ~/.codex/skills/_shared
-cp -R skills/kk-mail ~/.codex/skills/kk-mail            # 원하는 kk-* 나열 (또는 skills/kk-* 전체)
-cp skills/_shared/kiki.config.example.json ~/.codex/kiki/kiki.config.json
-cp skills/_shared/token.txt.example ./token.txt          # kiki 폴더(기본 ~/kiki)에 토큰 파일
+for s in _shared kk-mail; do rm -rf ~/.codex/skills/$s; cp -R skills/$s ~/.codex/skills/$s; done   # 원하는 kk-* 나열(또는 skills/kk-* 전체). 재설치 때 겹치지 않게 지우고 복사
+rm -rf ~/.codex/skills/kk-dining; [ -d dining ] && [ ! -d meeting ] && mv dining meeting        # 옛 이름(2026-09-26 개명) 정리
+[ -f ~/.codex/kiki/kiki.config.json ] || cp skills/_shared/kiki.config.example.json ~/.codex/kiki/kiki.config.json   # 기존 설정 유지
+[ -f ./token.txt ] || cp skills/_shared/token.txt.example ./token.txt          # kiki 폴더(기본 ~/kiki)에 토큰 파일
 mkdir -p budget meeting inspect _tmp
 ```
 ```powershell
 # Windows (PowerShell)
 New-Item -ItemType Directory -Force "$env:USERPROFILE\.codex\skills","$env:USERPROFILE\.codex\kiki" | Out-Null
-Copy-Item -Recurse "skills\_shared" "$env:USERPROFILE\.codex\skills\_shared"
-Copy-Item -Recurse "skills\kk-mail" "$env:USERPROFILE\.codex\skills\kk-mail"
-Copy-Item "skills\_shared\kiki.config.example.json" "$env:USERPROFILE\.codex\kiki\kiki.config.json"
-Copy-Item "skills\_shared\token.txt.example" ".\token.txt"   # kiki 폴더(기본 C:\kiki)에 토큰 파일
+foreach ($s in @("_shared", "kk-mail")) {                      # 원하는 kk-* 나열. 재설치 때 겹치지 않게 지우고 복사
+  if (Test-Path "$env:USERPROFILE\.codex\skills\$s") { Remove-Item -Recurse -Force "$env:USERPROFILE\.codex\skills\$s" }
+  Copy-Item -Recurse "skills\$s" "$env:USERPROFILE\.codex\skills\$s"
+}
+if (Test-Path "$env:USERPROFILE\.codex\skills\kk-dining") { Remove-Item -Recurse -Force "$env:USERPROFILE\.codex\skills\kk-dining" }   # 옛 이름 정리
+if ((Test-Path dining) -and -not (Test-Path meeting)) { Move-Item dining meeting }
+if (-not (Test-Path "$env:USERPROFILE\.codex\kiki\kiki.config.json")) { Copy-Item "skills\_shared\kiki.config.example.json" "$env:USERPROFILE\.codex\kiki\kiki.config.json" }   # 기존 설정 유지
+if (-not (Test-Path ".\token.txt")) { Copy-Item "skills\_shared\token.txt.example" ".\token.txt" }   # kiki 폴더(기본 C:\kiki)에 토큰 파일
 New-Item -ItemType Directory -Force budget,meeting,inspect,_tmp | Out-Null
 ```
 
@@ -56,7 +60,7 @@ skill 본문의 "Claude in Chrome" 도구를 Codex의 Chrome DevTools 도구로 
 | 화면/DOM 확인 (`screenshot`/`read_page`/`find`) | `take_snapshot` (필요시 `take_screenshot`) |
 | 클릭/입력/업로드 fallback | `click` / `fill` / `press_key` / `upload_file` |
 
-- **JS 코어 주입·호출은 `evaluate_script`**: 각 skill의 `scripts/*.js`를 읽어 대상 탭에 주입 → `window.kkPay.*` / `window.kkBudget.*` / `window.kkmeeting.*` / `window.kkMail.*` 함수 호출. kk-mail도 chrome-devtools의 Dooray 탭에서 [코어 `kk_mail_ops.js` 1.3](skills/kk-mail/scripts/kk_mail_ops.js)을 주입·호출한다.
+- **JS 코어 주입·호출은 `evaluate_script`**: 각 skill의 `scripts/*.js`를 읽어 대상 탭에 주입 → `window.kkPay.*` / `window.kkBudget.*` / `window.kkmeeting.*` / `window.kkMail.*` / `window.kkWiki.*` 함수 호출(environment_setup.md §1 의 "Claude in Chrome 미연결이면 중단" 은 Codex 에선 `list_pages` 로 창 확인으로 읽는다). kk-mail도 chrome-devtools의 Dooray 탭에서 [코어 `kk_mail_ops.js` 1.3](skills/kk-mail/scripts/kk_mail_ops.js)을 주입·호출한다.
 - ⚠️ **페이지 새로고침 시 주입한 `window.*` 객체가 사라진다 → 재주입** 필요.
 
 ## 3. 인증·개인설정 분리 (repo 밖)
@@ -103,7 +107,7 @@ s.textContent = `[id*="_form_modalPopDiv"], [id*="modalPopDivScrollableInnerCont
 - **kk-meeting**: [SKILL](skills/kk-meeting/SKILL.md) 기준으로 **회의 주제를 먼저 묻고, 회의내용은 사용자가 작성을 부탁할 때만** 근거자료로 채운다(직접 준 내용은 그대로 기록). 사전결재 적용 시점·회의시간·참석자 판단은 SKILL을 따른다. Codex도 chrome-devtools에서 `evaluate_script`로 제어하며, 계정/비목은 **`doDecision()` 콜백**, 통장표기는 **`common_onkillfocus` 동기화**를 사용한다.
   회의록 엑셀은 임시저장 직후 `{kiki_root}/meeting/meeting_log/{yymm}_회의록.xlsx`에 자동 기록한다(처리 연월별 1파일, 연월 하위폴더 없음). 회의록 파일은 **hwpx로 통일**하고 요청 시에만 [make_meetinglog_hwpx.py](skills/kk-meeting/scripts/make_meetinglog_hwpx.py)로 같은 폴더에 `{yymmdd}_{과제번호}_{과제이름 간략}_회의록.hwpx`를 만든다(건당 1파일). 생성은 표준 라이브러리로 모든 OS에서 **아래아한글 없이** 가능하고, 열람은 한글 또는 HOP을 쓴다. 세부 저장·중복 검사 규칙은 [회의록 엑셀 안내](skills/kk-meeting/references/meeting_log_excel.md)를 따른다.
 - **kk-mail**: [SKILL](skills/kk-mail/SKILL.md)의 기능 번호는 **1 자연어로 메일 찾기(가장 많이 쓰는 기능) · 2 폴더 분류 · 3 자동분류 규칙 · 4 스팸 처리**. 로그인 세션 쿠키로 동작하며 토큰·추가 설치는 불필요하다(§1의 Codex 브라우저 도구 준비 전제).
-  기능 1은 코어 1.3의 **`searchMails`/`searchMany` → Dooray 검색 API `POST /v2/wapi/mails/search`** 경로가 기본이고, 검색어를 정하기 어려우면 **`listMails`로 목록 훑기** 경로를 쓴다. 검색·읽음 상태 보존의 상세는 [SKILL](skills/kk-mail/SKILL.md)·[wapi 참조](skills/kk-mail/references/wapi_reference.md)를 따른다.
+  기능 1은 코어(1.6)의 **`searchMails`/`searchMany` → Dooray 검색 API `POST /v2/wapi/mails/search`** 경로가 기본이고, 검색어를 정하기 어려우면 **`listMails`로 목록 훑기** 경로를 쓴다. 검색·읽음 상태 보존의 상세는 [SKILL](skills/kk-mail/SKILL.md)·[wapi 참조](skills/kk-mail/references/wapi_reference.md)를 따른다.
   첫 실행(`kk-mail 설정해줘`)은 **환경 점검 → 기존 폴더·규칙 파악 → 4가지 기능 안내로 종료**한다. 폴더 분류·권장 규칙 설정은 사용자가 원할 때만 진행한다. 기능 3의 기본 조건은 **발신 주소만**이며, 제목 조건은 사용자가 명시할 때만 추가한다.
   **도구별 검증 범위**: SKILL의 "출력 약 1,000자 잘림·`a=b` 필터"는 **Claude in Chrome의 `javascript_tool`에서 실측**한 제약이다. Codex의 **`evaluate_script`에서는 미확인**이며 동일하게 적용된다고 단정하지 않는다. 결과 분할 등의 우회는 실제 증상이 있을 때만 정본을 참고한다.
 - **kk-wiki**: [SKILL](skills/kk-wiki/SKILL.md). 위키 본문 스냅샷을 `{kiki_root}/wiki`에 두고 로컬 검색(`wiki_search.py`) → 인용 페이지만 `wiki_snapshot.py fresh`로 최신 확인. **토큰이 있으면 Python만으로**(브라우저 불요) 수집·최신 확인·첨부. 토큰이 없으면 chrome-devtools 창의 Dooray 탭에 코어 `kk_wiki_ops.js`를 주입 → `crawlAll()`(탭을 앞에 둘 것) → export JSON 다운로드 → `import`. 스냅샷은 KIST 내부 자료 — repo 밖에만.

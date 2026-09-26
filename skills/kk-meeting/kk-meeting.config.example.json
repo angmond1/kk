@@ -6,8 +6,6 @@
   "_log_root": "회의록 엑셀·hwpx 폴더(한 폴더, 월별 {yymm}_회의록.xlsx + 건별 hwpx). 클라우드 동기화 폴더로 바꿔도 됨.",
   "hwp_output_root_optional": "{kiki_root}/meeting/meeting_log",
   "_hwp_output_root_optional": "hwpx 회의록 출력 폴더 = 엑셀과 같은 폴더(키 이름은 호환 위해 유지). 파일명 {yymmdd}_{과제번호}_{과제이름 간략}_회의록.hwpx",
-  "upload_via_rpa": false,
-  "_upload_via_rpa": "true 면 회의록을 dooray 드라이브에 올려 RPA 처리(행정원 폴더 = kiki.config payment_admin.folder_url). 기본 false = fam_0704 직접 자동작성.",
   "receipt_path": "",
   "_receipt_path": "카드영수증/증빙 폴더(사람마다 다름, 비우면 그때그때 첨부). {kiki_root} = kiki.config.json 의 kiki_root (기본 C:\\kiki / ~/kiki).",
   "output_dir": "{kiki_root}/meeting",
@@ -25,10 +23,9 @@
       "S",
       "I",
       "F",
-      "B",
-      "K",
-      "G"
+      "B"
     ],
+    "_bimok_note": "K 과제는 34-448, G 계정은 17-523·41-523 (project_code.md)",
     "amount_per_person": 50000,
     "amount_includes": "식대+음료(액체 다과) 합산",
     "log_format_options": {

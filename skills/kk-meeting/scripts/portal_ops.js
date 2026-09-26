@@ -20,14 +20,21 @@
       + '<Parameter id="svcId">' + svcId + '</Parameter>\n'
       + '</Parameters>\n' + datasetXml + '\n</Root>';
   }
+  // XML 특수문자 이스케이프 — 거래처명 'H&M' 같은 값이 요청 XML 을 깨지 않게
+  function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
   function ds(id, cols, row) {
     var ci = cols.map(function (c) { return '<Column id="' + c + '" type="STRING" size="256"/>'; }).join('');
-    var rc = Object.keys(row).map(function (k) { return '<Col id="' + k + '">' + row[k] + '</Col>'; }).join('');
+    var rc = Object.keys(row).map(function (k) { return '<Col id="' + k + '">' + esc(row[k]) + '</Col>'; }).join('');
     return '<Dataset id="' + id + '"><ColumnInfo>' + ci + '</ColumnInfo><Rows><Row>' + rc + '</Row></Rows></Dataset>';
   }
   async function post(path, body) {
     var r = await fetch(path, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'text/xml; charset=UTF-8' }, body: body });
-    return r.text();
+    var t = await r.text();
+    // 세션 만료·잘못된 경로면 XML 대신 HTML(로그인·오류 페이지)이 온다 → 빈 결과로 넘어가지 않게 throw (2026-09-27 실측: authTk 가 틀려도 200 XML, 세션이 없으면 HTML)
+    if (!r.ok || t.indexOf('<Root') < 0) throw new Error('PORTAL: 통합정보 응답이 XML 이 아닙니다(HTTP ' + r.status + ') — 세션 만료 가능성. e.kist.re.kr 로그인 확인 → 통합정보 탭 새로고침 → 코어 재주입');
+    var ec = /<Parameter id="ErrorCode"[^>]*>(-?\d+)</.exec(t);
+    if (ec && +ec[1] < 0) { var em = /<Parameter id="ErrorMsg"[^>]*>([\s\S]*?)</.exec(t); throw new Error('PORTAL ErrorCode ' + ec[1] + (em ? ': ' + decodeEnt(em[1]).slice(0, 200) : '')); }
+    return t;
   }
   function decodeEnt(s) {
     return String(s).replace(/&#(\d+);/g, function (_, n) { return String.fromCharCode(+n); })
@@ -46,6 +53,9 @@
   // ---------- 카드영수증 (fam_0711 / getList) — 단일 카드종류 ----------
   // cardType: '5'(법인) | '3'(연구비)
   async function queryCards(opt) {
+    opt = opt || {};
+    if (!opt.empno) throw new Error('queryCards: empno(카드책임자 사번)가 필요합니다 — kiki.config card_holder.empno, 없으면 fam_0711 화면 ds_search.SEARCHID');
+    if (!opt.fromDt || !opt.toDt) throw new Error('queryCards: fromDt/toDt(YYYYMMDD) 가 필요합니다');
     var cols = ['FROM_DT', 'TO_DT', 'CARDTYPECD', 'CARDRESPEREMPNO', 'SEARCHID', 'CUSTNM', 'CARDNO'];
     var row = { FROM_DT: opt.fromDt, TO_DT: opt.toDt, CARDTYPECD: opt.cardType || '5', CARDRESPEREMPNO: opt.empno, SEARCHID: opt.empno };
     if (opt.custnm) row.CUSTNM = opt.custnm;
@@ -53,7 +63,9 @@
     var xml = await post('/mis/fam/fam0711/getList.do', nexBody('fam_0711', 'getList', ds('ds_search', cols, row)));
     var kind = (opt.cardType === '3') ? '연구비' : '법인';
     return parseRows(xml).filter(function (o) { return o.CARDAPPRNO; }).map(function (o) {
-      return { date: o.CARDUSEYMD, custnm: o.CUSTNM, amount: o.USEAMT, apprno: o.CARDAPPRNO, cardno: o.CARDNO, status: o.PRGRSSTATNM, cardKind: kind };
+      // 카드번호 전체는 돌려주지 않는다(채팅 노출 방지) — 뒤 4자리(card4)만. holder = 카드책임자, cancel = 취소금액.
+      return { date: o.CARDUSEYMD, custnm: o.CUSTNM, amount: o.USEAMT, apprno: o.CARDAPPRNO, status: o.PRGRSSTATNM, cardKind: kind,
+               holder: o.CARDRESPEREMPNM, cancel: o.DCAMT, card4: String(o.CARDNO || '').slice(-4) };
     });
   }
 
@@ -74,7 +86,7 @@
     return parseRows(xml).filter(function (o) { return o.ACCCD; }).map(function (o) {
       var mm = String(o.ACCCD).match(/\d+([A-Za-z])/);   // 숫자 뒤 첫 영문 = 분류코드 (2E11111 -> E, 2N11111 -> N)
       var code = mm ? mm[1].toUpperCase() : '';
-      return { acccd: o.ACCCD, name: o.PROJNM, pi: o.KORNM, projCode: code, preApprovalExempt: (code === 'I' || code === 'S' || code === 'K') };
+      return { acccd: o.ACCCD, name: o.PROJNM, pi: o.KORNM, projCode: code, preApprovalExempt: ['I', 'S', 'B', 'F'].indexOf(code) >= 0 };
     });
   }
 
@@ -106,11 +118,24 @@
     return null;   // 매칭 실패 → 호출측에서 회의제목 자동산출/확인
   }
 
+  // ---------- 출력 조각 (Claude in Chrome javascript_tool 제약: ~1,000자 truncation, 8자리 이상 숫자·URL 가림, a=b 꼴 차단) ----------
+  // 카드 목록을 12~15줄씩 읽는다. 승인번호는 4자리마다 '-', 날짜는 YYYY-MM-DD, 금액은 천단위 콤마 → 8자리 연속 숫자가 없다. '=' 도 없다.
+  //   idx | 날짜 | 거래처 | 금액 | 승인 XXXX-XXXX | 상태 | 카드책임자 | (법인/연구비)
+  function fmtCards(rows, from, to) {
+    rows = rows || []; from = from || 0; to = to == null ? from + 15 : to;
+    var hy = function (x) { return String(x == null ? '' : x).replace(/(\d{4})(?=\d)/g, '$1-'); };
+    var dt = function (d) { d = String(d || ''); return /^\d{8}$/.test(d) ? d.slice(0, 4) + '-' + d.slice(4, 6) + '-' + d.slice(6) : d; };
+    var won = function (a) { if (a && typeof a === 'object') a = a.hi; var n = parseFloat(String(a == null ? '' : a).replace(/[^0-9.\-]/g, '')); return isNaN(n) ? String(a == null ? '' : a) : Math.round(n).toLocaleString('en-US'); };
+    var lines = rows.slice(from, to).map(function (c, k) {
+      return [from + k, dt(c.date), String(c.custnm || '').slice(0, 16), won(c.amount), '승인 ' + hy(c.apprno), c.status || '', c.holder || '', c.cardKind || ''].join(' | ').replace(/[=&?;]/g, ' ');
+    });
+    return '[' + from + '-' + Math.min(to, rows.length) + ' of ' + rows.length + ']\n' + lines.join('\n');
+  }
   window.kkmeeting = {
     authTk: authTk, ready: ready, nexBody: nexBody, ds: ds, post: post, parseRows: parseRows,
     queryCards: queryCards, queryCardsBoth: queryCardsBoth, queryProjects: queryProjects,
-    queryPreApprovals: queryPreApprovals, matchPreApproval: matchPreApproval,
-    _version: 'kk-meeting-portal/1.0',
+    queryPreApprovals: queryPreApprovals, matchPreApproval: matchPreApproval, fmtCards: fmtCards, esc: esc,
+    _version: 'kk-meeting-portal/1.1',
   };
   return window.kkmeeting._version + ' =^.^=';
 })();

@@ -23,6 +23,12 @@ data 키(전부 문자열): account 계정번호 / pi_ins '김키키 (인)' / am
 """
 from __future__ import annotations
 import html, io, json, os, re, sys, zipfile
+# Windows 한국어(cp949) 콘솔·파이프에서도 한글·기호가 깨지거나 멈추지 않게 출력은 UTF-8 로 (모듈로 불러 써도 적용)
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE = os.path.normpath(os.path.join(HERE, "..", "assets", "minutes_template.hwpx"))
@@ -58,8 +64,11 @@ _LINESEG = re.compile(r"<hp:linesegarray>.*?</hp:linesegarray>", re.S)
 _T = re.compile(r"<hp:t\b[^>]*>(.*?)</hp:t>", re.S)
 
 
+_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+
 def _esc(s) -> str:
-    return html.escape(str(s), quote=False)   # & < > 만 (따옴표는 본문에 그대로)
+    return html.escape(_CTRL.sub(" ", str(s)), quote=False)   # & < > 만 (따옴표는 본문에 그대로); XML 에 못 들어가는 제어문자는 공백
 
 
 def _para_with_text(proto: str, text: str, first: bool,
@@ -124,15 +133,25 @@ def _preview(data: dict) -> str:
     return "\n".join(f"{LABELS[k]}: {data.get(k, '')}" for k in CELL_MAP.values()) + "\n"
 
 
+def safe_name(s: str, n: int = 40) -> str:
+    """과제이름 등을 파일명 조각으로 — 폴더 구분자·금지 문자·제어문자는 '_', 앞뒤 공백·점 제거, n 자로 자름."""
+    s = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', "_", str(s or "")).strip(" ._")
+    return re.sub(r"\s+", " ", s)[:n].rstrip(" ._") or "회의록"
+
+
 def make(data: dict, out_path: str, template: str | None = None) -> str:
     """양식 hwpx 에 data 를 채워 out_path(.hwpx) 로 저장. 저장 경로 반환."""
     template = template or TEMPLATE
     if not os.path.exists(template):
         raise FileNotFoundError(f"양식 없음: {template}")
-    root, _ = os.path.splitext(out_path)
-    out_path = root + ".hwpx"
     d = os.path.dirname(os.path.abspath(out_path))
+    base = os.path.splitext(os.path.basename(out_path))[0]
+    base = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', "_", base).strip(" .") or "회의록"   # 과제명에 '/' ':' 가 있어도 파일명이 깨지지 않게
     os.makedirs(d, exist_ok=True)
+    out_path = os.path.join(d, base + ".hwpx")
+    k = 2
+    while os.path.exists(out_path):                              # 같은 날 같은 과제 2건 — 덮어쓰지 않고 _2, _3
+        out_path = os.path.join(d, f"{base}_{k}.hwpx"); k += 1
     with zipfile.ZipFile(template) as zin:
         names = zin.namelist()
         section = fill_section(zin.read(SECTION).decode("utf-8"), data)
@@ -155,7 +174,12 @@ def make(data: dict, out_path: str, template: str | None = None) -> str:
 
 def make_batch(items: list, template: str | None = None) -> list:
     """items: [{'data': dict, 'hwpx': 출력경로}, ...] ('hwp' 키도 허용 — 확장자는 .hwpx 로 저장)."""
-    return [make(it["data"], it.get("hwpx") or it.get("hwp"), template) for it in items]
+    out = []
+    for it in items:
+        if not it.get("hwpx") and not it.get("hwp"):
+            raise ValueError("항목에 'hwpx'(출력 경로)가 없습니다")
+        out.append(make(it["data"], it.get("hwpx") or it.get("hwp"), template))
+    return out
 
 
 def dump(path: str) -> list:
@@ -180,13 +204,13 @@ if __name__ == "__main__":
     if len(a) == 2 and a[0] == "--demo":
         print(make(DEMO_DATA, a[1]))
     elif len(a) == 2 and a[0] == "--batch":
-        items = json.load(io.open(a[1], encoding="utf-8"))
+        items = json.load(io.open(a[1], encoding="utf-8-sig"))
         for p in make_batch(items):
             print(p)
     elif len(a) == 2 and a[0] == "--dump":
         for i, k, t in dump(a[1]):
             print(f"{i:2d} {k:8s} {t!r}")
     elif len(a) == 2:
-        print(make(json.load(io.open(a[0], encoding="utf-8")), a[1]))
+        print(make(json.load(io.open(a[0], encoding="utf-8-sig")), a[1]))
     else:
         print(__doc__)

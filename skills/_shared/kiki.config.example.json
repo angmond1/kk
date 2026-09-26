@@ -26,15 +26,14 @@
   },
 
   "location": {
-    "region_code": "LABT_00",
+    "region_code": "",
     "_region": "본원=LABT_00 / 강릉=LABT_01 / 전북=LABT_02.",
     "building_code": "",
     "room": "",
     "_note": "검수신청자 소속/위치. (kk-inspect)"
   },
 
-  "projects": [
-    {"acccd": "", "name": "", "pi": "", "code": "", "role": ""}
-  ],
+  "projects": [],
+  "_projects_example": {"acccd": "2E11111", "name": "○○ 연구", "pi": "김키키", "code": "E", "role": "주관"},
   "_projects": "참여 과제 캐시 — queryProjects 로 자동수집 후 사용자 확인. acccd=과제번호 / name=과제명 / pi=책임자 / code=분류코드(영문 1자, project_codes.md) / role=주관·공동·참여. 여러 skill 공유(검수 지급계정·예산 추적·회의비 계정·지급신청 과제). '과제 갱신' 시 재수집."
 }

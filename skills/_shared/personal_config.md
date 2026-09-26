@@ -22,22 +22,22 @@
 4. 폴더·파일이 없으면 **빈 템플릿 자동 생성**(파일 직접 못 만드는 사용자 우회).
 
 ## 토큰 입력 (필요 skill 만 — kk-pay 카드 RPA 업로드 / kk-meeting RPA 옵션)
-- **표준 — 파일**: skill 이 `token.txt` **절대경로를 보여주며** 안내 → 사용자가 https://kist.gov-dooray.com/setting/api/token 에서 발급한 토큰을 `Dooray token:` **다음 줄**에 붙여넣고 저장 → 채팅엔 "두레이 토큰 저장했다" → skill 이 파일을 읽어 **값은 출력하지 않고** 형식(공백 없음·길이)만 확인. 원하면 파일을 열어준다(Windows `notepad`, macOS `open -e`).
+- **표준 — 파일**: skill 이 `token.txt` **절대경로를 보여주며** 안내 → 사용자가 https://kist.gov-dooray.com/setting/api/token 에서 발급한 토큰을 `Dooray token:` **다음 줄**에 붙여넣고 저장 → 채팅엔 "두레이 토큰 저장했다" → skill 이 `python <skill>/scripts/dooray_drive.py check` 로 **값은 출력하지 않고** 길이·파일 위치만 확인(파일 Read 금지). 원하면 파일을 열어준다(Windows `notepad`, macOS `open -e`).
 - **⚠️ 채팅 붙여넣기는 비권장** — 대화 기록에 남아 타인에게 노출될 수 있다는 것을 **항상 경고**한다. 그래도 붙여넣어지면 즉시 `token.txt` 에 옮겨 저장하고 채팅에서 다시 쓰지 않는다.
 - 토큰 로드 우선순위(`dooray_drive.py`): 환경변수 `DOORAY_TOKEN` → `<kiki_root>/token.txt` → `~/.claude/kiki/token.txt` → `~/.codex/kiki/token.txt` → `~/.claude/kiki/kiki.env` → `~/.codex/kiki/kiki.env`.
 - 토큰은 **repo·코드·로그 0건**(gitignore `*token*`). 조회 전용 skill·세션쿠키 skill·세금계산서 직접작성은 토큰이 아예 필요 없다.
 
 ## 공통 필드 ↔ 사용하는 skill
-| kiki.config.json 필드 | kk-mail | kk-pay | kk-meeting | kk-budget | kk-inspect |
-|----------------------|:---:|:---:|:---:|:---:|:---:|
-| kiki_root | | ○ | ○ | ○ | ○ |
-| user.name | | ○ | ○ | ○ | ○ |
-| user.emp_no | | ○ | ○ | | ○ |
-| user.phone | | | | | ○ |
-| card_holder | | ○ | ○ | | ○ |
-| payment_admin | | ○ | ○ | | ○ |
-| location | | | | | ○ |
-| projects | | ○ | ○ | ○ | ○ |
-| token.txt (토큰) | (옵션) | ○ | (옵션) | | |
+| kiki.config.json 필드 | kk-mail | kk-pay | kk-meeting | kk-budget | kk-inspect | kk-wiki |
+|----------------------|:---:|:---:|:---:|:---:|:---:|:---:|
+| kiki_root | | ○ | ○ | ○ | ○ | ○ |
+| user.name | | ○ | ○ | ○ | ○ | |
+| user.emp_no | | ○ | ○ | | ○ | |
+| user.phone | | | | | ○ | |
+| card_holder | | ○ | ○ | | ○ | |
+| payment_admin | | ○ | ○ | | ○ | |
+| location | | | | | ○ | |
+| projects | | ○ | ○ | ○ | ○ | |
+| token.txt (토큰) | (옵션) | ○ | (옵션) | | | (옵션) |
 
 > kk-mail 은 개인 식별정보가 필요 없다(메일은 브라우저 세션 쿠키로 동작). 분류 선호만 `kk-mail.config.json` 에.

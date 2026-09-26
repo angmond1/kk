@@ -7,7 +7,7 @@
 // 직접 호출하면 해상도·스크롤·행 위치와 무관하다. (2026-09-18 확립)
 //
 // 사용법:
-//   1) 예실대비표 화면을 열고 계정(과제번호)을 입력해 조회한 상태에서
+//   1) 예실대비표 화면(bdg_2030)에서 수행중 계정 목록의 과제번호를 클릭해 표가 뜬 상태에서(SKILL §4 '진입')
 //   2) 이 파일을 Read -> javascript_tool 로 inject
 //   3) kkExe.init()            // 폼·그리드 잡기 (셀 인덱스 자동 조회)
 //      kkExe.cats()            // 카테고리 목록 [{dsRow, cd, nm, exec, pd, pp}]
@@ -26,7 +26,8 @@
 
   function num(v) {
     if (v && typeof v === 'object') return v.hi || 0;              // NEXACRO {hi,lo}
-    return parseInt(String(v == null ? '0' : v).replace(/[^0-9-]/g, '')) || 0;
+    var n = parseFloat(String(v == null ? '0' : v).replace(/[^0-9.\-]/g, ''));   // '1234.00' → 1234 (점만 지우면 100배)
+    return isNaN(n) ? 0 : Math.round(n);
   }
 
   // 메인 폼: application.mainframe.all[0].form 이 화면 폼(ChildFrame).
@@ -205,7 +206,7 @@
 
   window.kkExe = {
     init: init, cats: cats, open: open, parse: parse, close: close, pop: pop,
-    _version: 'kk-budget-exec-detail/1.1'
+    _version: 'kk-budget-exec-detail/1.2'
   };
   return window.kkExe._version + ' =^.^=';
 })();

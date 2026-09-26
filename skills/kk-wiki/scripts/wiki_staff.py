@@ -13,6 +13,12 @@ Claude 가 `get_page_text` 로 읽은 덤프를 파일로 저장하면 이 스�
 """
 from __future__ import annotations
 import argparse, io, json, os, re, sys, time
+# Windows 한국어(cp949) 콘솔·파이프에서도 한글·기호가 깨지거나 멈추지 않게 출력은 UTF-8 로 (모듈로 불러 써도 적용)
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from wiki_snapshot import snapshot_root  # noqa: E402
@@ -164,9 +170,9 @@ def _add_row(cur: dict, cells: list) -> None:
 def parse_dump(text: str) -> dict:
     """staffRender 덤프 형식:
     === KKWIKI-STAFF v1 | exported ... | board ... | teams N ===
-    ## 팀: 재무팀 | 글번호 77956 | 게시일 08-18 17:58 | 게시자 장승현 | 제목 ... | id NEW... | pos 0
+    ## 팀: 재무팀 | 글번호 NNNNN | 게시일 08-18 17:58 | 게시자 김키키 | 제목 ... | id NEW... | pos 0
     | 직무구분 | 직무 내용 | 담당 |
-    | 팀장 | ◦ 재무업무 총괄 | 장승현 (6026) |
+    | 팀장 | ◦ 재무업무 총괄 | 김키키 (NNNN) |
     (표 없음 — 이미지 게시글)
     """
     m = re.search(r"=== KKWIKI-STAFF v1 \| exported ([^|]+)\| board ([^|]+)\| teams (\d+) ===", text)
@@ -176,7 +182,7 @@ def parse_dump(text: str) -> dict:
     for line in text.splitlines():
         line = line.rstrip()
         if line.startswith("## 팀:"):
-            fields = [x.strip() for x in line[6:].split("|")]
+            fields = [x.strip() for x in line[len("## 팀:"):].split("|")]
             cur = {"team": norm_team(fields[0]), "rows": [], "note": ""}
             for f in fields[1:]:
                 for key, name in (("글번호", "no"), ("게시일", "date"), ("게시자", "poster"), ("제목", "title"), ("id", "id"), ("url", "url"), ("pos", "pos"), ("기준일", "asof")):
@@ -218,6 +224,11 @@ def cmd_import(root: str, paths: list, since: str = "2025-01-01", keep: bool = F
         data = json.load(open(jp0, encoding="utf-8"))
     for path in paths:
         d = parse_dump(io.open(path, encoding="utf-8-sig").read())
+        # 같은 덤프 안에 같은 팀이 두 번 있으면 뒤 것이 이긴다(보정 덤프와 같은 규칙)
+        seen = {}
+        for t in d["teams"]:
+            seen[t["team"]] = t
+        d["teams"] = list(seen.values())
         if data is None:
             data = d
         else:
@@ -241,7 +252,7 @@ def cmd_import(root: str, paths: list, since: str = "2025-01-01", keep: bool = F
     jp = os.path.join(d, "staff.json")
     if os.path.exists(jp):
         hist = os.path.join(d, "_history"); os.makedirs(hist, exist_ok=True)
-        os.replace(jp, os.path.join(hist, f"staff_{time.strftime('%y%m%d_%H%M')}.json"))
+        os.replace(jp, os.path.join(hist, f"staff_{time.strftime('%y%m%d_%H%M%S')}.json"))
     data["imported_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
     json.dump(data, open(jp, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     lines = [f"# 부서별 업무분장표 — 담당자 (수집 {data['imported_at'][:10]}, {len(data['teams'])}팀, 기준 {since or '전체'}~ 우선)", "",
@@ -267,7 +278,10 @@ def cmd_import(root: str, paths: list, since: str = "2025-01-01", keep: bool = F
 def cmd_known(root: str) -> None:
     """팀별 글번호 JSON 한 줄 — 브라우저 코어 staffChanged(known) 에 그대로 붙여 넣는다."""
     data = load(root)
-    print(json.dumps({t["team"]: int(t.get("no") or 0) for t in data["teams"]}, ensure_ascii=False, separators=(",", ":")))
+    def _no(v):
+        m = re.search(r"\d+", str(v or ""))
+        return int(m.group()) if m else 0
+    print(json.dumps({t["team"]: _no(t.get("no")) for t in data["teams"]}, ensure_ascii=False, separators=(",", ":")))
 
 
 def load(root: str) -> dict:
@@ -340,7 +354,9 @@ def main(argv=None):
             raise SystemExit("find <단어...>")
         cmd_find(root, a.args, a.top)
     elif a.cmd == "team":
-        cmd_team(root, a.args[0] if a.args else "")
+        if not a.args:
+            raise SystemExit("team <팀명>  (예: team 재무팀)")
+        cmd_team(root, a.args[0])
     elif a.cmd == "status":
         cmd_status(root)
     elif a.cmd == "known":
