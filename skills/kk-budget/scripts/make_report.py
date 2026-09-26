@@ -151,7 +151,93 @@ def main(json_path, out_path):
     return out
 
 
+
+
+def _kiki_root() -> str:
+    r = os.environ.get("KIKI_ROOT", "").strip()
+    if r:
+        return os.path.expanduser(r)
+    for cfg in ("~/.claude/kiki/kiki.config.json", "~/.codex/kiki/kiki.config.json"):
+        p = os.path.expanduser(cfg)
+        if os.path.exists(p):
+            try:
+                r = (json.load(open(p, encoding="utf-8-sig")).get("kiki_root") or "").strip()
+            except Exception:
+                r = ""
+            if r:
+                return os.path.expanduser(r)
+    return "C:\\kiki" if os.name == "nt" else os.path.expanduser("~/kiki")
+
+
+def _downloads_dir() -> str:
+    d = os.environ.get("KIKI_DOWNLOADS", "").strip()
+    if d:
+        return os.path.expanduser(d)
+    if os.name == "nt":
+        try:
+            import winreg
+            k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders")
+            v, _ = winreg.QueryValueEx(k, "{374DE290-123F-4565-9164-39C4925E467B}")
+            return os.path.expandvars(v)
+        except Exception:
+            pass
+    return os.path.join(os.path.expanduser("~"), "Downloads")
+
+
+def _latest_download(pattern: str, max_age_h: float = 24.0) -> str:
+    import glob, time
+    cands = [p for p in glob.glob(os.path.join(_downloads_dir(), pattern)) if os.path.isfile(p) and time.time() - os.path.getmtime(p) <= max_age_h * 3600]
+    return max(cands, key=os.path.getmtime) if cands else ""
+
+
+def cli(argv: list) -> int:
+    """사용: python make_report.py <input.json> <output.xlsx>
+       python make_report.py --from-downloads [--out <output.xlsx>] [--save-snapshot [<dir>]]
+         --from-downloads : 다운로드 폴더의 최근 kiki_budget_*.json(브라우저 코어 downloadSnapshot 결과)
+         --out            : 기본 {kiki_root}/budget/yymmdd.xlsx (yymmdd = 스냅샷 날짜)
+         --save-snapshot  : 입력 JSON 을 <dir>/yymmdd.json 으로 보관 (기본 ~/.claude/kiki/kk-budget/data)"""
+    if not argv or argv[0] in ("-h", "--help"):
+        print(cli.__doc__); return 0 if argv else 1
+    import shutil
+    src = out = None; save = None
+    pos = []
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == "--from-downloads":
+            src = _latest_download("kiki_budget_*.json")
+            if not src:
+                print("[kk-budget] 다운로드 폴더(" + _downloads_dir() + ")에 24시간 내 kiki_budget_*.json 이 없습니다 — 브라우저 코어 downloadSnapshot() 먼저"); return 1
+        elif a == "--out" and i + 1 < len(argv):
+            out = argv[i + 1]; i += 1
+        elif a == "--save-snapshot":
+            save = argv[i + 1] if i + 1 < len(argv) and not argv[i + 1].startswith("--") else os.path.expanduser("~/.claude/kiki/kk-budget/data")
+            if save == (argv[i + 1] if i + 1 < len(argv) else None):
+                i += 1
+        else:
+            pos.append(a)
+        i += 1
+    if src is None and pos:
+        src = pos.pop(0)
+    if out is None and pos:
+        out = pos.pop(0)
+    if not src:
+        print(cli.__doc__); return 1
+    try:
+        with open(os.path.expanduser(src), encoding="utf-8-sig") as f:
+            snap = json.load(f)
+    except Exception as e:
+        print("[kk-budget] 입력 JSON 을 읽지 못함:", e); return 1
+    ymd = (snap.get("snapshot_date") or "").replace("-", "")[2:] or __import__("time").strftime("%y%m%d")
+    if not out:
+        out = os.path.join(_kiki_root(), "budget", ymd + ".xlsx")
+    if save:
+        os.makedirs(os.path.expanduser(save), exist_ok=True)
+        dst = os.path.join(os.path.expanduser(save), ymd + ".json")
+        shutil.copy2(os.path.expanduser(src), dst); print("[kk-budget] 스냅샷 보관:", dst)
+    main(src, out)
+    return 0
+
+
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        sys.exit("사용: python make_report.py <input.json> <output.xlsx>")
-    main(sys.argv[1], sys.argv[2])
+    sys.exit(cli(sys.argv[1:]))

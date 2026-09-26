@@ -66,6 +66,29 @@ def snapshot_root(arg: str | None) -> str:
     return os.path.abspath(os.path.expanduser(d))
 
 
+def downloads_dir() -> str:
+    """브라우저 다운로드 폴더 — 환경변수 KIKI_DOWNLOADS → Windows 레지스트리(사용자가 옮긴 경우) → ~/Downloads."""
+    d = os.environ.get("KIKI_DOWNLOADS", "").strip()
+    if d:
+        return os.path.expanduser(d)
+    if os.name == "nt":
+        try:
+            import winreg
+            k = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders")
+            v, _ = winreg.QueryValueEx(k, "{374DE290-123F-4565-9164-39C4925E467B}")
+            return os.path.expandvars(v)
+        except Exception:
+            pass
+    return os.path.join(os.path.expanduser("~"), "Downloads")
+
+
+def latest_download(pattern: str, max_age_h: float = 24.0) -> str:
+    """다운로드 폴더에서 pattern(glob) 에 맞는 가장 최근 파일(max_age_h 시간 안) — 없으면 ''. 브라우저 코어의 다운로드 결과를 LLM 이 옮겨 적지 않고 바로 쓰기 위한 것."""
+    import glob, time
+    cands = [p for p in glob.glob(os.path.join(downloads_dir(), pattern)) if os.path.isfile(p) and time.time() - os.path.getmtime(p) <= max_age_h * 3600]
+    return max(cands, key=os.path.getmtime) if cands else ""
+
+
 # ---------- 토큰 (kk-pay dooray_drive.py 와 동일 규칙) ----------
 def _read_text(p: str) -> str:
     """메모장이 UTF-16 이나 ANSI 로 저장해도 읽히게 — BOM 우선, 그다음 UTF-8, 시스템 인코딩."""
@@ -542,6 +565,7 @@ def main(argv=None):
     ap.add_argument("--update", action="store_true")
     ap.add_argument("--max-mb", type=float, default=30.0, help="attach: 이보다 큰 첨부는 건너뜀")
     ap.add_argument("--force", action="store_true", help="crawl/import: 새 수집이 기존의 절반 미만이어도 기존 페이지를 _old 로 보관")
+    ap.add_argument("--from-downloads", action="store_true", help="import: 다운로드 폴더의 최근 kist_wiki_*.json 을 자동으로 찾아 쓴다(exportSnapshot 결과)")
     a = ap.parse_intermixed_args(argv)
     cfg = _skill_config()
     wiki = a.wiki or cfg.get("space_id") or DEFAULT_WIKI
@@ -551,9 +575,10 @@ def main(argv=None):
     if a.cmd == "crawl":
         crawl(root, wiki, home, a.force)
     elif a.cmd == "import":
-        if not a.args:
-            raise SystemExit("import <export.json>")
-        import_export(root, wiki, home, a.args[0], a.force)
+        src = a.args[0] if a.args else (latest_download("kist_wiki_*.json") if a.from_downloads else "")
+        if not src:
+            raise SystemExit("import <export.json>  또는  import --from-downloads (다운로드 폴더 " + downloads_dir() + " 에 24시간 내 kist_wiki_*.json 없음 — 브라우저 코어 exportSnapshot() 먼저)")
+        import_export(root, wiki, home, src, a.force)
     elif a.cmd == "build":
         build(root, wiki, home)
     elif a.cmd == "fresh":

@@ -30,7 +30,7 @@ description: |
 2. **통합정보 화면 1개 확보**: `tabs_context_mcp` → **먼저 `navigate('https://e.kist.re.kr')` 로 로그인 상태 확인(포털 메인이 떠야 함)** → `navigate` `http://p.kist.re.kr:8081/nxui/kistis/indexQ.jsp?target=mis.fam::fam_0711.xfdl&menuParam=sysCd%3DCUS` → 9초 대기(NEXACRO).
    - 로그인 페이지면(세션 만료) "KIST 통합정보에 로그인해 달라" 안내 후 중단.
    - 🔴 **순서 고정: 새 브라우저·새 날·`about:blank`·정오 이후엔 먼저 `navigate('https://e.kist.re.kr')` 로 로그인 상태를 확인하고, 포털 메인이 뜬 뒤에만 fam_0711 딥링크**. 딥링크를 먼저 열면 `Your session has expired` alert + 무한 로딩(사용자가 반복 지적한 실수, 2026-09-12).
-3. **portal 코어 주입**: `scripts/portal_ops.js` Read → `javascript_tool` inject → `window.kkPay.ready()` true 확인(=`authTk` 확보). false면 화면 로드 재시도, 그래도 안 되면 조회는 **좌표 fallback**(워크플로 4의 fetch→좌표 순서)으로 전환.
+3. **portal 코어 주입**: `scripts/portal_ops.min.js` Read → `javascript_tool` inject((주입은 주석을 뺀 `portal_ops.min.js` 를 쓴다 — 내용 동일, 글자 수 30~40% 적음. 원본 `portal_ops.js` 는 읽을 필요 없다)) → `window.kkPay.ready()` true 확인(=`authTk` 확보). false면 화면 로드 재시도, 그래도 안 되면 조회는 **좌표 fallback**(워크플로 4의 fetch→좌표 순서)으로 전환.
 4. dooray 작업은 Bash 로 `scripts/dooray_drive.py`(토큰) 사용.
 
 ---
@@ -64,10 +64,10 @@ description: |
    - 카드 종류: **법인/연구비** 확인(법인=`CARDTYPECD` 5, 연구비 3).
 4. **카드 건 승인번호 조회** — 2-스텝: `window.__c=null; window.kkPay.queryCards({fromDt,toDt,cardType,empno,custnm}).then(r=>window.__c=r); 'started'` → 다음 호출에서 `window.kkPay.fmtCards(window.__c, 0, 15)`(`javascript_tool` 은 비동기 결과를 `{}` 로 돌려주고 8자리 숫자·`=` 를 가리므로 — 승인번호는 `1234-5678` 꼴로 보인다). `empno` 는 필수(kiki.config `card_holder.empno`). 반환 항목 `{date, custnm, amount, apprno, status, holder(카드책임자), cancel(취소액), card4(카드 뒤 4자리)}` — 카드번호 전체는 돌아오지 않는다. 거래처·금액·날짜·`holder` 로 매칭해 `apprno` 확보. **외화는 임의 환산 말고** `USEAMT`(원화청구액) 그대로. (세금계산서·회의비는 승인번호 없음)
    - ⭐ **fetch 실패 시 좌표 fallback 자동 시도** (authTk 없음 / 빈 결과 / HTTP 에러 / 코어가 `PORTAL:` 오류를 던지면 먼저 `e.kist.re.kr` 로그인·탭 새로고침·재주입): `references/kist_portal_fetch.md` 의 좌표 절차(화면 캡처 + `zoom` 으로 칸 위치를 찾아 입력·Enter·조회버튼·grid 읽기)로 **재시도**. **시도 순서 = fetch → 좌표, "어떻게든 성공"이 목표.** 둘 다 실패할 때만 화면을 캡처해 사용자에게 보여주고 안내(조용히 멈추지 말 것). 과제목록 조회도 동일.
-5. **파일명 규칙 변환** — `계정_항목_비목_카드승인번호_카드책임자]내용` (세금계산서는 승인번호 생략 / 카드영수증+주문내역이면 주문내역만 / 복수는 `(1)(2)`). 로컬에서 rename.
+5. **파일명 규칙 변환 — 스크립트로**: 확정된 값(파일·계정·항목·비목·승인번호·카드책임자·내용·kind·같은 건 묶음 `group`·통장사본 여부)을 `items.json` 에 적고 `python scripts/kk_pay_files.py plan items.json` 으로 계획표(`계정_항목_비목_카드승인번호_카드책임자]내용`; 세금계산서는 승인번호 없이 `계정_항목_비목_이름]내용`; 같은 건 여러 파일은 ` (1) (2)`; 통장사본은 `_통장사본`)를 **사용자에게 보여 confirm** → `apply items.json`(같은 폴더에서 이름 변경, 덮어쓰기·규칙 위반은 거부). 카드영수증+주문내역이면 주문내역만 올린다. 셸에서 직접 rename 하지 않는다(`]`·공백 함정).
 6. **업로드 (confirm 후)** — `python scripts/dooray_drive.py upload <폴더id|폴더링크> <파일…>`(모듈로는 `DoorayDrive().upload(folder_id, path)`). 유형별 폴더(카드=root / 세금계산서=하위 또는 동일, 1-c 분기대로). **RPA 비대상 비목(회의비·전문가활용·전화료·전기료·도서비·용역·공사 — `rpa_payment_filing.md` §1)은 올리지 않고** 회의비는 kk-meeting, 나머지는 직접작성·행정원 안내로. 업로드 = **RPA 자동 기안 트리거**임을 알리고 confirm.
 7. **업로드 결과 웹 확인 (필수 — 텍스트 '완료'만 통보 금지)** — 업로드 직후 **행정원 폴더의 dooray 드라이브 웹페이지를 브라우저에 띄운다**: `navigate` → `https://kist.gov-dooray.com/drive/3311002956353796322/{folderId}` (projectId `3311002956353796322` 는 전 KIST 공통, `{folderId}` = 담당 행정원 폴더 id). 올라간 파일 목록을 사용자가 **눈으로 확인**하게 하고, 방금 올린 파일명이 다 보이는지 대조한다. (사용자 피드백 2026-07-07: "다 했다고만 하지 말고 dooray 드라이브 웹페이지를 띄워 보여줄 것")
-8. **처리완료 정리** — ⭐ **카드·세금계산서 모두: 실제 쓴 원본 증빙을 `영수증폴더/{월}/신청완료/…/{과제번호}/` 로 이동(move)** = 신청완료 사본은 **증빙으로 반드시 보존**하고, 원래 폴더에서는 이동으로 제거된다. 🔴 **신청완료 폴더의 파일을 삭제하지 말 것**(2026-09-12 오해로 카드 건 13개를 지웠다가 복원 — 사용자: "신청완료한 것 증빙으로 남겨둬야 해"). 다음 달에도 붙일 문서(변경요청서 등)만 원래 폴더에 남긴다. 과제별 분류 규칙:
+8. **처리완료 정리 — 스크립트로** `python scripts/kk_pay_files.py archive items.json --base <그 달 영수증 폴더> --dry` 로 계획을 보이고 confirm 후 `--dry` 없이 실행(파일 단위 이동, 같은 이름은 ` (2)`, GoogleDrive 동기 폴더 안전). ⭐ **카드·세금계산서 모두: 실제 쓴 원본 증빙을 `영수증폴더/{월}/신청완료/…/{과제번호}/` 로 이동(move)** = 신청완료 사본은 **증빙으로 반드시 보존**하고, 원래 폴더에서는 이동으로 제거된다. 🔴 **신청완료 폴더의 파일을 삭제하지 말 것**(2026-09-12 오해로 카드 건 13개를 지웠다가 복원 — 사용자: "신청완료한 것 증빙으로 남겨둬야 해"). 다음 달에도 붙일 문서(변경요청서 등)만 원래 폴더에 남긴다. 과제별 분류 규칙:
    - **카드**: `신청완료/{카드구분}/{과제}/` + 파일명 **RPA 업로드명 그대로**(`{계정}_{항목}_{비목}_{승인번호}_{카드책임자}]내용`). 업로드 안 한 물품사진·Npay 일괄전표는 root 유지.
    - **세금계산서**: `신청완료/세금계산서/{과제}/` + **원본명 유지**(세금계산서+거래명세서 건별). 물품사진·zip 은 원본 거래처 폴더 유지.
    - ⚠️ GoogleDrive 동기 폴더면 **폴더 통째 Move 금지 → 하위 폴더 만들고 `Move-Item -LiteralPath`(macOS/Linux `mv -- "파일" "폴더/"`) 파일 단위 이동**(파일명 `]`·연속공백 주의), 안 그러면 `{월} (1)` 충돌 사본 발생. mode("그대로 둘까/복사/이동?")는 첫 **2~3회만 묻고, 답이 일관되면 학습(config `moveOrCopy`)해 이후 자동.**
@@ -91,6 +91,7 @@ description: |
 - **토큰은 config 아닌 `<kiki_root>/token.txt`.** 민감정보(카드번호 등) 저장 금지.
 
 ## 참고 문서
+- `scripts/kk_pay_files.py` — 파일명 규칙 계획·적용·처리완료 이동(`plan/apply/archive`). `scripts/convert.py` — 형식 변환(`--check`, `--trash`). `scripts/dooray_drive.py` — `check/find/structure/upload`. `scripts/portal_ops.js`(주입은 `.min.js`) — 카드·과제 조회·`fmtCards`.
 - `references/payment_request_manual.md` — ⭐ **재무팀 공식 지급신청 매뉴얼**(Dooray Wiki 원문 스냅샷 + 빠른참조). 비목별 증빙·검수·집행기준·반려사항·계정코드·과세/국외소득 + 첨부양식 10 file_id + 원문 링크. 증빙·검수·반려 점검의 1차 권위(규정 개정 시 원문 링크로 최신 확인).
 - `references/expense_category.md` — 비목 매핑·증빙·한도·파일명·외화·RPA운영 통합(1차 판단).
 - `references/rpa_payment_filing.md` — ⭐ **RPA 지급신청 운영 사양**(재무팀 wiki 「7.RPA 지급신청 안내」 정제). RPA 대상(카드+**세금계산서**)/비대상(회의비·전문가활용·전화료·전기료·도서비·용역·공사)·파일명(카드/세금계산서 국세청승인번호/`_통장사본`/복수`(1)(2)`)·계좌 OCR+자주사용계좌·수행시간(10/15/22시,1건4분)·결재선(신청자→계정책임자전결)·결과(성공=폴더파일삭제/실패=잔존+메일)·실패사례 + 전화료/전문가활용 RPA. **세금계산서도 RPA 대상**(계좌 실명검증을 RPA OCR가 우회).

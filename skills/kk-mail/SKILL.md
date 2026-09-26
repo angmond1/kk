@@ -27,12 +27,13 @@ description: |
 1. **브라우저 연결 확인** → `list_connected_browsers` / `select_browser`.
 2. **탭 확보 + Dooray 이동**: `tabs_context_mcp` → `navigate` `https://kist.gov-dooray.com/mail`.
    - 로그인 페이지가 뜨면(세션 만료) 사용자에게 "Dooray에 로그인해 달라" 안내 후 중단.
-3. **코어 주입(1회)**: `scripts/kk_mail_ops.js`를 Read → `javascript_tool`로 inject.
-   - 반환값이 `kk-mail-ops/1.6 =^.^=`(버전 문자열)이면 성공. 이후 `window.kkMail.*` 호출.
+3. **코어 주입(1회)**: `scripts/kk_mail_ops.min.js` 를 Read → `javascript_tool`로 inject (주입은 주석을 뺀 `kk_mail_ops.min.js` 를 쓴다 — 내용 동일, 글자 수 30~40% 적음. 원본 `kk_mail_ops.js` 는 읽을 필요 없다).
+   - 반환값이 `kk-mail-ops/1.7 =^.^=`(버전 문자열)이면 성공. 이후 `window.kkMail.*` 호출.
    - 코어 1.3 부터 **Dooray 검색 API**(`POST /v2/wapi/mails/search`, 검색창과 동일 호출)가 `searchMails`/`searchMany` 로 들어 있다 — 메일 찾기(기능 1 경로 A)의 기본 수집 수단. 목록 API(`listMails`)는 최신부터 페이지를 넘기므로 오래된 기간은 검색 API 로. 파라미터 실측은 `references/wapi_reference.md` "검색" 절.
    - 코어 1.4 부터 **제목 키워드 도우미**(`subjectKeyword`·`checkSubjectKeywords`·`previewSubjectRule`)가 들어 있고, `createRule` 이 제목 키워드를 점검한다(기능 3 '제목 키워드 고르기').
    - 코어 1.5 부터 **메일 팝업 보기**(`openMail` 임시 버튼 + 실제 클릭 · `popupStatus` · `closePopups`, 링크는 `/mail/popup/mails/<id>`) — 기능 1 의 6.
    - 코어 1.6: 검색 오류는 `error` 로 돌아온다(빈 결과와 구분 — `error` 가 있으면 "없음" 이 아니라 오류로 보고), `createRule` 은 조건 없는 규칙을 만들지 않고, `listInbox` 는 기간 안 메일을 전부 넘겨 읽는다(`truncated` 확인).
+   - 코어 1.7: **`spamHints`/`fmtSpam`**(스팸·광고 1차 점수와 근거 — 판별 패턴을 코드로; 최종 판단은 Claude·사용자) · **`fmtFolders`/`fmtRules`**(첫 실행 현황을 한 줄씩).
    - 페이지가 새로고침되면 `window.kkMail`이 사라지므로 재주입.
    - ⚠️ **async 반환이 `{}`로 비면**(특히 `/mail` → 특정 메일 redirect 직후 탭에서 발생): `javascript_tool`이 Promise 결과를 회수 못 하는 현상. 결과를 `window.__x = ...`에 저장하고 마지막 식은 동기 마커(`"go";`)로 즉시 반환 → **다음 호출에서 `JSON.parse(JSON.stringify(window.__x))`로 동기 회수**(2-스텝). sync 반환(`1+1`)은 정상이라 이 우회로가 통한다. 쓰기(`reportSpam`/`moveMails`)도 같은 패턴으로 실행 후 결과 회수.
 4. **출력 제약(2026-09-24 실측)**: `javascript_tool` 반환 문자열은 **약 1,000자에서 잘리고**(`[TRUNCATED]`), 출력 필터가 **`a=b` 꼴이 섞인 결과를 통째로 `[BLOCKED: Cookie/query string]`** 처리하며 URL·8자리 이상 숫자열(메일 id)도 가린다. → 결과는 window 에 두고 코어의 **`fmtList(mails, from, to)` / `fmtBody(b, chars, offset)` / `sanitize()`** 로 조각내어 회수(`=` 금지, id 는 `hyId` 하이픈 꼴). 모든 기능 공통.
@@ -115,7 +116,7 @@ description: |
 ### 4. 스팸 처리 (기본, 누구에게나 통용) · 사용자가 요청할 때 수행(첫 실행은 안내로 끝)
 받은편지함에서 **광고성/predatory 메일을 식별 → 스팸 신고 제안**.
 - 조회: `window.kkMail.listInbox({days: N})` (기본 7일).
-- 분류: `references/classification_policy.md`의 **판별 패턴**으로 광고성/predatory 식별.
+- 1차 점수: `window.kkMail.fmtSpam(window.__x.recent)`(`listInbox` 결과; 의심 도메인·대량발송 중계·모객 문구·호칭 제목은 +, 정상 기관 도메인·답장은 − 로 점수순 정렬) → **점수는 힌트일 뿐**, 전체 목록을 보고 `references/classification_policy.md` 의 판별 패턴으로 Claude 가 최종 식별(점수 낮아도 광고면 포함, 높아도 정상이면 제외).
 - 제안: **위 공통 mandate 대로** 걸러낸 메일 전체를 본문 표로 먼저 출력(번호·날짜·발신자 주소·제목·분류 근거) → 그 다음 **confirm**.
 - 실행: `window.kkMail.reportSpam([id,...])` (휴지통 + 학습 + 발신자 차단 + 과거 inbox 소급).
 - 스팸은 **폴더를 만들지 않는다**. 스팸함으로 보낼 뿐.
@@ -142,7 +143,7 @@ description: |
 첫 실행은 **환경 점검 → 현황 파악 → 할 수 있는 일 안내**로 끝낸다. 폴더 분류·권장 자동분류 규칙 설정(4·5)은 **사용자가 원한다고 말했을 때만** 진행한다(사용자 결정 2026-09-24). **메일 찾기(기능 1)는 설정 없이 바로 된다.**
 
 1. 실행 준비(위) 완료.
-2. **현재 상태 파악** — `findAllFolders()` + `listMailRules()`로 **기존 폴더·분류 규칙을 먼저 조회**(충돌 판단용). 폴더 목록 제시.
+2. **현재 상태 파악** — `window.__f=null; Promise.all([window.kkMail.findAllFolders(), window.kkMail.listMailRules()]).then(r=>window.__f=r); 'started'` → `window.kkMail.fmtFolders(window.__f[0]) + '\n' + window.kkMail.fmtRules(window.__f[1])` 로 **기존 폴더·분류 규칙을 먼저 조회**(충돌 판단용). 폴더 목록 제시.
 3. **기능 안내(반드시 출력 — 여기서 첫 실행은 끝)** — 준비물이 더 필요 없다는 것(같은 Chrome·같은 Dooray 로그인, 토큰·추가 설치 없음)과 앞으로 쓸 수 있는 말을 예시로 보여준다:
    - **1 메일 찾기(가장 많이 쓰는 기능)**: *"작년에 ○○대 세미나 갔던 거 관련 메일 찾아줘"*, *"첨부에 견적서 있던 업체 메일 어디 있지"* — 키워드 검색으로 안 잡히는 메일을 제목·본문·발신자를 뒤져 뜻으로 골라 팝업 링크로 보여준다(누르면 그 메일 한 통만 뜬다 — 링크를 열면 그 메일은 읽음 처리되지만, 찾기 자체는 읽음 상태를 바꾸지 않음; 받은·보낸 메일 모두). "3번 띄워줘" 하면 작은 팝업 창으로 연다.
    - 2 폴더 분류: *"받은편지함 정리해줘"*

@@ -1,6 +1,7 @@
 # kiki 실행 환경 점검 (형제 skill 공유)
 
 > **모든 kk-* skill 은 첫 실행(부트스트랩)과 매 작업 시작 때 아래를 동일하게 확인/안내한 뒤 진행한다.**
+> **먼저 `python <skills>/_shared/kiki_doctor.py` 한 번** — Python·패키지·Node·설치된 skill 과 코어 버전·개인 설정 유무(값은 안 보임)·토큰 유무·kiki_root·다운로드 폴더·변환 엔진·kk-wiki 상태를 한 번에 출력한다(`--json` 도 됨). 아래 개별 점검은 doctor 가 문제를 보일 때만.
 > 무자격 환경(미연결·미로그인)이면 **크래시 대신 친절한 안내로 멈춘다**. 설치 자체(패키지·Python·Node.js·MCP 등록)는 `CLAUDE.md`/`INSTALL.md` 가 담당 — 여기는 *실행 직전* 점검.
 > 권장 모델: 첫 설정·첫 1~2회 = Opus 5(high), 이후 kk-budget 은 Sonnet 5, kk-mail 은 Opus 5(분류, 스팸처리 Sonnet 5), kk-meeting·세금계산서 직접작성은 Opus 5 유지(README 표).
 

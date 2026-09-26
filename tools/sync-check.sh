@@ -30,6 +30,10 @@ done
 echo ""
 echo "  상세 diff:  diff -ru \"$installed/<skill>\" \"$src/<skill>\""
 echo ""
+echo ""
+echo "=== 0) 브라우저 코어 .min.js 최신 여부 (원본 .js 를 고쳤으면 python tools/build_min.py) ==="
+python "$(dirname "$0")/build_min.py" --check || true
+
 echo "=== 2) 설치본 skill 폴더 개인정보 스캔 (본진 반영 전 0건이어야) ==="
 # 진짜 위험 신호만: 실명·메인테이너 ID·개인 이메일 도메인·토큰 실제값·실제 개인 home 경로.
 #   (기관 공용 메일 @kist.re.kr·@nrf.re.kr, 6자리 코드/날짜/금액/hex 는 skill 본문에 정상적으로 많아 제외.)

@@ -25,8 +25,8 @@ description: |
 - ⛔ **위키 내용은 KIST 내부 자료** — 스냅샷·첨부·검색 결과를 repo·공개 저장소·채팅 외부로 옮기지 않는다. skill 에는 수집 방법만 있고 내용은 0.
 
 ## 실행 준비 (매 작업 시작 시)
-1. `python scripts/wiki_snapshot.py status` — 스냅샷 유무·페이지 수·build 일자. 없으면 기능 2(만들기)부터.
-2. 토큰 경로면 브라우저가 필요 없다. 브라우저 경로면 `tabs_context_mcp` → Dooray 탭(어느 화면이든 `kist.gov-dooray.com`) 확인 → 코어 주입(`kk_wiki_ops.js` Read → `javascript_tool`, 반환 `kk-wiki-ops/1.5 =^.^=`). 출력 제약(~1,000자·`a=b` 필터·긴 숫자 가림)과 2-스텝 회수는 kk-mail 실행 준비 3·4 와 같다.
+1. `python ../_shared/kiki_doctor.py` 한 번(환경·설정·스냅샷·담당자표 상태를 한꺼번에; 값·토큰은 안 보임) — 문제가 있을 때만 개별 확인. 스냅샷이 없으면 기능 2(만들기)부터.
+2. 토큰 경로면 브라우저가 필요 없다. 브라우저 경로면 `tabs_context_mcp` → Dooray 탭(어느 화면이든 `kist.gov-dooray.com`) 확인 → 코어 주입(`scripts/kk_wiki_ops.min.js` Read → `javascript_tool`, 반환 `kk-wiki-ops/1.6 =^.^=`; (주입은 주석을 뺀 `kk_wiki_ops.min.js` 를 쓴다 — 내용 동일, 글자 수 30~40% 적음. 원본 `kk_wiki_ops.js` 는 읽을 필요 없다)). 출력 제약(~1,000자·`a=b` 필터·긴 숫자 가림)과 2-스텝 회수는 kk-mail 실행 준비 3·4 와 같다.
 
 ## 기능 (3가지)
 
@@ -44,7 +44,7 @@ description: |
 
 ### 2. 스냅샷 만들기·갱신
 - **전체 수집(토큰)**: `python scripts/wiki_snapshot.py crawl` — 373페이지 ≈ 2~3분. 완료 후 `CHANGES_yymmdd.md`(신규·변경·삭제)를 보여준다. 안전장치(2026-09-27): Home 을 못 받으면 기존 스냅샷을 건드리지 않고 멈추고, 요청 실패가 있으면 삭제 판정을 보류하며, 위키에서 사라진 페이지는 지우지 않고 `raw/_old_<시각>/` 에 옮긴다. 새 수집이 기존의 절반 미만이면 `--force` 없이는 기존을 유지한다.
-- **전체 수집(브라우저)**: 코어 `window.kkWiki.crawlAll()` → `status()` 로 진행 확인(**그 탭을 앞에 두게 안내** — 뒤로 가면 10배 느려짐) → 끝나면 **사용자 확인 후** `exportSnapshot()`(다운로드 폴더에 `kist_wiki_YYYYMMDD.json`, 크기는 `sizeEstimate()`) → `python scripts/wiki_snapshot.py import <다운로드경로>`.
+- **전체 수집(브라우저)**: 코어 `window.kkWiki.crawlAll()` → `status()` 로 진행 확인(**그 탭을 앞에 두게 안내** — 뒤로 가면 10배 느려짐) → 끝나면 **사용자 확인 후** `exportSnapshot()`(다운로드 폴더에 `kist_wiki_YYYYMMDD.json`, 크기는 `sizeEstimate()`) → `python scripts/wiki_snapshot.py import --from-downloads`(경로를 알 필요 없음).
 - **증분**: `fresh <id…> --update` 는 인용 시점에 자동. 큰 갱신은 전체 수집이 단순하고 안전하다.
 - **첨부(토큰만)**: `python scripts/wiki_snapshot.py attach` (전체) 또는 `attach <pageId>`. 규정 원문 hwp/pdf 가 여기 있다. 읽기는 `hwp` skill 이나 PDF 텍스트 추출로.
 
@@ -53,7 +53,7 @@ description: |
 1. 평소 Chrome(Claude in Chrome)으로 포탈 `https://e.kist.re.kr`(로그인 뒤 `p.kist.re.kr`) 진입 → **첫 화면 팝업을 먼저 닫는다**(사용자 지적: 거의 항상 뜬다) → 상단 탭 **게시판** 클릭 → 왼쪽 메뉴에서(스크롤) **부서별업무분장표** 클릭 → 목록이 보인다.
 2. 이 게시판 화면은 그룹웨어 `ngw.kist.re.kr` 페이지가 iframe 으로 들어온 것이라 포탈 탭에서는 JS 로 접근이 막힌다. 그 iframe 의 주소(`…/xclick_kist/dispatcherKMS.jsp?…` 또는 `XClickController?isDispath=true`)로 **탭을 직접 띄운 뒤** 코어 `kk_wiki_ops.js` 를 주입한다. 목록은 코어가 직접 POST 하므로 **왼쪽 메뉴를 열 필요가 없다**(`XClickController?isDispath=true` 는 빈 화면이지만 같은 origin 이라 충분). 목록이 비어 오류가 나면 이 Chrome 에서 포탈 로그인이 안 된 것 → 로그인 후 다시.
 3. `window.kkWiki.staffCollect()` → `staffStatus()` 로 진행 확인(목록 2페이지 + 글 20건 ≈ 50초). ⭐ **차분 갱신(평소 — 업무분장은 수시로 바뀐다)**: `python scripts/wiki_staff.py known` 이 찍는 `{팀:글번호}` JSON 을 `window.kkWiki.staffChanged(<JSON>)` 에 넣고 2~3초 뒤 `staffChangedStatus()` → 바뀐 팀만 `staffCollect({ list: window.kkWiki.changed })` → 아래 4 를 `--keep` 로. "변경 없음" 이면 그대로 끝. **기간 정책(사용자 2026-09-25)**: 2025-01-01 이후 글을 우선하고, 그 이후 글이 없는 존속 부서(시설운영팀·데이터정보팀 등)는 그 전 최신 글을 쓰되 **오래됨** 표시(`staffList({minDate, floorDate})`, 2020년 이전 글뿐인 부서는 개편 전 조직으로 보고 `excluded` 에만). 글은 'URL복사' 공유 주소를 숨은 iframe 으로 열어 읽으므로 **탭을 앞에 둘 것**.
-4. **사용자에게 알린 뒤** `window.kkWiki.staffRender()` — 그 탭 화면이 덤프 텍스트로 바뀐다 → `get_page_text` 로 한 번에 읽는다(3만 자 이상 가능) → 그대로 `{kiki_root}\wiki\staff\staff_dump_yymmdd.txt` 에 저장 → `python scripts/wiki_staff.py import <그 파일> [보정덤프.txt …]`(여러 파일은 뒤 파일이 같은 팀을 덮어씀. `--since 2025-01-01` 기본 — 그 이후 글이 없는 팀은 ⚠오래됨 표시. `--keep` 이면 기존 `staff.json` 의 팀을 유지한 채 새 덤프의 팀만 덮어씀 = 차분 갱신) → `staff.json`·`staff.md`. 끝나면 탭을 새로고침해 그룹웨어 화면을 되돌린다.
+4. `window.kkWiki.staffDownload()` — 덤프가 다운로드 폴더에 `kiki_staff_dump_yymmdd.txt` 로 저장된다(LLM 이 읽고 다시 적지 않는다) → `python scripts/wiki_staff.py import --from-downloads [--keep] [보정덤프.txt …]`(다운로드 폴더의 최근 파일을 `{kiki_root}\wiki\staff\` 로 복사해 가져온다; 다운로드 폴더가 다르면 환경변수 `KIKI_DOWNLOADS`). 다운로드가 막힌 환경에서만 옛 방식: **사용자에게 알린 뒤** `staffRender()` → `get_page_text` → `staff_dump_yymmdd.txt` 저장 → `import <그 파일>`(여러 파일은 뒤 파일이 같은 팀을 덮어씀. `--since 2025-01-01` 기본 — 그 이후 글이 없는 팀은 ⚠오래됨 표시. `--keep` 이면 기존 `staff.json` 의 팀을 유지한 채 새 덤프의 팀만 덮어씀 = 차분 갱신) → `staff.json`·`staff.md`. 끝나면 탭을 새로고침해 그룹웨어 화면을 되돌린다.
 5. 확인: `python scripts/wiki_staff.py status` / `find 출장` / `team 재무팀`. `status` 의 "이미지·본문만 N" 이 0 이 아니면 6 으로(표가 있는데 "본문 없음"이면 헤더 규칙 문제 — 그 글을 직접 열어 확인, `references/staff_board.md` 표 절).
 6. **이미지 게시글 판독(OCR)**: 덤프에 `(표 없음 — 이미지 게시글…)` 인 팀(2026-09-25 기준 가치혁신·총무복지·국제협력팀)은 그 글의 공유 주소(덤프의 url)를 탭에 열고 코어 주입 → `window.kkWiki.staffShowImage()`(본문 이미지 하나를 원본 폭으로 펼침) → `computer` `screenshot` 으로 전체를 본 뒤 `zoom` 으로 세로 400px 안팎 띠씩 잘라 읽어 행을 옮겨 적는다 → `staff_dump_yymmdd_ocr.txt`(같은 덤프 형식: `## 팀:` 줄은 원본 덤프 것 그대로, 헤더 행 포함, 병합 셀은 행마다 채움, 끝에 "(※ 이미지 게시글을 화면 확대 캡처로 판독해 옮김 — 날짜)") → `import <원본> <_ocr.txt>` → `team <팀>` 으로 행 수·이름을 캡처와 대조. 캡처가 30초 타임아웃이면 띠를 좁히거나 다시(전체 screenshot 이 또렷하면 그것으로). 절차 상세 `references/staff_board.md`.
 - 담당자표는 **이름·내선이 든 내부 자료** — `{kiki_root}\wiki\staff\` 밖으로 내보내지 않는다. 반년 또는 조직개편 때 갱신.
@@ -77,5 +77,5 @@ description: |
 - `references/wiki_api.md` — 공식 API(토큰)·internal wapi(세션) endpoint, 응답 필드, 첨부 다운로드(307 → file-api), 실측 제약.
 - `references/search_playbook.md` — 질문 → 검색어 확장 → 판독 → 답 형식, 규정 분야별 동의어 표, 흔한 함정.
 - `references/staff_board.md` — 포탈 게시판 "부서별업무분장표"(그룹웨어 FC_BBS224) 진입 경로·목록/글 열람 방식·덤프 형식·실측 제약(팝업, iframe 교차출처, POST 흉내 실패, 이미지 게시글).
-- scripts: `wiki_snapshot.py`(crawl/import/build/fresh/attach/status) · `wiki_search.py`(AND/OR 검색·발췌·목록) · `wiki_staff.py`(담당자표 import/find/team/status) · `kk_wiki_ops.js`(브라우저 코어: 위키 수집·최신 확인 + 담당자표 수집·덤프).
+- scripts: `wiki_snapshot.py`(crawl/import[--from-downloads]/build/fresh/attach/status) · `wiki_search.py`(AND/OR 검색·발췌·목록) · `wiki_staff.py`(담당자표 import[--from-downloads]/find/team/status/known) · `kk_wiki_ops.js`(브라우저 코어: 위키 수집·최신 확인 + 담당자표 수집·덤프·다운로드; 주입은 `.min.js`).
 - 관련: kk-mail(Dooray 메일 찾기 — 같은 출력 제약·2-스텝), `../_shared/dooray_api_guide.md`(토큰 발급).

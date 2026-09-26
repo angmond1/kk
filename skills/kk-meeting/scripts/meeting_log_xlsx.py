@@ -249,9 +249,27 @@ def all_titles(root: Optional[str] = None) -> list[dict]:
 
 
 if __name__ == "__main__":
-    # 간단 테스트: 표본 파일 읽기
-    import sys
-    if len(sys.argv) > 1:
-        fp = sys.argv[1]
-        for r in read_log(fp):
-            print(r)
+    # 명령줄 (Claude 가 한글이 든 파이썬 한 줄을 셸에 넣지 않게 — 2026-09-27):
+    #   python meeting_log_xlsx.py append <data.json> [--yymm YYMM] [--root DIR]   → 행 추가, "순번 N | 파일" 출력
+    #   python meeting_log_xlsx.py titles [--root DIR]                              → 과거 회의 제목·내용 JSON(중복 검사용)
+    #   python meeting_log_xlsx.py path <YYMM> [--root DIR]                         → 그 달 파일 경로(없으면 생성)
+    import json as _json, time as _time
+    _a = sys.argv[1:]
+    def _opt(name):
+        return _a[_a.index(name) + 1] if name in _a and _a.index(name) + 1 < len(_a) else None
+    _root = _opt("--root")
+    try:
+        if _a and _a[0] == "append" and len(_a) >= 2:
+            _data = _json.load(open(_a[1], encoding="utf-8-sig"))
+            _p = open_or_create(_opt("--yymm") or _time.strftime("%y%m"), _root)
+            print("순번", append_row(_p, _data), "|", _p)
+        elif _a and _a[0] == "titles":
+            print(_json.dumps(all_titles(_root), ensure_ascii=False, indent=1))
+        elif _a and _a[0] == "path" and len(_a) >= 2:
+            print(open_or_create(_a[1], _root))
+        else:
+            print(__doc__)
+            sys.exit(1)
+    except RuntimeError as e:
+        print("ERR", e)
+        sys.exit(1)

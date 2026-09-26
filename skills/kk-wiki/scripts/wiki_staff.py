@@ -21,7 +21,7 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from wiki_snapshot import snapshot_root  # noqa: E402
+from wiki_snapshot import snapshot_root, latest_download, downloads_dir  # noqa: E402
 
 
 def staff_dir(root: str) -> str:
@@ -343,12 +343,23 @@ def main(argv=None):
     ap.add_argument("--top", type=int, default=15)
     ap.add_argument("--since", default="2025-01-01", help="이 날짜 이후 글이 없는 팀에 ⚠오래됨 표시 (빈 문자열이면 표시 안 함)")
     ap.add_argument("--keep", action="store_true", help="import: 기존 staff.json 의 팀을 유지하고 새 덤프의 팀만 덮어씀(차분 갱신)")
+    ap.add_argument("--from-downloads", action="store_true", help="import: 다운로드 폴더의 최근 kiki_staff_dump_*.txt(코어 staffDownload 결과)를 staff/ 로 복사해 가져온다")
     a = ap.parse_intermixed_args(argv)   # `import --keep <덤프>` 처럼 옵션이 파일 앞에 와도 되게
     root = snapshot_root(a.root)
     if a.cmd == "import":
-        if not a.args:
-            raise SystemExit("import <dump.txt> [보정덤프.txt ...]")
-        cmd_import(root, a.args, a.since, a.keep)
+        paths = list(a.args)
+        if a.from_downloads:
+            src = latest_download("kiki_staff_dump_*.txt")
+            if not src:
+                raise SystemExit("다운로드 폴더(" + downloads_dir() + ")에 24시간 내 kiki_staff_dump_*.txt 가 없습니다 — 브라우저 코어 staffDownload() 먼저")
+            import shutil
+            d = staff_dir(root); os.makedirs(d, exist_ok=True)
+            dst = os.path.join(d, "staff_dump_" + time.strftime("%y%m%d_%H%M") + ".txt")
+            shutil.copy2(src, dst); print("[kk-wiki] 덤프 복사:", src, "→", dst)
+            paths = [dst] + paths
+        if not paths:
+            raise SystemExit("import <dump.txt> [보정덤프.txt ...]  또는  import --from-downloads [--keep]")
+        cmd_import(root, paths, a.since, a.keep)
     elif a.cmd == "find":
         if not a.args:
             raise SystemExit("find <단어...>")
