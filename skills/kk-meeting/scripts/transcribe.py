@@ -30,10 +30,12 @@ os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
 MODELS = {"small": ("Systran/faster-whisper-small", 0.5), "medium": ("Systran/faster-whisper-medium", 1.5),
           "turbo": ("mobiuslabsgmbh/faster-whisper-large-v3-turbo", 1.6)}
-# 실시간 대비 배수(1분 녹음에 걸리는 분). CPU small 0.13 = 공식 벤치마크(int8·beam5·8스레드 i7-12700K, 13분 → 1분 42초).
-# medium·turbo 는 small 대비 계산량으로 잡은 추정, GPU 는 fp16 추정. 범위는 PC 세대 차이를 감안해 넓게 잡는다.
-CPU_RTF = {"small": 0.13, "medium": 0.33, "turbo": 0.45}
+# 실시간 대비 배수(1분 녹음에 걸리는 분, 8스레드 기준). 2026-09-27 한국어 실측(Ryzen 9 9900X·RTX 5080): CPU small 0.16, CPU turbo 0.24,
+# GPU turbo 0.03(모델 로드 포함). 공식 벤치마크(영어, small·int8·8스레드 i7-12700K)는 0.13 — 한국어는 토큰이 많아 조금 느리다.
+# medium 은 디코더가 커서 CPU 에서 turbo 보다 느리다(추정). 범위는 PC 세대 차이를 감안해 0.8~2.5배로 넓게 잡는다.
+CPU_RTF = {"small": 0.16, "medium": 0.40, "turbo": 0.24}
 GPU_RTF = {"small": 0.02, "medium": 0.03, "turbo": 0.04}
+CPU_LIMIT_MIN = 40          # CPU 변환 예상 상한이 이보다 길면 휴대폰·클로바노트를 먼저 권한다
 AUDIO_EXT = (".m4a", ".mp3", ".wav", ".mp4", ".aac", ".3gp", ".amr", ".ogg", ".opus", ".webm", ".flac", ".wma", ".mov", ".mkv")
 CLOVA_URL = "https://clovanote.naver.com"
 # 조용한 구간에서 Whisper 가 지어내는 흔한 한국어 문구(영상 자막 학습 흔적) — 이런 구간만 따로 있으면 버린다
@@ -348,6 +350,24 @@ def _est(dur_min: float, rtf: float, f: float = 1.0) -> tuple:
     return max(1, round(lo)), max(1, round(hi))
 
 
+def _rng(lo: int, hi: int) -> str:
+    """예상 시간 문구: 1분 안 / 약 N분 / 약 A~B분."""
+    if hi <= 1:
+        return "1분 안"
+    return f"약 {lo}분" if lo == hi else f"약 {lo}~{hi}분"
+
+
+def pick_cpu_model(dur_min: float, cpu: dict, ram: float) -> tuple:
+    """CPU 로 돌릴 모델과 예상 시간. 8코어·8GB 이상이면 정확한 모델(turbo)부터, 예상 상한이 CPU_LIMIT_MIN 을 넘으면 가벼운 모델(small)."""
+    f = 8 / max(1, min(cpu["physical"], 8))
+    cands = ["turbo", "small"] if cpu["physical"] >= 8 and ram >= 8 else ["small"]
+    for m in cands:
+        est = _est(dur_min, CPU_RTF[m], f)
+        if est[1] <= CPU_LIMIT_MIN:
+            return m, est
+    return "small", _est(dur_min, CPU_RTF["small"], f)
+
+
 def assess(path: str | None = None) -> dict:
     cpu, ram, gpu, inst = _cpu(), _ram_gb(), _gpu(), _installed()
     au = audio_info(path) if path else None
@@ -371,26 +391,24 @@ def assess(path: str | None = None) -> dict:
     need_gb = MODELS["turbo" if gpu else "small"][1] + 0.3
     if free_gb is not None and free_gb < need_gb + 1:
         why.append(f"여유 공간 {free_gb:.1f}GB — 모델·패키지에 {need_gb:.1f}GB 필요")
+    cpu_model, cpu_est = pick_cpu_model(ref, cpu, ram)
+    rep["cpu_model"] = cpu_model
     if py_ok and not why and gpu and gpu["mem_gb"] >= 4:
         route, alt, model = "local-gpu", "local-cpu", "turbo"
         est = rep["estimates"]["gpu_turbo"]
     else:
-        small_hi = rep["estimates"]["cpu_small"][1]
+        model, est = cpu_model, cpu_est
         if not py_ok or why or ram < 6 or cpu["physical"] <= 2:
-            route, alt, model = "phone", ("local-cpu" if py_ok and not why else ""), "small"
+            route, alt = "phone", ("local-cpu" if py_ok and not why else "")
             if ram < 6:
                 why.append(f"메모리 {ram:.0f}GB")
             if cpu["physical"] <= 2:
                 why.append(f"물리 {cpu['physical']}코어")
-        elif small_hi <= 30:
-            route, alt, model = "local-cpu", "phone", "small"
-        elif small_hi <= 90:
-            route, alt, model = "phone", "local-cpu", "small"
-            why.append(f"{ref:.0f}분 녹음에 이 PC 로 약 {rep['estimates']['cpu_small'][0]}~{small_hi}분")
+        elif est[1] <= CPU_LIMIT_MIN:
+            route, alt = "local-cpu", "phone"
         else:
-            route, alt, model = "phone", "local-cpu", "small"
-            why.append(f"{ref:.0f}분 녹음에 이 PC 로 약 {rep['estimates']['cpu_small'][0]}~{small_hi}분 — 너무 오래 걸림")
-        est = rep["estimates"]["cpu_small"]
+            route, alt = "phone", "local-cpu"
+            why.append(f"{ref:.0f}분 녹음에 이 PC 로 {_rng(*est)}" + (" — 너무 오래 걸림" if est[1] > 100 else ""))
     pkgs = [] if inst["faster_whisper"] else ["faster-whisper"]
     if route == "local-gpu" and not inst["gpu_libs"]:
         pkgs += ["nvidia-cublas-cu12", "nvidia-cudnn-cu12==9.*"]
@@ -421,17 +439,20 @@ def fmt_assess(r: dict) -> str:
         if r["model_download_gb"]:
             parts.append(f"모델 {r['model']} 약 {r['model_download_gb']}GB 내려받기")
         inst_note = " 처음 한 번: " + ", ".join(parts) + ". 사용자 동의를 받은 뒤 설치."
+    names = {"turbo": "정확한 모델 turbo", "small": "가벼운 모델 small", "medium": "중간 모델 medium"}
+    cm = r.get("cpu_model", "small")
     if r["route"] == "local-gpu":
-        cl, ch = r["estimates"]["cpu_small"]
-        L.append(f"[권장] 이 PC 에서 변환 — 그래픽카드, 정확한 모델 turbo, {base} 예상 약 {lo}~{hi}분.{inst_note} 그래픽카드가 안 되면 CPU 로 자동 전환(가벼운 모델 small, 약 {cl}~{ch}분).")
+        cl, ch = r["estimates"]["cpu_" + cm]
+        L.append(f"[권장] 이 PC 에서 변환 — 그래픽카드, 정확한 모델 turbo, {base} 예상 {_rng(lo, hi)}.{inst_note} 그래픽카드가 안 되면 CPU 로 자동 전환({names[cm]}, {_rng(cl, ch)}).")
     elif r["route"] == "local-cpu":
-        tl, th = r["estimates"]["cpu_turbo"]
-        L.append(f"[권장] 이 PC 에서 변환 — CPU, 가벼운 모델 small, {base} 예상 약 {lo}~{hi}분(정확한 모델 turbo 는 약 {tl}~{th}분).{inst_note}")
+        other = "small" if r["model"] == "turbo" else "turbo"
+        ol, oh = r["estimates"]["cpu_" + other]
+        L.append(f"[권장] 이 PC 에서 변환 — CPU, {names[r['model']]}, {base} 예상 {_rng(lo, hi)}({names[other]} 는 {_rng(ol, oh)}).{inst_note} run 에 --model {r['model']}")
     else:
         L.append("[권장] 휴대폰 녹음 앱의 텍스트 변환 또는 클로바노트 " + CLOVA_URL + " 로 바꾼 글을 받는다 — 이유: " + ("; ".join(r["why"]) or "이 PC 사양")
                  + ". 클로바노트는 녹음이 외부 서버로 올라가므로 내부 회의면 보안 기준 확인."
-                 + (f" 사용자가 원하면 이 PC 에서도 가능(가벼운 모델 small, {base} 약 {lo}~{hi}분).{inst_note}" if r["alt"] == "local-cpu" else ""))
-    L.append(f"[요약] 권장 {r['route']}" + (f"(대안 {r['alt']})" if r["alt"] else "") + f" | 예상 {lo}~{hi}분 | 설치 필요 {'예' if r['needs_install'] else '아니오'}"
+                 + (f" 사용자가 원하면 이 PC 에서도 가능({names[r['model']]}, {base} {_rng(lo, hi)}, run 에 --model {r['model']}).{inst_note}" if r["alt"] == "local-cpu" else ""))
+    L.append(f"[요약] 권장 {r['route']}" + (f"(대안 {r['alt']})" if r["alt"] else "") + f" | 예상 {_rng(lo, hi)} | 설치 필요 {'예' if r['needs_install'] else '아니오'}"
              + (f" | 녹음 {a['duration'] / 60:.0f}분" if a and a["duration"] else ""))
     return "\n".join(L)
 
@@ -524,7 +545,9 @@ def cmd_run(a) -> int:
     device = a.device
     if device == "auto":
         device = "cuda" if (_gpu() and _gpu_libs_found()) else "cpu"
-    model = a.model if a.model != "auto" else ("turbo" if device == "cuda" else "small")
+    dur_min = ((audio_info(path)["duration"] or 3600) / 60)
+    cpu_pick = pick_cpu_model(dur_min, _cpu(), _ram_gb())[0]
+    model = a.model if a.model != "auto" else ("turbo" if device == "cuda" else cpu_pick)
     if device == "cuda" and not a.no_fallback:
         # 그래픽카드 라이브러리 문제는 프로세스째 멈출 수 있어 자식 프로세스로 먼저 해 보고, 안 되면 CPU 로 다시
         cmd = [sys.executable, os.path.abspath(__file__), "run", path, "--device", "cuda", "--model", model, "--out", out, "--no-fallback"]
@@ -533,10 +556,10 @@ def cmd_run(a) -> int:
         rc = subprocess.call(cmd)
         if rc == 0:
             return 0
-        print(f"⚠ 그래픽카드로 변환하지 못해(종료 코드 {rc}) CPU 로 다시 합니다 — 가벼운 모델 small" if a.model == "auto" else f"⚠ 그래픽카드로 변환하지 못해(종료 코드 {rc}) CPU 로 다시 합니다", flush=True)
-        device = "cpu"
         if a.model == "auto":
-            model = "small"
+            model = cpu_pick
+        print(f"⚠ 그래픽카드로 변환하지 못해(종료 코드 {rc}) CPU 로 다시 합니다 — 모델 {model}", flush=True)
+        device = "cpu"
     return transcribe_file(path, model, device, a.hint or "", out)
 
 

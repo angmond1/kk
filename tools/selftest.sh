@@ -163,7 +163,8 @@ EOF
 chk "check: 사양별 권장(그래픽카드·8코어·4코어 62분·2코어·메모리 4GB)" "grep -q \"gpu ('local-gpu', 'local-cpu')\" '$T/t2' && grep -q \"cpu8 ('local-cpu', 'phone')\" '$T/t2' && grep -q \"cpu4_62min ('phone', 'local-cpu')\" '$T/t2' && grep -q \"cpu2 ('phone', 'local-cpu')\" '$T/t2' && grep -q \"ram4 ('phone', 'local-cpu')\" '$T/t2'"
 $PY "$TR" text "$T/메모.docx" > "$T/t3" 2>&1; $PY "$TR" text "$T/m.vtt" >> "$T/t3" 2>&1; $PY "$TR" text "$T/old.hwp" >> "$T/t3" 2>&1
 chk "text: docx 줄바꿈·자막 화자·hwp 안내" "grep -q '담당 김키키' '$KIKI_ROOT/meeting/transcripts/메모_회의기록.txt' && grep -q '이키키: 시작하겠습니다.' '$KIKI_ROOT/meeting/transcripts/m_회의기록.txt' && grep -q 'hwpx 나 pdf 로 저장' '$T/t3'"
-$PY "$TR" run "$T/회의 260915_130200.wav" > "$T/t4" 2>&1; rc=$?
+mkdir -p "$T/nofw/faster_whisper"; echo 'raise ImportError("selftest: 설치 안 된 PC 흉내")' > "$T/nofw/faster_whisper/__init__.py"   # 이 PC 에 설치돼 있어도 '없음' 경로를 시험
+PYTHONPATH="$T/nofw" $PY "$TR" run "$T/회의 260915_130200.wav" > "$T/t4" 2>&1; rc=$?
 chk "run: faster-whisper 없으면 종료 코드 2 + 동의 후 설치 안내" "[ $rc -eq 2 ] && grep -q '사용자 동의 후 설치' '$T/t4'"
 FW="$T/fakefw/faster_whisper"; mkdir -p "$FW"
 cat > "$FW/__init__.py" <<'EOF'
