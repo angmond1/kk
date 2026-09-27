@@ -38,6 +38,8 @@ https://github.com/angmond1/kk 설치해줘
 - claude 설치 https://claude.com/download  
 - codex (chatgpt) 설치 https://openai.com/ko-KR/codex/  
 
+<br>
+
 ### 2. chrome 브라우저 + 확장 프로그램 Claude in Chrome 또는 Chrome Chatgpt 설치
 - chrome 브라우저 설치 https://www.google.com/chrome/  
 - Claude는 Claude in Chrome 설치: https://chromewebstore.google.com/detail/claude/fcoeoabgfenejglbffodgkkbkcdhcgfn  
@@ -48,12 +50,18 @@ https://github.com/angmond1/kk 설치해줘
 
   그리고 나서 codex app에서 좌하단 이니셜 클릭 → 설정 → 좌측 탭의 "컴퓨터 사용" → Google Chrome 사용  
 
+<br>
+
 ### 3. chrome-devtools-mcp 설치 (파일첨부용)
 - 대화창에 "chrome-devtools mcp 설치해서 사용 가능하게 해줘" → claude 또는 codex 재시작  
+
+<br>
 
 ### 4. chrome 브라우저로 KIST 포탈·Dooray 로그인 필요
 - kk-mail, kk-budget 스킬은 먼저 chrome 브라우저로 KIST 포탈에 로그인해 둔 채로 진행  
 - 파일첨부 스킬 (kk-pay 세금계산서, kk-meeting, kk-inspect)은 새 chrome 브라우저를 띄워주면서 새 로그인을 다시 요구함  
+
+<br>
 
 ### 5. Dooray 토큰 (카드결제건 RPA 업로드용)
 토큰 생성페이지 https://kist.gov-dooray.com/setting/api/token 에서 토큰 생성하고  
