@@ -12,16 +12,16 @@
 ## 구성
 | skill | 용도 | 기능 | 권장모델<br>(Claude / Codex) |
 |-------|------|------|:--------:|
-| **kk-pay** | 지급신청 | 세금계산서 지급신청서 자동작성,<br>카드결제건 RPA 자동처리 | Opus / Sol<br>(RPA는 Sonnet / Luna) |
+| **kk-pay** | 지급신청 | 세금계산서 지급신청서 자동작성,<br>카드결제건 RPA 자동처리 | Opus / Sol<br>(RPA는 Sonnet / Terra) |
 | **kk-meeting** | 회의비처리 | 회의록, 회의비 지급신청서 자동 작성  | Opus / Sol |
 | **kk-inspect** | 물품검수 | 소액 검수 신청서 자동 작성 | Sonnet / Sol |
-| **kk-budget** | 예산조회 | 과제 예실대비표 예산현황 자동조회  | Sonnet / Luna |
-| **kk-mail** | 메일관리 | 자연어 메일검색, 자동 폴더분류,<br>불건전 학회/저널 메일 자동스팸 | Opus / Sol<br>(분류, 스팸처리 Sonnet / Luna) |
+| **kk-budget** | 예산조회 | 과제 예실대비표 예산현황 자동조회  | Sonnet / Terra |
+| **kk-mail** | 메일관리 | 자연어 메일검색, 자동 폴더분류,<br>불건전 학회/저널 메일 자동스팸 | Opus / Sol<br>(분류, 스팸처리 Sonnet / Terra) |
 | **kk-wiki** | 규정, 담당자 검색 | KIST WIKI, 업무담당자 자연어 검색 | Opus / Sol |
 
-Codex는 **Sol = GPT-6 Sol**(`gpt-6-sol`, 추론 Medium), **Luna = GPT-6 Luna**(`gpt-6-luna`, 추론 High) 기준이다. 증빙·자산 판정, 여러 화면에 걸친 신청서 작성, 자연어 검색·규정 해석은 Sol을 권장한다. Luna는 정형 예산 조회와 **과제·비목 또는 분류 기준이 확정된** RPA·메일 분류에 권장하며, 새로운 기준을 판단하거나 예외를 처리할 때는 Sol을 쓴다.
+Codex는 **Sol = GPT-6 Sol**(`gpt-6-sol`, 추론 Medium), **Terra = GPT-5.6 Terra**(`gpt-5.6-terra`) 기준이다. 증빙·자산 판정, 여러 화면에 걸친 신청서 작성, 자연어 검색·규정 해석은 Sol을 권장한다. Terra는 정형 예산 조회와 **과제·비목 또는 분류 기준이 확정된** RPA·메일 분류에 권장하며, 새로운 기준을 판단하거나 예외를 처리할 때는 Sol을 쓴다.
 
-2026-09-27 [OpenAI 모델 선택 안내](https://learn.chatgpt.com/docs/models#recommended-models)와 각 skill의 절차를 바탕으로 정한 시작 권장값이며, kiki의 모델별 성능 비교 실측 결과는 아니다. 계정에서 선택 가능한 모델을 확인해 사용한다.
+2026-09-27 기준 프로젝트 권장값이며, kiki의 모델별 성능 비교 실측 결과는 아니다. 모델 정보는 [OpenAI 모델 선택 안내](https://learn.chatgpt.com/docs/models#recommended-models)를 참고하고, 계정에서 선택 가능한 모델을 확인해 사용한다.
 
 <br><br>
 
