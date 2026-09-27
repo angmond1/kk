@@ -96,6 +96,11 @@ def run():
     if not IS_WIN:
         pk.pop("pywin32")
     rep["packages"] = pk
+    try:                                                   # 선택: kk-meeting 녹음 → 글(필요할 때 동의 후 설치). import 하지 않고 있는지만 본다(무거움)
+        import importlib.util
+        rep["optional"] = {"faster-whisper": importlib.util.find_spec("faster_whisper") is not None}
+    except Exception:
+        rep["optional"] = {"faster-whisper": False}
     need = [m for m, ok in pk.items() if not ok and m in ("openpyxl", "requests", "Pillow")]
     if need:
         rep["install"].append("python -m pip install " + " ".join(need) + "  (필요한 skill 을 쓸 때)")
@@ -169,6 +174,7 @@ def run():
 def text(rep):
     L = [f"[kiki doctor] Python {rep['python']} | 패키지 " + ", ".join(f"{k}{'✓' if v else '✗'}" for k, v in rep["packages"].items())
          + f" | Node {'✓' if rep['node']['node'] and rep['node']['npx'] else '✗'} {rep['node']['version']}"]
+    L.append("선택: " + ", ".join(f"{k}{'✓' if v else '✗'}" for k, v in rep.get("optional", {}).items()) + " (kk-meeting 회의 녹음 → 글, 녹음이 있을 때 transcribe.py check 후 동의받고 설치)")
     L.append("skills: " + "; ".join(f"{k} {' '.join(v) if v else '(코어 없음)'}" for k, v in rep["skills"].items()))
     kr = rep["kiki_root"]
     L.append(f"kiki_root: {kr['path']} ({kr['from']}, {'있음' if kr['exists'] else '없음'}) 하위 " + " ".join(f"{d}{'✓' if ok else '✗'}" for d, ok in kr["subdirs"].items()))

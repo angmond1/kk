@@ -127,6 +127,65 @@ echo "== 6. 환경 점검(kiki_doctor.py) — 빈 환경"
 $PY "$S/_shared/kiki_doctor.py" > "$T/k1" 2>&1
 chk "doctor 요약 줄 + KIKI_DOWNLOADS 반영" "grep -q '^\[요약\]' '$T/k1' && grep -q \"$(basename "$KIKI_DOWNLOADS")\" '$T/k1'"
 
+echo "== 7. 회의 기록 → 글(kk-meeting transcribe.py)"
+TR="$S/kk-meeting/scripts/transcribe.py"
+"$PY" - "$T" <<'EOF'
+import os, sys, wave, zipfile
+T = sys.argv[1]
+with wave.open(os.path.join(T, "회의 260915_130200.wav"), "wb") as w:        # 90초 무음(파일 이름에 녹음 시각)
+    w.setnchannels(1); w.setsampwidth(2); w.setframerate(16000); w.writeframes(b"\0\0" * 16000 * 90)
+with zipfile.ZipFile(os.path.join(T, "메모.docx"), "w") as z:
+    z.writestr("word/document.xml", '<w:document><w:body><w:p><w:r><w:t>1. 촉매 결과</w:t><w:br/><w:t>담당 김키키</w:t></w:r></w:p></w:body></w:document>')
+open(os.path.join(T, "m.vtt"), "w", encoding="utf-8").write("WEBVTT\n\n00:00:01.000 --> 00:00:03.000\n<v 이키키>시작하겠습니다.</v>\n")
+open(os.path.join(T, "old.hwp"), "wb").write(b"\xd0\xcf")
+EOF
+$PY "$TR" check "$T/회의 260915_130200.wav" > "$T/t1" 2>&1
+chk "check: 녹음 길이·파일 이름 시각·권장 요약 줄" "grep -q '녹음 2분' '$T/t1' && grep -q '파일 이름 시각 2026-09-15 13:02' '$T/t1' && grep -q '^\[요약\] 권장 ' '$T/t1'"
+"$PY" - "$S/kk-meeting/scripts" > "$T/t2" 2>&1 <<'EOF'
+import sys
+sys.path.insert(0, sys.argv[1])
+import transcribe as t
+t.audio_info = lambda p: {"file": "x.m4a", "size_mb": 30, "duration": 62 * 60, "created": None, "how": "mp4", "mtime": "2026-09-15 14:05"}
+inst = {"faster_whisper": None, "models": [], "gpu_libs": False}
+t._installed = lambda: inst
+def route(cores, ram, gpu, path=None):
+    t._cpu = lambda: {"name": "", "logical": cores * 2, "physical": cores}
+    t._ram_gb = lambda: ram
+    t._gpu = lambda: gpu
+    r = t.assess(path)
+    return r["route"], r["alt"]
+print("gpu", route(12, 64, {"name": "NVIDIA RTX", "mem_gb": 16}))
+print("cpu8", route(8, 16, None))
+print("cpu4_62min", route(4, 8, None, "x.m4a"))
+print("cpu2", route(2, 16, None))
+print("ram4", route(8, 4, None))
+EOF
+chk "check: 사양별 권장(그래픽카드·8코어·4코어 62분·2코어·메모리 4GB)" "grep -q \"gpu ('local-gpu', 'local-cpu')\" '$T/t2' && grep -q \"cpu8 ('local-cpu', 'phone')\" '$T/t2' && grep -q \"cpu4_62min ('phone', 'local-cpu')\" '$T/t2' && grep -q \"cpu2 ('phone', 'local-cpu')\" '$T/t2' && grep -q \"ram4 ('phone', 'local-cpu')\" '$T/t2'"
+$PY "$TR" text "$T/메모.docx" > "$T/t3" 2>&1; $PY "$TR" text "$T/m.vtt" >> "$T/t3" 2>&1; $PY "$TR" text "$T/old.hwp" >> "$T/t3" 2>&1
+chk "text: docx 줄바꿈·자막 화자·hwp 안내" "grep -q '담당 김키키' '$KIKI_ROOT/meeting/transcripts/메모_회의기록.txt' && grep -q '이키키: 시작하겠습니다.' '$KIKI_ROOT/meeting/transcripts/m_회의기록.txt' && grep -q 'hwpx 나 pdf 로 저장' '$T/t3'"
+$PY "$TR" run "$T/회의 260915_130200.wav" > "$T/t4" 2>&1; rc=$?
+chk "run: faster-whisper 없으면 종료 코드 2 + 동의 후 설치 안내" "[ $rc -eq 2 ] && grep -q '사용자 동의 후 설치' '$T/t4'"
+FW="$T/fakefw/faster_whisper"; mkdir -p "$FW"
+cat > "$FW/__init__.py" <<'EOF'
+import os
+class _S:
+    def __init__(s, a, b, t, cr=1.2):
+        s.start, s.end, s.text, s.compression_ratio, s.no_speech_prob, s.avg_logprob = a, b, t, cr, 0.01, -0.2
+class _I:
+    duration, duration_after_vad = 90.0, 80.0
+class WhisperModel:
+    def __init__(self, name, device="cpu", **kw):
+        if device == "cuda":
+            os.abort()                      # 그래픽카드 라이브러리 문제로 프로세스째 멈추는 경우 흉내
+    def transcribe(self, path, **kw):
+        segs = [_S(0, 5, " 오늘 회의는 촉매 합성 결과를 공유하는 자리입니다. 두 번째 촉매 선택도가 가장 높았습니다. 다음 주까지 장시간 시험을 진행하기로 했습니다."),
+                _S(5, 7, " 시청해 주셔서 감사합니다."), _S(7, 9, " 음 음 음 음 음 음 음 음", cr=3.2),
+                _S(10, 20, " 결정 사항은 두 가지입니다. 장시간 안정성 시험과 전극 열화 원인 분석입니다. 담당은 김키키 연구원과 이키키 연구원입니다.")]
+        return iter(segs), _I()
+EOF
+PYTHONPATH="$T/fakefw" $PY "$TR" run "$T/회의 260915_130200.wav" --device cuda --hint "촉매 전극" > "$T/t5" 2>&1; rc=$?
+chk "run: 그래픽카드 강제 종료 → CPU 자동 전환, 지어낸 문구 2개 제거, 요약 줄" "[ $rc -eq 0 ] && grep -q 'CPU 로 다시' '$T/t5' && grep -q '지어낸 문구 2개 뺌' '$T/t5' && grep -q '^\[요약\] 녹음 2분 → 글' '$T/t5' && ! grep -q '시청해' \"$KIKI_ROOT/meeting/transcripts/회의 260915_130200_녹취록.txt\""
+
 echo
 echo "[요약] $((n - fail))/$n PASS" $([ $fail -gt 0 ] && echo "— $fail FAIL")
 exit $([ $fail -eq 0 ] && echo 0 || echo 1)
