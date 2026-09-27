@@ -42,7 +42,8 @@
 ## 검산 (수집 시 자동)
 `LASTBUDGAMT(A) = BALNAMT(D) + CTRLPERFAMT(집행B) + CTRLCAUSAMT(계류완료) + TEMPAMT(계류진행)` — 불일치 시 경고.
 
-## 개인집계 (optional, config `personal_share`)
+## 개인집계 (optional, config `personal_share` — 또는 "이 과제에서 내가 쓴 금액" 질문)
+- 보고 형식(2026-09-28): ① 첫 줄에 한계 한 줄 — "인건비는 개인별로 파악할 수 없어 뺐습니다(학생인건비 풀링제, 인건비성 세부내역은 계정책임자·지정 계정관리자만)" ② `kkExe.fmtMine()` 그대로 표: 비목 | 집행 완료 | 계류(결재완료+진행) | 합계, 맨 아래 합계 ③ 집계 기준(어떤 이름으로 잡았는지, RPA 카드건 `이름]` 포함) ④ 검산 결과(팝업 N개 상세합 = 화면값) ⑤ 본인 이름이 없던 비목. 신청인 칸의 사번은 옮기지 않는다.
 - 공동과제에서 **본인 사용분만** = 집행내역 적요에 config `filter_names`(연구자명/행정원명/혼합) 중 하나 포함 건 합산(완료+계류).
 - `merge_act2_into_act1=true`면 활동비2 사용분을 활동비1 풀에 합산.
 - 할당 기준액(config `allocations`)−사용분 = 본인 잔액.

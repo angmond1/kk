@@ -104,11 +104,22 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
     Tab00_tabpage1_Grid01_oncellclick() { if (/인건비/.test(dsRows[xform.ds_datagrid1.pos].EXPITEMKORNM)) window.alert('인건비성 항목이 포함된 상세내역은 계정책임자및 계정책임자가 지정한 계정관리자에 한해서만 조회가능합니다.'); else opened++; } };
   window.application = { mainframe: { all: [{ form: xform }] }, popupframes: { length: 0, getItem() { return null; } } };
   window.alert = () => { alerted++; };
-  ok('exec_detail inject 1.3', load('kk-budget/scripts/exec_detail.min.js') === 'kk-budget-exec-detail/1.3 =^.^=');
+  ok('exec_detail inject 1.4', load('kk-budget/scripts/exec_detail.min.js') === 'kk-budget-exec-detail/1.4 =^.^=');
   const XE = window.kkExe; XE.init();
   const xc = XE.cats(), xd1 = XE.open(0, 'exec'), xd2 = XE.open(1, 'exec');
   window.alert(); 
   ok('exec_detail 인건비성 표시 + 거부 알림은 가로채 DENIED(탭 안 멈춤) + 끝나면 alert 원복', xc[0].personnel && !xc[1].personnel && xd1.startsWith('DENIED: 인건비성') && xd2.startsWith('ok') && opened === 1 && alerted === 1, [xd1, xd2, opened, alerted].join(' | '));
+  // collectMine: 인건비성은 열지 않고, 금액 있는 칸만 열어 본인 건 합산 + 검산(상세합 == 화면값)
+  let popupOpen = false;
+  const prow = [['2026-09-01', '김키키]○○ 시약', '30'], ['2026-09-02', '이키키 ○○ 부품', '20']], pcol = ['RESOLYMD', 'COMDSCCONT', 'RESOLAMT'];
+  const popForm = { name: 'popBdgExeList', btn_close: { click() { popupOpen = false; } },
+    ds_datagrid1: { getRowCount: () => prow.length, getColCount: () => pcol.length, getColID: (c) => pcol[c], getColumn: (r, c) => prow[r][typeof c === 'number' ? c : pcol.indexOf(c)] } };
+  window.application.popupframes = { get length() { return popupOpen ? 1 : 0; }, getItem() { return { form: popForm }; } };
+  xform.Tab00_tabpage1_Grid01_oncellclick = function () { if (/인건비/.test(dsRows[xform.ds_datagrid1.pos].EXPITEMKORNM)) window.alert('인건비성 항목'); else popupOpen = true; };
+  window.__mm = null; XE.collectMine(['김키키'], { waitTicks: 4, gapMs: 10 }).then(r => window.__mm = r, e => window.__mm = { error: String(e) });
+  await tick(2600);
+  const fmm = XE.fmtMine(), fmr = XE.fmtMineRows();
+  ok('exec_detail collectMine: 인건비성 건너뜀 + 본인 30원 + 검산 일치 + 확인 표본', XE.mineStatus().startsWith('done 1/1') && fmm.includes('검산 전부 일치') && fmm.includes('연구재료비 | 30 (1건) | 0 (0건) | 30') && fmm.includes('인건비성 제외(개인별 파악 불가): 내부인건비2') && fmr.includes('2026-09-01 | 30 | 김키키]○○ 시약') && !popupOpen, fmm + ' // ' + fmr);
   // ================= kk-mail =================
   dom();
   let mm = 'ok';
