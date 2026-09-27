@@ -40,15 +40,15 @@ https://github.com/angmond1/kk 설치해줘
 
 <br>
 
-### 2. chrome 브라우저 + 확장 프로그램 Claude in Chrome 또는 Chrome Chatgpt 설치
+### 2. chrome 브라우저 + 확장 프로그램 설치
 - chrome 브라우저 설치 https://www.google.com/chrome/  
-- Claude는 Claude in Chrome 설치: https://chromewebstore.google.com/detail/claude/fcoeoabgfenejglbffodgkkbkcdhcgfn  
+- claude: https://chromewebstore.google.com/detail/claude/fcoeoabgfenejglbffodgkkbkcdhcgfn  
 
-  그러고 나서 Claude Desktop: 좌하단 이니셜 클릭 → "설정" 클릭 → 좌측 탭에서 "Claude in Chrome 설정" 클릭 → "Claude in Chrome 사용설정" 켜기  
+  그러고 나서 claude app 좌하단 이니셜 클릭 → "설정" 클릭 → 좌측 탭에서 "Claude in Chrome 설정" 클릭 → Claude in Chrome 사용설정 켜기  
 
-- Codex는 Chrome Chatgpt 설치: https://chromewebstore.google.com/detail/chatgpt/hehggadaopoacecdllhhajmbjkdcmajg?pli=1  
+- codex: https://chromewebstore.google.com/detail/chatgpt/hehggadaopoacecdllhhajmbjkdcmajg?pli=1  
 
-  그리고 나서 codex app에서 좌하단 이니셜 클릭 → 설정 → 좌측 탭의 "컴퓨터 사용" → Google Chrome 사용  
+  그리고 나서 codex app에서 좌하단 이니셜 클릭 → 설정 → 좌측 탭의 "컴퓨터 사용" → Google Chrome 사용설정 켜기  
 
 <br>
 
