@@ -50,7 +50,7 @@ kiki 는 Chrome 창 두 종류를 쓴다. **skill 마다 쓰는 창이 정해져
 | skill | 패키지 | 필요한 시점 |
 |-------|--------|------------|
 | kk-budget | `openpyxl` | 엑셀 리포트 저장 직전 |
-| kk-meeting | `openpyxl` (hwpx 회의록 옵션은 추가 패키지 없음) | 회의록 엑셀 작성 직전 |
+| kk-meeting | `openpyxl` (hwpx 회의록 옵션은 추가 패키지 없음) | 지난 회의 제목 확인(단계 5) 때 — 회의록이 아직 없으면 그 뒤 엑셀 작성 직전 |
 | kk-pay | `Pillow`(이미지→jpg) · `requests`(Dooray 업로드) · Windows 문서 변환 시 `pywin32` | 증빙 변환 직전 / 업로드 직전 |
 | kk-inspect | `Pillow` (+ pdf→jpg 시 `PyMuPDF`) | 증빙 변환 직전 |
 | kk-mail | — | — |

@@ -122,6 +122,10 @@ echo '{"date_text":"","amount":0,"place":"○○카페","acccd":"2E11111","title
 $L append "$T/bad.json" --yymm 2609 > "$T/m3" 2>&1; chk "필수 항목 빈 행 거부" "grep -q '필수 항목이 비어' '$T/m3'"
 printf 'broken' > "$KIKI_ROOT/meeting/meeting_log/2608_회의록.xlsx"
 $L titles > "$T/m4" 2>&1; chk "titles 한 줄씩 + 읽지 못한 파일 경고" "grep -q '○○ 연구 진행 점검' '$T/m4' && grep -q '읽지 못한 회의록 파일' '$T/m4'"
+mkdir -p "$T/noxl/openpyxl" "$T/emptylog"; echo 'raise ImportError("selftest: openpyxl 없는 PC 흉내")' > "$T/noxl/openpyxl/__init__.py"
+PYTHONPATH="$T/noxl" $L titles --root "$T/emptylog" > "$T/m5" 2>&1; rc5=$?
+PYTHONPATH="$T/noxl" $L titles > "$T/m6" 2>&1; rc6=$?
+chk "openpyxl 없는 새 PC: 회의록이 없으면 0건, 있으면 설치 명령 안내" "[ $rc5 -eq 0 ] && grep -q '회의록 0건' '$T/m5' && [ $rc6 -ne 0 ] && grep -q 'pip install openpyxl' '$T/m6'"
 
 echo "== 6. 환경 점검(kiki_doctor.py) — 빈 환경"
 $PY "$S/_shared/kiki_doctor.py" > "$T/k1" 2>&1
@@ -179,9 +183,12 @@ ok = ("바로 글로 바꾸겠습니다" in m["설치됨·그래픽카드"] and 
       and "빠르지만" in m["미설치·그래픽카드"] and m["미설치·그래픽카드"].endswith("설치할까요?")
       and "그래픽카드가 없어 오래 걸립니다" in m["미설치·CPU"] and m["미설치·CPU"].endswith("설치할까요?")
       and not any(re.search(r"pip|faster|whisper|nvidia|cudnn|turbo|small|--", v, re.I) for v in m.values()))
-print("MSG_OK" if ok else "MSG_BAD " + repr(m))
+t.audio_info = lambda p: {"file": "x.m4a", "size_mb": 3, "duration": 3 * 60, "created": None, "how": "mp4", "mtime": "2026-09-15 14:05"}
+short = [msg(False, 4, None), msg(True, 4, None)]
+ok = ok and not any(re.search(r"오래|다른 일을", v) for v in short) and short[0].endswith("설치할까요?")
+print("MSG_OK" if ok else "MSG_BAD " + repr(m) + repr(short))
 EOF
-chk "check: 사용자 안내 네 가지(설치됨이면 묻지 않음·미설치면 설치할까요·CPU 는 오래 걸림·기술 용어 없음)" "grep -q '^MSG_OK' '$T/t2b'"
+chk "check: 사용자 안내 네 가지(설치됨이면 묻지 않음·미설치면 설치할까요·CPU 는 오래 걸림·기술 용어 없음·짧은 녹음엔 오래 걸린다고 안 함)" "grep -q '^MSG_OK' '$T/t2b'"
 $PY "$TR" text "$T/메모.docx" > "$T/t3" 2>&1; $PY "$TR" text "$T/m.vtt" >> "$T/t3" 2>&1; $PY "$TR" text "$T/old.hwp" >> "$T/t3" 2>&1
 chk "text: docx 줄바꿈·자막 화자·hwp 안내" "grep -q '담당 김키키' '$KIKI_ROOT/meeting/transcripts/메모_회의기록.txt' && grep -q '이키키: 시작하겠습니다.' '$KIKI_ROOT/meeting/transcripts/m_회의기록.txt' && grep -q 'hwpx 나 pdf 로 저장' '$T/t3'"
 mkdir -p "$T/nofw/faster_whisper"; echo 'raise ImportError("selftest: 설치 안 된 PC 흉내")' > "$T/nofw/faster_whisper/__init__.py"   # 이 PC 에 설치돼 있어도 '없음' 경로를 시험

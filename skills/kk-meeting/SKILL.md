@@ -13,7 +13,7 @@ description: KIST 회의비 처리 자동화 — 카드 회의비 추출, 사전
 ## 정보 5분류
 - **A 내장**: 회의비 판별(음식점·카페), 인원 산정(⌈금액÷5만⌉+1, **식대+음료 합산**), 회의시간 융통성(USETIME 참고), 별지1호 hwpx 셀매핑(요청 시만, 한글 불요), 회의록 엑셀 9컬럼, fam_0704 자동작성 11단계, 회의내용 가이드(기록 → 초안: 글 > 녹음 > 주제), 분류코드 면제(**I·S·B·F·부서운영비**).
 - **B 런타임조회**: 카드내역(fam_0711 법인+연구비)·참여과제(rdm_2011)·사전결재(fam_0100)·발의자 사번. → `scripts/portal_ops.js`
-- **C 환경준비**: **Claude 전용 새 Chrome 창**(chrome-devtools-mcp — 회의록 팝업 첨부 때문; 그 창에서 포탈 `e.kist.re.kr` 로그인 **한 번 더**, 평소 Chrome 로그인은 넘어오지 않는다고 미리 안내) + KIST 사내망(밖이면 VPN) / Python `openpyxl`(엑셀 작성 직전에 확인·설치) / (요청 시) hwpx 회의록 — **추가 설치 없음**(표준 라이브러리, 한글 불요·모든 OS; 열람은 한글 또는 무료 HOP) / (녹음 파일을 그대로 주고 이 PC 에서 바꾸길 원할 때만) 음성 인식 `faster-whisper` — 기본은 휴대폰 녹음 앱·클로바노트로 바꾼 글을 받는다. 설치는 `scripts/transcribe.py check` 의 `[사용자 안내]` 한 줄로 묻고 **동의 후**(ffmpeg 불필요, 그래픽카드 없으면 오래 걸림) / (Dooray 로그인·토큰 불요).
+- **C 환경준비**: **Claude 전용 새 Chrome 창**(chrome-devtools-mcp — 회의록 팝업 첨부 때문; 그 창에서 포탈 `e.kist.re.kr` 로그인 **한 번 더**, 평소 Chrome 로그인은 넘어오지 않는다고 미리 안내) + KIST 사내망(밖이면 VPN) / Python `openpyxl`(단계 5 지난 회의 제목 확인부터 필요 — `ERR openpyxl 이 없습니다` 가 나오면 그 명령으로 설치 후 다시) / (요청 시) hwpx 회의록 — **추가 설치 없음**(표준 라이브러리, 한글 불요·모든 OS; 열람은 한글 또는 무료 HOP) / (녹음 파일을 그대로 주고 이 PC 에서 바꾸길 원할 때만) 음성 인식 `faster-whisper` — 기본은 휴대폰 녹음 앱·클로바노트로 바꾼 글을 받는다. 설치는 `scripts/transcribe.py check` 의 `[사용자 안내]` 한 줄로 묻고 **동의 후**(ffmpeg 불필요, 그래픽카드 없으면 오래 걸림) / (Dooray 로그인·토큰 불요).
 - **D config**: 공통(이름·카드책임자·참여과제)은 `~/.claude/kiki/kiki.config.json`(형제 공유), kk-meeting 고유(폴더)는 `kk-meeting.config.json`. → `../_shared/personal_config.md`.
 - **E 격리**: 사번·참석자 실명·회의 녹음과 녹취록(`{kiki_root}\meeting\transcripts\` 로컬만, 외부 전송 금지). skill 텍스트엔 0건.
 
@@ -21,7 +21,7 @@ description: KIST 회의비 처리 자동화 — 카드 회의비 추출, 사전
 
 > 🐱 **키키 인사(정체성)**: 첫 실행의 첫 줄은 *"안녕하세요 🐱 kk-meeting 를 준비할게요."* 한 줄, 그 다음부터는 평소 문체. 작업 보고의 첫 줄은 상황별 머리표: `😸 완료 — kk-meeting`(정상) / `😻 완료`(확인할 것 없음) / `😼 완료`(사용자가 할 일 남음: 결재 상신·확인) / `😺 완료`(조회만 한 가벼운 작업) / `🙀 중단`(막혀서 멈춤, 상황 보고) / `😿 부분 완료`(일부만 처리). 제출 문서·적요·파일명·오류 문구에는 넣지 않는다.
 
-**0. 환경 점검** — `../_shared/environment_setup.md` 0단계(새 Chrome 창·통합정보 로그인[포탈 `e.kist.re.kr` → 업무화면 `p.kist.re.kr:8081`]; python `openpyxl` 은 엑셀 작성 시점에; hwpx 는 설치 때 묻지 않는다 — 작업마다 요청 시).
+**0. 환경 점검** — `../_shared/environment_setup.md` 0단계(새 Chrome 창·통합정보 로그인[포탈 `e.kist.re.kr` → 업무화면 `p.kist.re.kr:8081`]; python `openpyxl` 은 지난 회의 제목을 처음 확인할 때(단계 5); hwpx 는 설치 때 묻지 않는다 — 작업마다 요청 시).
 **공통 식별정보는 `~/.claude/kiki/kiki.config.json` 에서 읽는다**(없으면 1회 수집·저장, 다른 skill 재사용). kk-meeting 고유만 `kk-meeting.config.json`. (`../_shared/personal_config.md`)
 
 1. **성함·카드책임자·참여과제** *(공통 `user`/`card_holder`/`projects`)* — kiki.config 에 없으면 묻는다. 카드책임자 본인 여부 확인. 사번은 묻지 않는다 — fam_0711 화면 `ds_search.SEARCHID` 에서 자동으로 읽는다(kiki.config 에 없으면 그 값을 저장). 참여과제는 `queryProjects` 자동조회 → 분류코드 포함 확인.
@@ -106,7 +106,7 @@ kk-meeting 은 Dooray 토큰이 필요 없다(통합정보 SSO 세션만). 토�
 - 업종(식당·카페·주점)은 코드가 가리지 않는다 — 영수증함 건 전체를 보고 Claude 가 판단해 사용자에게 확인받는다(주류 업종은 회의비 불가).
 - `headcount` 는 건별 값 — 같은날 식당+카페는 합산해 다시 계산한다.
 - `transcribe.py check` 는 `[사용자 안내]` 한 줄만 사용자에게 전하고, 판단은 마지막 줄 `[요약] 설치됨 예/아니오 | 이 PC 변환 그래픽카드/CPU/어려움 | 예상 … | 첫 내려받기 NGB` 로 한다. `run` 은 `[요약] 녹음 N분 → 글 N자 …` — `⚠ 글이 너무 적습니다` 면 한국어·녹음 소리를 확인하고 정확한 모델(`--model turbo`)로 1회 또는 휴대폰·클로바노트, `ERR 모델 … 내려받지 못했습니다` 면 인터넷·프록시 확인 후 1회, 그래도 안 되면 휴대폰·클로바노트 안내. `⚠ 그래픽카드 준비 실패 … CPU 로 다시` 는 자동 복구된 것. `text` 는 `[요약] 글 N자`.
-- `meeting_log_xlsx.py append` 는 `[요약] 추가 1건` 과 순번(직전+1)을 찍는다. `같은 회의 … 이미 순번 N` 이면 이미 기록된 것이니 다시 쓰지 않는다(정말 별개 회의일 때만 `--dup-ok`). `titles` 에 `⚠ 읽지 못한 회의록 파일` 이 있으면 그 파일을 닫게 한 뒤 다시.
+- `meeting_log_xlsx.py append` 는 `[요약] 추가 1건` 과 순번(직전+1)을 찍는다. `같은 회의 … 이미 순번 N` 이면 이미 기록된 것이니 다시 쓰지 않는다(정말 별개 회의일 때만 `--dup-ok`). `titles` 가 `ERR openpyxl 이 없습니다` 면 그 명령으로 설치하고 다시 1회(회의록이 아직 없으면 설치 없이 0건). `titles` 에 `⚠ 읽지 못한 회의록 파일` 이 있으면 그 파일을 닫게 한 뒤 다시.
 
 ## 안전 규칙
 - **모든 쓰기(fam_0704 임시저장·결재상신·업로드·전송)는 사용자 confirm 후.**
@@ -123,7 +123,7 @@ kk-meeting 은 Dooray 토큰이 필요 없다(통합정보 SSO 세션만). 토�
 - `../_shared/nexacro_file_upload.md` — ⭐ **NEXACRO `ExtFileUpload` 첨부 자동화 공통 가이드**(2026-06-07 codex 실증, A/B/C 3 패턴). kk-pay·kk-meeting·kk-inspect 공유. **C(정공법, `extUp._input_node` 직접) 우선 시도** 권장.
 - `references/meeting_log_excel.md` — 회의록 엑셀 9컬럼 관리 표준 (월별 1파일).
 - `references/meeting_form.md` — (요청 시) hwpx 별지1호 양식·셀매핑·인원·증빙·중복.
-- `references/meeting_transcribe.md` — ⭐ **회의 기록 → 회의내용**: 글 → 녹음 → 없음 순서와 묻는 말, 글 형식별 읽기, 이 PC 점검 기준(`local-gpu`·`local-cpu`·`phone`), 설치 동의 문구, 백그라운드 변환·결과 점검, 휴대폰 녹음 앱·클로바노트·온라인 회의 녹취록 안내, 초안 규칙, 회의시간 힌트, 보관·보안.
+- `references/meeting_transcribe.md` — ⭐ **회의 기록 → 회의내용**: 글 → 녹음 → 없음 순서와 묻는 말, 글 형식별 읽기, 녹음을 그대로 줄 때 `[사용자 안내]` 한 줄 전달과 다섯 경우, 백그라운드 변환·결과 점검, 휴대폰 녹음 앱·클로바노트·온라인 회의 녹취록 안내, 초안 규칙, 회의시간 힌트, 보관·보안.
 - `references/project_code.md` — 분류코드·비목·면제(I·S·B·F·부서운영비)·발의자.
 - `references/fam0100_reference.md` — 사전결재 fetch 명세.
 - scripts: `portal_ops.js`(조회·`fmtMeeting`·`headcount`; 주입은 `.min.js`) · **`meeting_log_xlsx.py`(엑셀 헬퍼 + 명령줄 `append`(필수 항목·중복 검사)/`titles`(한 줄씩, 내용까지는 `--full`)/`path`)** · **`make_meetinglog_hwpx.py`**(요청 시 hwpx — 한글 불요·모든 OS) · **`transcribe.py`**(회의 기록 → 글: `check` 이 PC 점검·권장 경로 / `run` 녹음 → 녹취록 / `text` docx·hwpx·자막 → 글) · `dooray_drive.py`(kk-pay 와 공용 — kk-meeting 에서는 쓰지 않음). (구형 한글 COM 스크립트·.hwp 양식은 2026-09-27 삭제.)

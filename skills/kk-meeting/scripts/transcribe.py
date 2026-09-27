@@ -36,6 +36,7 @@ MODELS = {"small": ("Systran/faster-whisper-small", 0.5), "medium": ("Systran/fa
 CPU_RTF = {"small": 0.16, "medium": 0.40, "turbo": 0.24}
 GPU_RTF = {"small": 0.02, "medium": 0.03, "turbo": 0.04}
 CPU_LIMIT_MIN = 40          # CPU 변환 예상 상한이 이보다 길면 휴대폰·클로바노트를 먼저 권한다
+SLOW_MIN = 10               # CPU 예상 상한이 이 이상일 때만 '오래 걸린다'고 알린다(짧은 녹음에 오래 걸린다고 하지 않게)
 AUDIO_EXT = (".m4a", ".mp3", ".wav", ".mp4", ".aac", ".3gp", ".amr", ".ogg", ".opus", ".webm", ".flac", ".wma", ".mov", ".mkv")
 CLOVA_URL = "https://clovanote.naver.com"
 # 조용한 구간에서 Whisper 가 지어내는 흔한 한국어 문구(영상 자막 학습 흔적) — 이런 구간만 따로 있으면 버린다
@@ -441,11 +442,15 @@ def user_message(r: dict) -> str:
         extra = f" 처음 한 번 약 {r['model_download_gb']}GB 를 내려받습니다." if r["model_download_gb"] else ""
         if gpu:
             return f"이 PC 에 설치된 음성 인식으로 바로 글로 바꾸겠습니다(그래픽카드, {dur} {_rng(lo, hi)}).{extra}"
-        return f"이 PC 에 설치된 음성 인식으로 바로 글로 바꾸겠습니다. 그래픽카드가 없어 시간이 걸리니({dur} {_rng(lo, hi)}) 그동안 다른 일을 하셔도 됩니다.{extra}"
+        if hi >= SLOW_MIN:
+            return f"이 PC 에 설치된 음성 인식으로 바로 글로 바꾸겠습니다. 그래픽카드가 없어 시간이 걸리니({dur} {_rng(lo, hi)}) 그동안 다른 일을 하셔도 됩니다.{extra}"
+        return f"이 PC 에 설치된 음성 인식으로 바로 글로 바꾸겠습니다({dur} {_rng(lo, hi)}).{extra}"
     if gpu:
         return f"이 PC 에 음성 인식 프로그램을 설치하면 직접 바꿀 수 있습니다. 그래픽카드가 있어 빠르지만({dur} {_rng(lo, hi)}), 처음 한 번 약 {_dl_gb(r)}GB 를 내려받습니다. 설치할까요?"
-    return (f"이 PC 에 음성 인식 프로그램을 설치하면 직접 바꿀 수는 있지만, 그래픽카드가 없어 오래 걸립니다({dur} {_rng(lo, hi)}). "
-            f"처음 한 번 약 {_dl_gb(r)}GB 도 내려받습니다. 설치할까요?")
+    if hi >= SLOW_MIN:
+        return (f"이 PC 에 음성 인식 프로그램을 설치하면 직접 바꿀 수는 있지만, 그래픽카드가 없어 오래 걸립니다({dur} {_rng(lo, hi)}). "
+                f"처음 한 번 약 {_dl_gb(r)}GB 도 내려받습니다. 설치할까요?")
+    return f"이 PC 에 음성 인식 프로그램을 설치하면 직접 바꿀 수 있습니다({dur} {_rng(lo, hi)}). 처음 한 번 약 {_dl_gb(r)}GB 를 내려받습니다. 설치할까요?"
 
 
 def fmt_assess(r: dict) -> str:

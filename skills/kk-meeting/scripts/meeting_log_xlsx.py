@@ -46,7 +46,7 @@ try:
     from openpyxl.utils import get_column_letter
 except ImportError:
     openpyxl = None
-    # pip install openpyxl
+_NEED = "openpyxl 이 없습니다: python -m pip install openpyxl  (macOS/Linux: python3 -m pip install --user openpyxl)"
 
 _ILLEGAL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 HEADERS = ["순번", "사용일자", "금액", "장소(거래처)", "처리계정",
@@ -99,7 +99,7 @@ def expected_path(yymm: str, root: Optional[str] = None) -> str:
 def open_or_create(yymm: str, root: Optional[str] = None) -> str:
     """엑셀 파일을 열거나(있으면) 9컬럼 양식으로 생성(없으면). 경로 반환."""
     if openpyxl is None:
-        raise RuntimeError("openpyxl 이 없습니다: python -m pip install openpyxl  (macOS/Linux: python3 -m pip install --user openpyxl)")
+        raise RuntimeError(_NEED)
     fp = expected_path(yymm, root)
     folder = os.path.dirname(fp)
     os.makedirs(folder, exist_ok=True)
@@ -152,7 +152,7 @@ def append_row(path: str, data: dict) -> int:
     return: 부여된 순번
     """
     if openpyxl is None:
-        raise RuntimeError("openpyxl not installed")
+        raise RuntimeError(_NEED)
     wb = openpyxl.load_workbook(path)
     ws = wb["회의록"] if "회의록" in wb.sheetnames else wb.active
     seq = _next_seq(ws)
@@ -191,7 +191,7 @@ def append_row(path: str, data: dict) -> int:
 def read_log(path: str) -> list[dict]:
     """엑셀 회의록 전체 행을 dict 리스트로 반환 (Claude 가 fam_0704 작성 시 조회)."""
     if openpyxl is None:
-        raise RuntimeError("openpyxl not installed")
+        raise RuntimeError(_NEED)
     wb = openpyxl.load_workbook(path, data_only=True)
     ws = wb["회의록"] if "회의록" in wb.sheetnames else wb.active
     out = []
@@ -234,15 +234,14 @@ def all_titles(root: Optional[str] = None, skipped: Optional[list] = None) -> li
     """중복 방지용 — 폴더의 모든 `*_회의록.xlsx` 를 읽어
     [{file, date_text, amount, place, acccd, title, content}] 를 반환한다.
     새 회의록을 쓰기 전 사용자가 준 주제를 title 들과 비교(같거나 유사하면 조정 제안)."""
-    if openpyxl is None:
-        raise RuntimeError("openpyxl not installed")
     root = root or DEFAULT_ROOT
     out: list[dict] = []
     if not os.path.isdir(root):
         return out
-    for fn in sorted(os.listdir(root)):
-        if not fn.endswith("_회의록.xlsx") or fn.startswith("~$"):
-            continue
+    files = [fn for fn in sorted(os.listdir(root)) if fn.endswith("_회의록.xlsx") and not fn.startswith("~$")]
+    if files and openpyxl is None:                     # 회의록이 아직 없으면 openpyxl 없이도 0건(새 PC 첫 회의록 — 2026-09-27 시험에서 발견)
+        raise RuntimeError(_NEED)
+    for fn in files:
         try:
             wb = openpyxl.load_workbook(os.path.join(root, fn), data_only=True)
             ws = wb["회의록"] if "회의록" in wb.sheetnames else wb.active
