@@ -168,12 +168,28 @@ def main(json_path, out_path):
 
 
 
+def _kiki_homes() -> list:
+    """개인 설정 폴더 후보(앞이 우선) — 지금 실행 중인 쪽(Claude Code·Codex)의 설정·토큰을 먼저 쓴다(2026-09-27 Codex 점검:
+    Codex 에서도 ~/.claude 쪽을 먼저 집던 문제). KIKI_HOME(폴더 직접 지정) > KIKI_AGENT=claude|codex >
+    이 스크립트가 설치된 곳(~/.codex/skills/… 면 Codex) > 실행 환경(CLAUDECODE·CODEX_…) > Claude, Codex 순."""
+    home = os.environ.get("KIKI_HOME", "").strip()
+    if home:
+        return [os.path.normpath(os.path.expanduser(home))]
+    claude, codex = (os.path.normpath(os.path.expanduser(x)) for x in ("~/.claude/kiki", "~/.codex/kiki"))
+    who = os.environ.get("KIKI_AGENT", "").strip().lower()
+    if who not in ("claude", "codex"):
+        parts = os.path.abspath(__file__).replace("\\", "/").lower().split("/")
+        who = next((a[1:] for a, b in zip(parts, parts[1:]) if a in (".claude", ".codex") and b == "skills"), "")
+    if not who:
+        who = "claude" if os.environ.get("CLAUDECODE") else ("codex" if any(k.startswith("CODEX_") for k in os.environ) else "")
+    return [codex, claude] if who == "codex" else [claude, codex]
+
+
 def _kiki_root() -> str:
     r = os.environ.get("KIKI_ROOT", "").strip()
     if r:
         return os.path.expanduser(r)
-    for cfg in ("~/.claude/kiki/kiki.config.json", "~/.codex/kiki/kiki.config.json"):
-        p = os.path.expanduser(cfg)
+    for p in [os.path.join(h, "kiki.config.json") for h in _kiki_homes()]:
         if os.path.exists(p):
             try:
                 r = (json.load(open(p, encoding="utf-8-sig")).get("kiki_root") or "").strip()
@@ -243,7 +259,7 @@ def cli(argv: list) -> int:
          --from-downloads : 다운로드 폴더의 kiki_budget_*.json(브라우저 코어 downloadSnapshot 결과)
          --expect         : downloadSnapshot() 이 알려 준 run id — 그 run 의 파일만 쓴다(없으면 옛 파일을 쓰지 않고 오류)
          --out            : 기본 {kiki_root}/budget/yymmdd.xlsx (yymmdd = 스냅샷 날짜)
-         --save-snapshot  : 입력 JSON 을 <dir>/yymmdd.json 으로 보관 (기본 ~/.claude/kiki/kk-budget/data)"""
+         --save-snapshot  : 입력 JSON 을 <dir>/yymmdd.json 으로 보관 (기본 <설정 폴더>/kk-budget/data — 지금 쓰는 쪽: Claude ~/.claude/kiki, Codex ~/.codex/kiki)"""
     if not argv or argv[0] in ("-h", "--help"):
         print(cli.__doc__); return 0 if argv else 1
     import shutil
@@ -259,7 +275,7 @@ def cli(argv: list) -> int:
         elif a == "--out" and i + 1 < len(argv):
             out = argv[i + 1]; i += 1
         elif a == "--save-snapshot":
-            save = argv[i + 1] if i + 1 < len(argv) and not argv[i + 1].startswith("--") else os.path.expanduser("~/.claude/kiki/kk-budget/data")
+            save = argv[i + 1] if i + 1 < len(argv) and not argv[i + 1].startswith("--") else os.path.join(_kiki_homes()[0], "kk-budget", "data")
             if save == (argv[i + 1] if i + 1 < len(argv) else None):
                 i += 1
         else:

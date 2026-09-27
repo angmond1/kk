@@ -28,7 +28,7 @@ description: |
 2. **탭 확보 + Dooray 이동**: `tabs_context_mcp` → `navigate` `https://kist.gov-dooray.com/mail`.
    - 로그인 페이지가 뜨면(세션 만료) 사용자에게 "Dooray에 로그인해 달라" 안내 후 중단.
 3. **코어 주입(1회)**: `scripts/kk_mail_ops.min.js` 를 Read → `javascript_tool`로 inject (주입은 주석을 뺀 `kk_mail_ops.min.js` 를 쓴다 — 내용 동일, 글자 수 30~40% 적음. 원본 `kk_mail_ops.js` 는 읽을 필요 없다).
-   - 반환값이 `kk-mail-ops/1.8 =^.^=`(버전 문자열)이면 성공. 이후 `window.kkMail.*` 호출.
+   - 반환값이 `kk-mail-ops/1.9 =^.^=`(버전 문자열)이면 성공. 이후 `window.kkMail.*` 호출.
    - 코어 1.3 부터 **Dooray 검색 API**(`POST /v2/wapi/mails/search`, 검색창과 동일 호출)가 `searchMails`/`searchMany` 로 들어 있다 — 메일 찾기(기능 1 경로 A)의 기본 수집 수단. 목록 API(`listMails`)는 최신부터 페이지를 넘기므로 오래된 기간은 검색 API 로. 파라미터 실측은 `references/wapi_reference.md` "검색" 절.
    - 코어 1.4 부터 **제목 키워드 도우미**(`subjectKeyword`·`checkSubjectKeywords`·`previewSubjectRule`)가 들어 있고, `createRule` 이 제목 키워드를 점검한다(기능 3 '제목 키워드 고르기').
    - 코어 1.5 부터 **메일 팝업 보기**(`openMail` 임시 버튼 + 실제 클릭 · `popupStatus` · `closePopups`, 링크는 `/mail/popup/mails/<id>`) — 기능 1 의 6.
@@ -60,7 +60,7 @@ description: |
 3. **경로 B — 목록 훑기(핵심어를 못 정할 때)**: "그 업체 이름이 기억 안 나", "첨부 있던 거" 처럼 검색어가 없으면 `listMails({folder:'inbox', since, until, size:1000, maxPages:40})` 로 기간 목록을 받아 `pick(정규식)` 후 12줄씩 읽는다. 최신부터 넘기므로 **1년 전 구간은 11페이지·20여 초**(실측) → 가능하면 A. 보낸편지함은 `folder:'sent'` 로 한 번 더.
 4. **뜻으로 고르기** — 제목·발신·날짜·첨부수·미리보기를 읽고 10건 이내로 좁힌다. 검색어·정규식은 거르기용일 뿐이다. 함정: 약어는 대소문자 구분·단어경계(짧은 약어 정규식은 다른 단어 조각에도 걸린다), 사내 공지는 `pick(mails, re, {excludeFrom:/kist\.re\.kr$/i})` 로 제외, 같은 이름의 다른 기관(거래처 "○○정밀", "○○지원팀")은 제목으로 걸러낸다.
 5. **본문 확인(필요할 때만)** — `window.__b=null; window.kkMail.getMails(window.__x.mails.slice(0,5)).then(r=>window.__b=r, e=>window.__b=[{error:String(e)}]); 'started'`(목록 항목을 그대로; 하이픈 id 문자열도 되지만 항목이 안전) → `window.kkMail.fmtBody(window.__b[0], 700)`(이어 읽기는 세 번째 인자 offset). 전체에 돌리지 말 것(건당 0.3초 + rate limit). 첨부 파일명은 머리줄 `files (…)`.
-   - ⚠️ 본문 GET 은 서버가 그 메일을 **읽음으로 바꾼다** → `getMails` 는 목록의 `read=false` 건을 조회 직후 **`markUnread` 로 자동 복원**한다(목록 항목(`read` 포함)을 그대로 넘겨야 하며 id 문자열만 넘기면 복원 못 함). 실측 3건 복원 확인. `opened`(열어본 적 있음)는 남지만 화면 표시는 `read` 기준이라 보이지 않는다.
+   - ⚠️ 본문 GET 은 서버가 그 메일을 **읽음으로 바꾼다** → `getMails` 는 목록의 `read=false` 건을 조회 직후 **`markUnread` 로 자동 복원**한다(목록 항목(`read` 포함)을 그대로 넘겨야 하며 id 문자열만 넘기면 복원 못 함). 실측 3건 복원 확인. `opened`(열어본 적 있음)는 남지만 화면 표시는 `read` 기준이라 보이지 않는다. 복원 요청이 거절되면 성공으로 적지 않고 `fmtBody` 머리줄에 `⚠ 안 읽음 복원 실패(읽음으로 바뀜)` 가 뜬다(본문은 그대로 보인다, 코어 1.9).
 6. **결과 제시** — **같은 사건끼리 묶어**(안내 → 일정 조율 → 감사 인사 순) 표(날짜·발신·제목·비고)로 보여주고 건마다 **팝업 링크** `https://kist.gov-dooray.com/mail/popup/mails/<id>` 를 단다(2026-09-27 사용자 확정). 폴더와 관계없이 id 하나로 되고, 누르면 브라우저 새 탭에 그 메일 한 통만 뜨며 쓰던 메일함 화면은 그대로 남는다. id 는 `fmtList(..., {ids:true})` 의 하이픈 id 에서 `-` 를 지운다(출력 필터가 URL·긴 숫자를 가리므로 링크는 코어가 아니라 답에서 조합). 무엇을 제외했는지 한 줄 덧붙인다. 조회 전용이라 confirm 은 필요 없다.
    - **"N번 열어줘 / 띄워줘"**(읽음 처리되므로 사용자가 말했을 때만): `window.kkMail.openMail(항목)` → 화면 오른쪽 위에 임시 버튼 'kiki 메일 팝업 열기' 가 생긴다 → `find` 로 그 버튼을 찾아 `computer` `left_click`(ref) → `popupStatus()` 가 `opened` 면 Dooray 새 창 버튼과 같은 크기의 팝업 창이 뜬 것. 스크립트만으로 창을 열면 Chrome 팝업 차단기가 막으므로(실측) 반드시 이 실제 클릭으로 연다. 클릭 한 번에 창 하나라 여러 통이면 한 통씩 반복하고, 같은 메일은 같은 창을 다시 쓴다. `blocked` 면 팝업 링크를 주고 눌러 달라고 한다. 사용자가 다 봤다고 하면 `closePopups()` 로 닫는다.
 - 실행 전 코어 주입(실행 준비 3) 필수. async 결과가 `{}` 로 비면 위 2-스텝이 정답(실행 준비 3 ⚠️). 출력이 잘리거나 `[BLOCKED…]` 면 실행 준비 4.
@@ -127,7 +127,7 @@ description: |
 ## 결과 점검 (스크립트·코어 결과를 쓰기 전)
 공통 3줄은 `../_shared/environment_setup.md` '결과 점검' 절(요약 줄만 대조 → 어긋나면 원인 고쳐 1회 재실행 → 그래도 안 되면 수동 경로 + 사용자에게 알림). 이 skill 의 기대치:
 - 포매터 첫 줄이 `ERR …` 면 결과가 아니라 오류다 — `DOORAY:` 면 로그인 확인 → 탭 새로고침 → 재주입 후 1회. `(결과 없음 …)` 이 두 번 넘게 이어지면 호출에 오류 처리(`e=>window.__x={error:String(e)}`)가 빠진 것.
-- 목록 머리줄 `[a-b of N]` 에서 N 이 0이면 조건을 넓혀 1회 재검색(오류는 위에서 이미 걸러진다). `⚠ 일부 오류`·`⚠ 목록 잘림` 은 그대로 보고에 싣는다.
+- 목록 머리줄 `[a-b of N]` 에서 N 이 0이면 조건을 넓혀 1회 재검색(오류는 위에서 이미 걸러진다). `⚠ 일부 오류` 는 그대로 보고에 싣는다. `⚠ 목록 잘림(전체 N 중 M)` 이면 결과가 전부가 아니다 — `maxPages` 를 늘리거나 기간·검색어를 좁혀 1회 다시, 그래도 잘리면 '일부만 봤다'고 밝힌다(목록·검색·묶음 검색 모두 코어 1.9 부터 표시). 본문 머리줄에 `⚠ 안 읽음 복원 실패` 가 있으면 그 메일이 읽음으로 바뀐 것 — `window.kkMail.markUnread([id])` 로 1회 다시, 안 되면 사용자에게 알린다. 본문 조회가 거절되면 빈 본문이 아니라 `ERR DOORAY 본문 조회 실패` 다.
 - 스팸 후보는 `fmtExternal` 목록 전체를 Claude 가 정책 문서로 판단한다(점수 없음). 머리줄의 `사내 K 제외` 가 전체와 맞는지만 본다.
 - `createRule`·`reportSpam`·`moveMails` 응답의 `header.isSuccessful`(또는 `blocked`)을 확인하고, 실패면 같은 요청을 반복하지 않는다.
 

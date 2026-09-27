@@ -13,6 +13,8 @@ items.json = [{ "file": "경로", "acccd": "2E11111", "item": "15", "bimok": "33
   - 80자 이내(확장자 제외, RPA 규칙) · 금지 문자 \\ / : * ? " < > | 는 '-' 로 · 확장자는 원본 그대로(jpg/pdf 만 업로드 가능 — 다른 형식은 convert.py 로 먼저 변환)
   - 경로는 C:/… 또는 C:\\… 로. Git Bash 꼴(/c/…)도 받는다.
   - archive: card → {base}/신청완료/{card_kind}/{acccd}/, tax → {base}/신청완료/세금계산서/{acccd}/
+    옮기기 전에 전부 검사한다(파일 · 과제번호 형식 · card_kind 는 법인|연구비 · 목적지가 신청완료 폴더 안 · 같은 파일 두 번) — 하나라도 걸리면
+    아무것도 옮기지 않고, 옮기다 실패하면 이미 옮긴 것을 원래 자리로 되돌린다(2026-09-27 Codex 점검 반영).
     apply 로 이름을 바꾼 뒤에도 같은 items.json 을 그대로 쓰면 된다(원래 경로에 없으면 규칙상의 새 이름을 찾아 옮긴다).
     GoogleDrive 동기 폴더에서도 안전하게 파일 단위로 옮기고, 같은 이름이 있으면 ' (2)' 를 붙인다. 원본 폴더의 다른 파일은 손대지 않는다.
 종료 코드 0 정상 / 1 규칙 위반·오류(메시지). 마지막 줄은 항상 요약('[요약] …').
@@ -27,6 +29,8 @@ for _s in (sys.stdout, sys.stderr):
         pass
 
 BAD = '\\/:*?"<>|'
+ACC_RE = r"[0-9][A-Za-z][0-9]{5}|[0-9]{2}[A-Za-z][0-9]{4}"   # 계정번호 2E11111 / 26N1111 두 형식(실제 계정번호는 둘 다 있음)
+CARD_KINDS = ("법인", "연구비")                                # archive 폴더 이름 — 이 둘만(경로 조각이 되므로 허용값으로 막는다)
 OK_EXT = (".jpg", ".pdf")
 MAX_NAME = 80                      # RPA 파일명 규칙: 80자 이내(확장자 제외로 센다)
 
@@ -69,7 +73,7 @@ def build_names(items: list) -> list:
         apprno = str(it.get("apprno") or "").strip()
         if kind not in ("card", "tax"):
             problems.append(f"kind 는 card 또는 tax: {kind}")
-        if not re.fullmatch(r"[0-9][A-Za-z][0-9]{5}|[0-9]{2}[A-Za-z][0-9]{4}", acccd):   # 2E11111 / 26N1111 두 형식 모두(실제 계정번호는 둘 다 있음)
+        if not re.fullmatch(ACC_RE, acccd):
             problems.append(f"계정번호 형식 이상: {acccd or '(없음)'}")
         if not re.fullmatch(r"\d{2}", item) or not re.fullmatch(r"\d{3}", bimok):
             problems.append(f"항목/비목 코드 형식 이상: {item or '?'}-{bimok or '?'} (항목 2자리, 비목 3자리)")
@@ -169,42 +173,73 @@ def cmd_apply(items):
     return 0
 
 
-def _unique(p):
-    if not os.path.exists(p):
-        return p
+def _unique(p, taken=()):
+    """같은 이름이 있으면 ' (2)' … — taken 은 이번에 옮기기로 이미 정한 목적지(서로 겹치지 않게)."""
     stem, ext = os.path.splitext(p); k = 2
-    while os.path.exists(f"{stem} ({k}){ext}"):
-        k += 1
-    return f"{stem} ({k}){ext}"
+    while os.path.exists(p) or os.path.normcase(p) in taken:
+        p = f"{stem} ({k}){ext}"; k += 1
+    return p
 
 
 def cmd_archive(items, base, dry):
     base = _path(base)
     if not base or not os.path.isdir(base):
         print("ERR --base <월 폴더> 가 필요합니다(영수증 폴더의 그 달 폴더)"); return 1
+    root = os.path.realpath(os.path.join(base, "신청완료"))
     rows = build_names(items)
-    # 1단계: 옮길 파일을 모두 먼저 찾는다(원래 경로 → 없으면 apply 로 바뀐 새 이름). 하나라도 없으면 아무것도 옮기지 않는다.
-    moves, missing = [], []
-    for r in rows:
+    # 1단계: 옮기기 전에 전부 검사 — 파일(원래 경로 → 없으면 apply 로 바뀐 새 이름) · 과제번호 · 카드 구분 · 목적지 · 같은 파일 두 번.
+    #   이름 규칙(적요·승인번호 등)은 보지 않는다 — 세금계산서처럼 원본 이름 그대로 정리하는 경우가 있다. 하나라도 걸리면 아무것도 옮기지 않는다.
+    moves, problems, seen = [], [], {}
+    for i, r in enumerate(rows, 1):
+        tag = f"{i}번 {os.path.basename(r['file'])}"
         f = r["file"] if os.path.isfile(r["file"]) else (_target(r) if os.path.isfile(_target(r)) else "")
         if not f:
-            missing.append(os.path.basename(r["file"]) + " / " + r["name"]); continue
-        sub = "세금계산서" if r["kind"] == "tax" else str(r.get("card_kind") or "법인")
-        acccd = str(r.get("acccd") or "").strip() or "미분류"
-        moves.append((f, os.path.join(base, "신청완료", sub, acccd)))
-    if missing:
-        print("ERR 옮길 파일을 찾지 못해 아무것도 옮기지 않았습니다(원래 이름 / 새 이름):", "; ".join(missing))
-        print(f"[요약] 이동 0 / 못 찾음 {len(missing)}")
+            problems.append(f"{tag}: 파일 없음(새 이름 {r['name']} 도 없음)"); continue
+        acccd = str(r.get("acccd") or "").strip()
+        if r["kind"] not in ("card", "tax"):
+            problems.append(f"{tag}: kind 는 card 또는 tax"); continue
+        if not re.fullmatch(ACC_RE, acccd):
+            problems.append(f"{tag}: 계정번호 형식 이상 {acccd or '(없음)'}"); continue
+        sub = "세금계산서" if r["kind"] == "tax" else str(r.get("card_kind") or "법인").strip()
+        if r["kind"] == "card" and sub not in CARD_KINDS:
+            problems.append(f"{tag}: card_kind 는 법인 또는 연구비({sub})"); continue
+        dest_dir = os.path.realpath(os.path.join(root, sub, acccd))
+        if dest_dir == root or os.path.commonpath([root, dest_dir]) != root:
+            problems.append(f"{tag}: 목적지가 신청완료 폴더 밖"); continue
+        key = os.path.normcase(os.path.realpath(f))
+        if key in seen:
+            problems.append(f"{tag}: {seen[key]} 와 같은 파일"); continue
+        seen[key] = tag
+        moves.append((f, dest_dir))
+    if problems:
+        print("ERR 옮기기 전 검사에서 걸려 아무것도 옮기지 않았습니다:", "; ".join(problems))
+        print(f"[요약] 이동 0 / 문제 {len(problems)}")
         return 1
-    n = 0
-    for f, dest_dir in moves:
-        dest = _unique(os.path.join(dest_dir, os.path.basename(f)))
-        print(("[dry] " if dry else "") + "이동:", os.path.basename(f), "→", os.path.relpath(dest, base))
-        if not dry:
-            os.makedirs(dest_dir, exist_ok=True)
-            shutil.move(f, dest)            # 파일 단위 이동(폴더 통째 Move 금지 — GoogleDrive 동기 폴더 충돌 방지)
-            n += 1
-    print(f"[요약] {'이동 계획' if dry else '이동'} {len(moves) if dry else n}건 → {os.path.join(base, '신청완료')}")
+    plan, taken = [], set()
+    for f, dest_dir in moves:                  # 목적지 이름도 미리 정한다(이번에 옮길 파일끼리 같은 이름이어도 ' (2)')
+        dest = _unique(os.path.join(dest_dir, os.path.basename(f)), taken)
+        taken.add(os.path.normcase(dest))
+        plan.append((f, dest_dir, dest))
+    # 2단계: 옮기고, 중간에 실패하면 이미 옮긴 것을 원래 자리로 되돌린다
+    done = []
+    try:
+        for f, dest_dir, dest in plan:
+            print(("[dry] " if dry else "") + "이동:", os.path.basename(f), "→", os.path.relpath(dest, base))
+            if not dry:
+                os.makedirs(dest_dir, exist_ok=True)
+                shutil.move(f, dest)            # 파일 단위 이동(폴더 통째 Move 금지 — GoogleDrive 동기 폴더 충돌 방지)
+                done.append((f, dest))
+    except OSError as e:
+        back = 0
+        for f, dest in reversed(done):
+            try:
+                shutil.move(dest, f); back += 1
+            except OSError:
+                print("  ⚠ 되돌리지 못함:", os.path.basename(dest), "→", f)
+        print(f"ERR 이동 중 실패({type(e).__name__}: {e}) — 옮긴 {len(done)}건 중 {back}건을 원래 자리로 되돌렸습니다(파일이 열려 있는지 확인)")
+        print(f"[요약] 이동 0 / 실패 1 / 되돌림 {back}/{len(done)}")
+        return 1
+    print(f"[요약] {'이동 계획' if dry else '이동'} {len(plan)}건 → {root}")
     return 0
 
 

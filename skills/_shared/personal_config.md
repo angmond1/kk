@@ -13,6 +13,8 @@
 
 템플릿: `kiki.config.example.json` · `token.txt.example` · `kiki.env.example` (이 폴더). Codex 는 `~/.codex/kiki/` + `<kiki_root>/token.txt`.
 
+**설정 폴더 고르는 순서**(모든 kiki 스크립트 공통, 2026-09-27 Codex 점검 반영 — 두 곳에 설정이 다르게 있어도 지금 쓰는 쪽 것을 쓴다): 환경변수 `KIKI_HOME`(폴더 직접 지정) → `KIKI_AGENT=claude|codex` → 스크립트가 설치된 곳(`~/.codex/skills/…` 에서 돌면 Codex) → 실행 환경(Claude Code 의 `CLAUDECODE`, Codex 의 `CODEX_…`) → Claude, Codex 순. 지금 쓰는 쪽 폴더에 없는 항목만 다른 쪽에서 읽는다. `kiki_doctor.py` 가 `설정 폴더(우선)` 줄로 어느 쪽을 쓰는지 보여 준다.
+
 **`kiki_root`** = 사용자가 설치 때 고른 kiki 폴더(기본 Windows `C:\kiki`, macOS/Linux `~/kiki`). 그 하위 `budget/`·`meeting/`·`inspect/`·`_tmp/` 가 각 skill 의 기본 저장 폴더. config 예시의 `{kiki_root}` 는 이 값으로 치환해 읽는다. 비어 있으면(수동 설치) 사용자에게 한 번 묻고 기록.
 
 ## 공유 원칙 (skill 부트스트랩이 따름)
@@ -24,7 +26,7 @@
 ## 토큰 입력 (필요 skill 만 — kk-pay 카드 RPA 업로드 / kk-meeting RPA 옵션)
 - **표준 — 파일**: skill 이 `token.txt` **절대경로를 보여주며** 안내 → 사용자가 https://kist.gov-dooray.com/setting/api/token 에서 발급한 토큰을 `Dooray token:` **다음 줄**에 붙여넣고 저장 → 채팅엔 "두레이 토큰 저장했다" → skill 이 `python <skill>/scripts/dooray_drive.py check` 로 **값은 출력하지 않고** 길이·파일 위치만 확인(파일 Read 금지). 원하면 파일을 열어준다(Windows `notepad`, macOS `open -e`).
 - **⚠️ 채팅 붙여넣기는 비권장** — 대화 기록에 남아 타인에게 노출될 수 있다는 것을 **항상 경고**한다. 그래도 붙여넣어지면 즉시 `token.txt` 에 옮겨 저장하고 채팅에서 다시 쓰지 않는다.
-- 토큰 로드 우선순위(`dooray_drive.py`): 환경변수 `DOORAY_TOKEN` → `<kiki_root>/token.txt` → `~/.claude/kiki/token.txt` → `~/.codex/kiki/token.txt` → `~/.claude/kiki/kiki.env` → `~/.codex/kiki/kiki.env`.
+- 토큰 로드 우선순위(`dooray_drive.py`·`wiki_snapshot.py`): 환경변수 `DOORAY_TOKEN` → `<kiki_root>/token.txt` → 지금 쓰는 쪽 설정 폴더의 `token.txt` → 그 폴더의 (구형) `kiki.env` → 다른 쪽 폴더의 같은 두 파일(순서는 위 '설정 폴더 고르는 순서').
 - 토큰은 **repo·코드·로그 0건**(gitignore `*token*`). 조회 전용 skill·세션쿠키 skill·세금계산서 직접작성은 토큰이 아예 필요 없다.
 
 ## 공통 필드 ↔ 사용하는 skill

@@ -102,6 +102,22 @@ cat > "$T/items4.json" <<J
 [{"file":"$T/r/c.jpg","acccd":"2E11111","item":"15","bimok":"330","apprno":"12345678","holder":"김키키","desc":"아주 긴 적요가 계속 이어지는 경우 ○○ 시약 외 여러 건 구입 및 장비 부품 교체 비용 정산 추가 설명 문구","kind":"card"}]
 J
 $K plan "$T/items4.json" > "$T/p5" 2>&1; chk "80자 초과 이름을 점검 필요로" "grep -q 'RPA 규칙 80자' '$T/p5'"
+# 2026-09-27 Codex 점검: archive 가 경로 조각·계정번호를 검사하고, 같은 파일 두 번이면 아무것도 옮기지 않는다
+mkdir -p "$T/ra"; printf d > "$T/ra/d.jpg"
+cat > "$T/items5.json" <<J
+[{"file":"$T/ra/d.jpg","acccd":"2E11111","item":"15","bimok":"330","apprno":"12345678","holder":"김키키","desc":"○○","kind":"card","card_kind":"../../outside"}]
+J
+$K archive "$T/items5.json" --base "$T/ra" --dry > "$T/p6" 2>&1; rc6=$?
+cat > "$T/items6.json" <<J
+[{"file":"$T/ra/d.jpg","acccd":"INVALID","item":"15","bimok":"330","apprno":"12345678","holder":"김키키","desc":"○○","kind":"card","card_kind":"법인"}]
+J
+$K archive "$T/items6.json" --base "$T/ra" --dry > "$T/p7" 2>&1; rc7=$?
+cat > "$T/items7.json" <<J
+[{"file":"$T/ra/d.jpg","acccd":"2E11111","item":"15","bimok":"330","apprno":"12345678","holder":"김키키","desc":"○○","kind":"card","card_kind":"법인"},
+ {"file":"$T/ra/d.jpg","acccd":"2E11111","item":"15","bimok":"330","apprno":"12345678","holder":"김키키","desc":"○○","kind":"card","card_kind":"법인"}]
+J
+$K archive "$T/items7.json" --base "$T/ra" > "$T/p8" 2>&1; rc8=$?
+chk "archive 사전 검사: 폴더 밖 경로·잘못된 계정번호·같은 파일 두 번 → 아무것도 안 옮김" "[ $rc6 -eq 1 ] && grep -q 'card_kind 는 법인 또는 연구비' '$T/p6' && [ $rc7 -eq 1 ] && grep -q '계정번호 형식 이상 INVALID' '$T/p7' && [ $rc8 -eq 1 ] && grep -q '같은 파일' '$T/p8' && [ -f '$T/ra/d.jpg' ] && [ ! -d '$T/ra/신청완료' ] && ! grep -q Traceback '$T/p8'"
 D="$PY $S/kk-pay/scripts/dooray_drive.py"
 $D upload 1234567890 "$T/r/c.jpg" > "$T/u1" 2>&1; rc=$?
 chk "규칙 밖 파일명은 업로드 전에 거부(토큰 없어도 검사 먼저)" "[ $rc -eq 1 ] && grep -q '올리지 않았습니다' '$T/u1'"
@@ -130,6 +146,37 @@ chk "openpyxl 없는 새 PC: 회의록이 없으면 0건, 있으면 설치 명�
 echo "== 6. 환경 점검(kiki_doctor.py) — 빈 환경"
 $PY "$S/_shared/kiki_doctor.py" > "$T/k1" 2>&1
 chk "doctor 요약 줄 + KIKI_DOWNLOADS 반영" "grep -q '^\[요약\]' '$T/k1' && grep -q \"$(basename "$KIKI_DOWNLOADS")\" '$T/k1'"
+# 2026-09-27 Codex 점검: 깨진 설정 JSON 은 '문제 없음'이 아니다 / 설정 폴더는 지금 쓰는 쪽(Claude·Codex) 먼저
+mkdir -p "$T/hostA" "$T/hostB"; printf '{ broken' > "$T/hostA/kiki.config.json"
+KIKI_HOME="$T/hostA" $PY "$S/_shared/kiki_doctor.py" > "$T/k2" 2>&1; rck=$?
+chk "doctor 깨진 설정 JSON → 종료 코드 1 + 설정 깨짐" "[ $rck -eq 1 ] && grep -q '설정 파일 깨짐' '$T/k2' && grep -q '설정 깨짐 1' '$T/k2'"
+[ "$HOME" = "$T/h" ] || { echo "HOME 이 임시 폴더가 아님 — 실제 설정을 건드리지 않게 중단"; exit 1; }
+mkdir -p "$HOME/.claude/kiki" "$HOME/.codex/kiki"
+printf '{"kiki_root":"%s"}' "$T/root_claude" > "$HOME/.claude/kiki/kiki.config.json"; printf '{"kiki_root":"%s"}' "$T/root_codex" > "$HOME/.codex/kiki/kiki.config.json"
+printf 'Dooray token:\nFAKEclaude0123456789abcdef\n' > "$HOME/.claude/kiki/token.txt"; printf 'Dooray token:\nFAKEcodex0123456789abcdefgh\n' > "$HOME/.codex/kiki/token.txt"
+"$PY" - "$S" "$HOME" > "$T/h1" 2>&1 <<'EOF'
+import sys, os, shutil, subprocess
+S, H = sys.argv[1], sys.argv[2]
+env = {k: v for k, v in os.environ.items() if k != "KIKI_ROOT" and k != "CLAUDECODE" and not k.startswith("CODEX_")}
+def root(extra, script):
+    e = dict(env, **extra)
+    code = "import sys;sys.path.insert(0,r'%s');import meeting_log_xlsx as m;print(m._kiki_root())" % os.path.dirname(script)
+    return subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=e).stdout.strip()
+src = os.path.join(S, "kk-meeting", "scripts", "meeting_log_xlsx.py")
+inst = os.path.join(H, ".codex", "skills", "kk-meeting", "scripts")         # Codex 설치본 흉내(스크립트가 ~/.codex/skills 아래)
+os.makedirs(inst, exist_ok=True); shutil.copy(src, inst)
+r_agent = root({"KIKI_AGENT": "codex"}, src)
+r_inst = root({}, os.path.join(inst, "meeting_log_xlsx.py"))
+r_claude = root({"CLAUDECODE": "1"}, src)
+sys.path.insert(0, os.path.join(S, "kk-pay", "scripts"))
+os.environ.pop("KIKI_ROOT", None); os.environ["KIKI_AGENT"] = "codex"
+import dooray_drive as d
+t, where = d._find_token()
+print("AGENT", r_agent.endswith("root_codex"), "INST", r_inst.endswith("root_codex"), "CLAUDE", r_claude.endswith("root_claude"),
+      "TOKEN", ".codex" in where and t.startswith("FAKEcodex"))
+EOF
+chk "설정 폴더: KIKI_AGENT=codex·Codex 설치본은 Codex 설정, Claude 실행은 Claude 설정 + 토큰도 Codex 먼저" "grep -q 'AGENT True INST True CLAUDE True TOKEN True' '$T/h1'"
+rm -rf "$HOME/.claude/kiki/kiki.config.json" "$HOME/.codex/kiki/kiki.config.json" "$HOME/.claude/kiki/token.txt" "$HOME/.codex/kiki/token.txt" "$HOME/.codex/skills"
 
 echo "== 7. 회의 기록 → 글(kk-meeting transcribe.py)"
 TR="$S/kk-meeting/scripts/transcribe.py"

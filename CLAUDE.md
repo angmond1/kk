@@ -88,7 +88,7 @@ KIST 행정 자동화 skill 6종(`kk-mail`·`kk-wiki`·`kk-pay`·`kk-meeting`·`
 | kk-pay 카드 RPA 업로드 | 평소 Chrome(확장) + `token.txt` | 포탈 + Dooray. 새 창 없음 |
 | kk-pay 세금계산서 직접작성 · kk-meeting · kk-inspect | **Claude 전용 새 Chrome 창**(chrome-devtools) | 그 창에서 포탈 로그인 **한 번 더** |
 
-- 새 창은 별도 프로필이라 평소 Chrome 의 로그인이 넘어오지 않는다 — 낯설어하므로 **첨부 작업 시작 전에 먼저 설명**하고 로그인을 요청한다. 한 번 로그인하면 기억한다(정오 세션 리셋 제외).
+- 새 창은 별도 프로필이라 평소 Chrome 의 로그인이 넘어오지 않는다 — 낯설어하므로 **첨부 작업 시작 전에 먼저 설명**하고 로그인을 요청한다. (chrome-devtools-mcp 를 `--autoConnect` 로 등록했다면 새 창 대신 평소 Chrome 에 붙어 로그인이 그대로다 — `list_pages` 에 평소 탭이 보이면 이쪽.) 한 번 로그인하면 기억한다(정오 세션 리셋 제외).
 - 로그인은 **사용자 본인이**(Claude 가 대신 로그인하지 않는다). 업무화면 딥링크 전에 항상 `e.kist.re.kr` 먼저.
 
 ## 3. Claude Code vs Claude Desktop (차이는 이것뿐)

@@ -44,12 +44,28 @@ HALLUCINATION = re.compile(r"^(?:시청해\s*주셔서\s*감사합니다|구독�
 
 
 # ---------------------------------------------------------------- 공통
+def _kiki_homes() -> list:
+    """개인 설정 폴더 후보(앞이 우선) — 지금 실행 중인 쪽(Claude Code·Codex)의 설정·토큰을 먼저 쓴다(2026-09-27 Codex 점검:
+    Codex 에서도 ~/.claude 쪽을 먼저 집던 문제). KIKI_HOME(폴더 직접 지정) > KIKI_AGENT=claude|codex >
+    이 스크립트가 설치된 곳(~/.codex/skills/… 면 Codex) > 실행 환경(CLAUDECODE·CODEX_…) > Claude, Codex 순."""
+    home = os.environ.get("KIKI_HOME", "").strip()
+    if home:
+        return [os.path.normpath(os.path.expanduser(home))]
+    claude, codex = (os.path.normpath(os.path.expanduser(x)) for x in ("~/.claude/kiki", "~/.codex/kiki"))
+    who = os.environ.get("KIKI_AGENT", "").strip().lower()
+    if who not in ("claude", "codex"):
+        parts = os.path.abspath(__file__).replace("\\", "/").lower().split("/")
+        who = next((a[1:] for a, b in zip(parts, parts[1:]) if a in (".claude", ".codex") and b == "skills"), "")
+    if not who:
+        who = "claude" if os.environ.get("CLAUDECODE") else ("codex" if any(k.startswith("CODEX_") for k in os.environ) else "")
+    return [codex, claude] if who == "codex" else [claude, codex]
+
+
 def _kiki_root() -> str:
     r = os.environ.get("KIKI_ROOT", "").strip()
     if r:
         return os.path.expanduser(r)
-    for cfg in ("~/.claude/kiki/kiki.config.json", "~/.codex/kiki/kiki.config.json"):
-        p = os.path.expanduser(cfg)
+    for p in [os.path.join(h, "kiki.config.json") for h in _kiki_homes()]:
         if os.path.exists(p):
             try:
                 r = (json.load(open(p, encoding="utf-8-sig")).get("kiki_root") or "").strip()

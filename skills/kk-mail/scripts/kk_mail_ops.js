@@ -98,7 +98,7 @@
   async function listInbox({ days = 7, size = 500, maxPages = 10 } = {}) {
     // 기간 안 메일 전부(페이지 넘김). 바쁜 편지함에서 200건 넘게 와도 빠지지 않는다. truncated=true 면 maxPages 를 늘릴 것.
     const r = await listMails({ folder: 'inbox', sinceDays: days, size, maxPages });
-    const out = { totalInbox: r.total, fetched: r.fetched, recent: r.mails, truncated: r.pages >= maxPages && r.fetched >= size * maxPages };
+    const out = { totalInbox: r.total, fetched: r.fetched, recent: r.mails, truncated: !!r.truncated };
     if (r.error) out.error = r.error;
     return out;
   }
@@ -133,7 +133,8 @@
   // ---------- 기능 1: 찾기 — 페이징 목록 + 본문 (2026-09-24 실증) ----------
   // 폴더의 메일을 최신순으로 페이지를 넘기며 수집. since(YYYY-MM-DD)/sinceDays 보다 오래된 메일이 나오면 중단.
   //   opt = { folder:'inbox'|'sent'|... (시스템 folderName) | folderId:'...', sinceDays?:90, since?:'YYYY-MM-DD', until?:'YYYY-MM-DD', maxPages?:6, size?:500 }
-  // 반환 { total, fetched, pages, mails:[summarize + url] }. 실측: size 500 × 3페이지(1,500건) ≈ 2.5초. size 1000 도 허용.
+  // 반환 { total, fetched, pages, mails:[summarize + url], end, truncated? } — end: all(끝까지)·period(기간 경계)·cap(maxPages 에서 멈춤)·error.
+  //   cap 이면 truncated=true(2026-09-27 Codex 점검: 상한에서 멈춘 목록을 '전부'로 오인하지 않게 — fmtList 머리줄에 ⚠ 목록 잘림). 실측: size 500 × 3페이지(1,500건) ≈ 2.5초. size 1000 도 허용.
   // ⚠️ 목록엔 본문 미리보기(previewText)가 비어 있다 → 본문 단서는 getMail 로.
   async function listMails(opt = {}) {
     const size = opt.size || 500, maxPages = opt.maxPages || 6;
@@ -143,21 +144,23 @@
     const folder = opt.folder || 'inbox';
     const base = opt.folderId ? `folderId=${opt.folderId}` : `folderName=${folder}`;
     const urlOf = (m) => opt.folderId ? `/mail/folders/${opt.folderId}/${m.id}` : `/mail/systems/${folder}/${m.id}`;
-    const out = { total: null, fetched: 0, pages: 0, mails: [] };
+    const out = { total: null, fetched: 0, pages: 0, mails: [], end: 'cap' };
     for (let p = 0; p < maxPages; p++) {
       const d = await dfetch(`/v2/wapi/mails?${base}&size=${size}&page=${p}&order=-createdAt`);
-      if (!d.result) { out.error = 'DOORAY 목록 조회 실패(page ' + p + '): ' + (apiErr(d) || 'no result'); break; }
+      if (!d.result) { out.error = 'DOORAY 목록 조회 실패(page ' + p + '): ' + (apiErr(d) || 'no result'); out.end = 'error'; break; }
       const c = d.result.contents || [];
       if (out.total == null) out.total = d.result.totalCount;
       out.fetched += c.length; out.pages++;
-      let stop = c.length < size;
+      let stop = c.length < size ? 'all' : '';
       for (const m of c) {
         const ts = new Date(m.createdAt).getTime();
-        if (ts < sinceTs) { stop = true; break; }
+        if (ts < sinceTs) { stop = 'period'; break; }
         if (ts < untilTs) { const s = summarize(m); s.url = 'https://kist.gov-dooray.com' + urlOf(m); out.mails.push(s); }
       }
-      if (stop) break;
+      if (!stop && out.total != null && out.fetched >= out.total) stop = 'all';
+      if (stop) { out.end = stop; break; }
     }
+    if (out.end === 'cap') out.truncated = true;
     return out;
   }
 
@@ -177,18 +180,31 @@
   // 메일 1건 본문. GET /v2/wapi/mails/{id} → result.content.{subject, createdAt, users, body:{mimeType,content(HTML)}, fileList[]}
   // ⚠️ 이 GET 은 서버가 그 메일을 읽음(read=true, opened=true)으로 바꾼다(실측). 목록에서 read=false 였던 메일은
   //    조회 직후 markUnread 로 read 를 복원한다(wasRead 를 넘길 것). opened 는 되돌릴 수 없지만 화면 표시엔 read 만 쓰인다.
+  // 2026-09-27 Codex 점검: API 거절(isSuccessful=false)을 빈 본문으로 넘기지 않고 throw. 안 읽음 복원이 거절되면 restoredUnread=true 로 적지 않고
+  //   throw 하되 읽은 본문은 e.mail 에 담는다 → getMails 는 본문과 함께 restoreError 를 남기고 fmtBody 머리줄에 '⚠ 안 읽음 복원 실패' 가 뜬다.
   async function getMail(id, { wasRead = null, restoreUnread = true, maxChars = 20000 } = {}) {
     const d = await dfetch(`/v2/wapi/mails/${id}`);
-    const c = (d.result && d.result.content) || {};
+    const bad = apiErr(d);
+    if (bad || !(d.result && d.result.content)) throw new Error('DOORAY 본문 조회 실패: ' + (bad || '본문 없음(result.content)'));
+    const c = d.result.content;
     const html = (c.body && c.body.content) || '';
     const text = htmlToText(html).slice(0, maxChars);
     const from = (c.users && c.users.from && c.users.from.emailUser) || {};
     const to = ((c.users && c.users.to) || []).map(u => (u.emailUser && u.emailUser.emailAddress) || '').filter(Boolean);
     const files = (c.fileList || []).map(f => f.name || f.fileName || f.originalName || f.originalFileName || '').filter(Boolean);
-    let restored = false;
-    if (restoreUnread && wasRead === false) { await markUnread([id]); restored = true; }
-    return { id, subject: c.subject || '', date: (c.createdAt || '').slice(0, 16).replace('T', ' '), fromName: from.name || '', fromEmail: from.emailAddress || '',
+    let restored = false, restoreError = '';
+    if (restoreUnread && wasRead === false) {
+      try { restoreError = apiErr(await markUnread([id])); } catch (e) { restoreError = String((e && e.message) || e); }
+      restored = !restoreError;
+    }
+    const out = { id, subject: c.subject || '', date: (c.createdAt || '').slice(0, 16).replace('T', ' '), fromName: from.name || '', fromEmail: from.emailAddress || '',
       to, files, text, textLen: text.length, htmlLen: html.length, restoredUnread: restored };
+    if (restoreError) {
+      const e = new Error('DOORAY 안 읽음 복원 실패 — 이 메일은 읽음으로 바뀌었습니다: ' + restoreError);
+      e.mail = Object.assign(out, { restoreError });
+      throw e;
+    }
+    return out;
   }
 
   // 후보 여러 건 본문 순차 조회 (rate limit: burst 20/초당 5 → 건당 delayMs 간격). items = listMails 의 mails 항목(id·read 포함) 또는 id 문자열.
@@ -198,7 +214,7 @@
       const id = String(typeof it === 'string' ? it : it.id).replace(/-/g, '');            // fmtList 의 하이픈 id 도 됨
       const wasRead = typeof it === 'string' ? (id in readCache ? readCache[id] : null) : it.read;
       try { out.push(await getMail(id, { wasRead, maxChars })); }
-      catch (e) { out.push({ id, error: String(e).slice(0, 120) }); }
+      catch (e) { out.push(e && e.mail ? e.mail : { id, error: String(e).slice(0, 120) }); }   // 복원 실패는 본문 + restoreError
       await new Promise(r => setTimeout(r, delayMs));
     }
     return out;
@@ -338,11 +354,12 @@
     const froms = (spec.fromEmails || []).map(x => String(x).toLowerCase());
     const opt = { size: 100, maxPages: 5 };
     if (spec.since) opt.since = spec.since; else opt.sinceDays = spec.sinceDays || 365;
-    const seen = new Map(), hits = {};
+    const seen = new Map(), hits = {}; let cut = false;
     for (const kw of kws) {
       const words = kw.split(/[^0-9A-Za-z가-힣]+/).filter(w => w.length >= 2).sort((a, b) => b.length - a.length).slice(0, 2);
       const r = await searchMails(words.length ? words : [kw], opt);
       if (r.error) return { error: r.error, hits, total: 0, mails: [] };
+      if (r.truncated) cut = true;
       const low = kw.toLowerCase();
       hits[kw] = 0;
       for (const m of r.mails) {
@@ -354,7 +371,7 @@
       await new Promise(res => setTimeout(res, 200));
     }
     const mails = Array.from(seen.values()).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
-    return { hits, total: mails.length, mails };
+    return { hits, total: mails.length, mails, truncated: cut };
   }
 
   // ---------- 기능 3: 자연어 자동분류 규칙 엔진 ----------
@@ -415,11 +432,11 @@
       page: 0, order: opt.order || '-createdAt', highlight: true, size };
     if (opt.since) body.since = iso(opt.since, false); else if (opt.sinceDays) body.since = new Date(Date.now() - opt.sinceDays * 86400000).toISOString();
     if (opt.before || opt.until) body.before = iso(opt.before || opt.until, true);   // until 도 같은 뜻으로
-    const out = { total: null, fetched: 0, pages: 0, mails: [] }, folders = {};
+    const out = { total: null, fetched: 0, pages: 0, mails: [], end: 'cap' }, folders = {};
     for (let p = 0; p < maxPages; p++) {
       body.page = p;
       const d = await dfetch('/v2/wapi/mails/search?preview=true', { method: 'POST', body });
-      if (!d.result) { out.error = (d.header && (d.header.resultMessage || d.header.resultCode)) || 'no result'; break; }
+      if (!d.result) { out.error = (d.header && (d.header.resultMessage || d.header.resultCode)) || 'no result'; out.end = 'error'; break; }
       const cs = d.result.contents || [], refs = d.result.references || {}, mm = refs.mailMap || {};
       Object.assign(folders, refs.folderMap || {});
       if (out.total == null) out.total = d.result.totalCount;
@@ -432,21 +449,24 @@
         s.url = 'https://kist.gov-dooray.com' + (f.type === 'system' ? `/mail/systems/${f.name}/${m.id}` : `/mail/folders/${m.folderId}/${m.id}`);
         out.mails.push(s);
       }
-      if (cs.length < size) break;
+      if (cs.length < size || (out.total != null && out.fetched >= out.total)) { out.end = 'all'; break; }
     }
+    if (out.end === 'cap') out.truncated = true;   // listMails 와 같은 규칙 — 상한에서 멈추면 잘림 표시
     return out;
   }
   // 동의어 묶음별로 검색해 합치고 중복 제거(최신순). groups = [['○○대'], ['univ'], ['○○대학교', '세미나']]
   async function searchMany(groups, opt = {}) {
-    const seen = new Map(); let totalSum = 0; const errors = [];
+    const seen = new Map(); let totalSum = 0; const errors = [], cut = [];
     for (const g of groups) {
       const r = await searchMails(g, opt); totalSum += r.total || 0;
       if (r.error) errors.push(String(r.error));                       // 검색 오류는 '없음'이 아니라 오류로 보고
+      if (r.truncated) cut.push([].concat(g).join(' ') + ' ' + r.fetched + '/' + r.total);   // 잘린 묶음도 합친 결과에 남긴다
       for (const m of r.mails) if (!seen.has(m.id)) seen.set(m.id, m);
       await new Promise(res => setTimeout(res, 200));
     }
     const out = { totalSum, mails: Array.from(seen.values()).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)) };
     if (errors.length) out.error = errors.join(' / ');
+    if (cut.length) { out.truncated = true; out.truncatedGroups = cut; }
     return out;
   }
 
@@ -472,6 +492,11 @@
   function listOf(x) { return Array.isArray(x) ? x : (x && (x.mails || x.recent)) || []; }
   function errOf(x) { return (x && !Array.isArray(x) && x.error) ? String(x.error) : ''; }
   // 반환 문자열은 1,000자에서 잘린다(실측) → 줄 수가 아니라 글자 수로 끊고 머리줄에 다음 조각 번호를 적는다
+  function cutOf(x) {                         // 잘림 머리줄: 전체 몇 건 중 몇 건을 읽었는지(묶음 검색은 잘린 묶음 수)
+    const tot = x.total != null ? x.total : x.totalInbox;
+    if (x.truncatedGroups) return `(묶음 ${x.truncatedGroups.length}개)`;
+    return tot != null && x.fetched != null ? `(전체 ${tot} 중 ${x.fetched})` : '';
+  }
   function fitRows(rows, reserve = 150) { const out = []; let n = reserve; for (const r of rows) { n += r.length + 1; if (n > 960) break; out.push(r); } return out; }
   function fmtList(x, from = 0, to = 12, { subj = 44, who = 14, ids = false, pv = 0 } = {}) {
     if (x == null) return NOT_YET;
@@ -481,14 +506,14 @@
       sanitize(`${from + k} | ${m.date.slice(2)} | ${m.read ? 'R' : 'U'} | att${m.fileCount} | ${(m.fromName || m.fromEmail).slice(0, who)} | ${m.subject.slice(0, subj)}`
         + (m.folder && m.folder !== 'inbox' ? ` [${m.folder}]` : '') + (pv && m.preview ? ' | ' + m.preview.slice(0, pv) : '')) + (ids ? ' | ' + hyId(m.id) : '')));
     const end = from + rows.length;
-    return `[${from}-${end} of ${mails.length}]` + (end < Math.min(to, mails.length) ? ` ▶ 다음 조각 ${end}` : '') + (err ? ' ⚠ 일부 오류: ' + sanitize(err).slice(0, 80) : '') + (x.truncated ? ' ⚠ 목록 잘림(maxPages 늘릴 것)' : '') + '\n' + rows.join('\n');
+    return `[${from}-${end} of ${mails.length}]` + (end < Math.min(to, mails.length) ? ` ▶ 다음 조각 ${end}` : '') + (err ? ' ⚠ 일부 오류: ' + sanitize(err).slice(0, 80) : '') + (x.truncated ? ' ⚠ 목록 잘림' + cutOf(x) + ' — maxPages 늘려 다시' : '') + '\n' + rows.join('\n');
   }
   // 본문 1건: 머리 1줄(제목·날짜·발신·첨부·복원 여부) + 본문 chars 자. 긴 본문은 offset 을 옮겨 이어 읽는다.
   function fmtBody(b, chars = 700, offset = 0) {
     if (!b) return 'no body';
     if (b.error) return 'ERR ' + sanitize(b.error);
     const files = b.files.length ? ` (${b.files.slice(0, 3).join(', ').slice(0, 80)})` : '';
-    const head = `${b.subject.slice(0, 40)} | ${b.date.slice(2)} | ${b.fromName || b.fromEmail} | files ${b.files.length}${files} | txt ${b.textLen}${b.restoredUnread ? ' | unread restored' : ''}`;
+    const head = `${b.subject.slice(0, 40)} | ${b.date.slice(2)} | ${b.fromName || b.fromEmail} | files ${b.files.length}${files} | txt ${b.textLen}${b.restoredUnread ? ' | unread restored' : ''}${b.restoreError ? ' | ⚠ 안 읽음 복원 실패(읽음으로 바뀜)' : ''}`;
     return sanitize(head + '\n' + b.text.slice(offset, offset + chars));
   }
   // ---------- 메일 팝업 보기 (2026-09-27 사용자 확정: 링크·열기 모두 팝업 방식) ----------
@@ -592,7 +617,7 @@
     createRule, listMailRules, deleteMailRule,
     subjectKeyword, checkSubjectKeywords, previewSubjectRule,
     externalOf, fmtExternal, fmtFolders, fmtRules, ruleTarget, overview, fmtOverview, apiErr,
-    _version: 'kk-mail-ops/1.8',
+    _version: 'kk-mail-ops/1.9',
   };
   return window.kkMail._version + ' =^.^=';
 })();

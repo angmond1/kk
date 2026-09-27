@@ -36,8 +36,26 @@ def _cmd_ok(args):
         return False, ""
 
 
+def _kiki_homes() -> list:
+    """개인 설정 폴더 후보(앞이 우선) — 지금 실행 중인 쪽(Claude Code·Codex)의 설정·토큰을 먼저 쓴다(2026-09-27 Codex 점검:
+    Codex 에서도 ~/.claude 쪽을 먼저 집던 문제). KIKI_HOME(폴더 직접 지정) > KIKI_AGENT=claude|codex >
+    이 스크립트가 설치된 곳(~/.codex/skills/… 면 Codex) > 실행 환경(CLAUDECODE·CODEX_…) > Claude, Codex 순."""
+    home = os.environ.get("KIKI_HOME", "").strip()
+    if home:
+        return [os.path.normpath(os.path.expanduser(home))]
+    claude, codex = (os.path.normpath(os.path.expanduser(x)) for x in ("~/.claude/kiki", "~/.codex/kiki"))
+    who = os.environ.get("KIKI_AGENT", "").strip().lower()
+    if who not in ("claude", "codex"):
+        parts = os.path.abspath(__file__).replace("\\", "/").lower().split("/")
+        who = next((a[1:] for a, b in zip(parts, parts[1:]) if a in (".claude", ".codex") and b == "skills"), "")
+    if not who:
+        who = "claude" if os.environ.get("CLAUDECODE") else ("codex" if any(k.startswith("CODEX_") for k in os.environ) else "")
+    return [codex, claude] if who == "codex" else [claude, codex]
+
+
 def _cfg_dirs():
-    return [os.path.expanduser(p) for p in ("~/.claude/kiki", "~/.codex/kiki")]
+    """개인 설정 폴더 — 지금 실행 중인 쪽(Claude/Codex)이 앞(다른 skill 스크립트와 같은 규칙)."""
+    return _kiki_homes()
 
 
 def _load_json(p):
@@ -45,6 +63,14 @@ def _load_json(p):
         return json.load(open(p, encoding="utf-8-sig"))
     except Exception:
         return None
+
+
+def _json_err(p):
+    try:
+        json.load(open(p, encoding="utf-8-sig"))
+        return ""
+    except Exception as e:
+        return f"{type(e).__name__}: {str(e)[:80]}"
 
 
 def kiki_root():
@@ -90,8 +116,10 @@ def core_versions():
 
 
 def run():
-    rep = {"ok": True, "install": [], "notes": []}
+    rep = {"ok": True, "install": [], "notes": [], "broken": []}
     rep["python"] = sys.version.split()[0]
+    rep["python_exe"] = sys.executable
+    rep["config_home"] = _cfg_dirs()[0]
     pk = {m: _has(mod) for m, mod in (("openpyxl", "openpyxl"), ("requests", "requests"), ("Pillow", "PIL"), ("pywin32", "win32com"), ("pymupdf", "fitz"))}
     if not IS_WIN:
         pk.pop("pywin32")
@@ -103,7 +131,15 @@ def run():
         rep["optional"] = {"faster-whisper": False}
     need = [m for m, ok in pk.items() if not ok and m in ("openpyxl", "requests", "Pillow")]
     if need:
-        rep["install"].append("python -m pip install " + " ".join(need) + "  (필요한 skill 을 쓸 때)")
+        rep["install"].append(f'"{sys.executable}" -m pip install ' + " ".join(need) + "  (필요한 skill 을 쓸 때 — kiki 스크립트를 돌리는 이 파이썬으로)")
+    if IS_WIN:                                             # 2026-09-27 Codex 점검: python 과 py -3 이 서로 다른 파이썬이면 패키지가 한쪽에만 있다
+        try:
+            r = subprocess.run(["py", "-3", "-c", "import sys;print(sys.executable)"], capture_output=True, text=True, timeout=15)
+            other = r.stdout.strip()
+            if r.returncode == 0 and other and os.path.normcase(os.path.abspath(other)) != os.path.normcase(os.path.abspath(sys.executable)):
+                rep["notes"].append(f"py -3 은 다른 파이썬({other})을 가리킵니다 — kiki 스크립트와 pip 는 이 파이썬({sys.executable})으로 실행")
+        except Exception:
+            pass
     node_ok, node_v = _cmd_ok(["node", "--version"]); npx_ok, _ = _cmd_ok(["npx", "--version"])
     rep["node"] = {"node": node_ok, "npx": npx_ok, "version": node_v}
     if not (node_ok and npx_ok):
@@ -121,6 +157,8 @@ def run():
             if os.path.exists(p):
                 c = _load_json(p)
                 cfgs[p] = "invalid JSON" if c is None else "ok"
+                if c is None:                              # 2026-09-27 Codex 점검: 깨진 설정을 '문제 없음'으로 넘기지 않는다
+                    rep["broken"].append(f"{p} — {_json_err(p)}")
                 if fn == "kiki.config.json" and c is not None:
                     filled = {}
                     for k in ("user", "card_holder", "payment_admin", "location"):
@@ -166,18 +204,19 @@ def run():
                        "ocr_files": len([f for f in os.listdir(os.path.join(wiki, "ocr"))]) if os.path.isdir(os.path.join(wiki, "ocr")) else 0}
     else:
         rep["wiki"] = "스냅샷 없음 (kk-wiki 첫 실행 때 수집)"
-    if rep["install"]:
+    if rep["install"] or rep["broken"]:
         rep["ok"] = False
     return rep
 
 
 def text(rep):
-    L = [f"[kiki doctor] Python {rep['python']} | 패키지 " + ", ".join(f"{k}{'✓' if v else '✗'}" for k, v in rep["packages"].items())
+    L = [f"[kiki doctor] Python {rep['python']} ({rep.get('python_exe', '')}) | 패키지 " + ", ".join(f"{k}{'✓' if v else '✗'}" for k, v in rep["packages"].items())
          + f" | Node {'✓' if rep['node']['node'] and rep['node']['npx'] else '✗'} {rep['node']['version']}"]
     L.append("선택: " + ", ".join(f"{k}{'✓' if v else '✗'}" for k, v in rep.get("optional", {}).items()) + " (kk-meeting 회의 녹음 → 글. 기본은 휴대폰·클로바노트로 바꾼 글, 사용자가 원할 때만 설치)")
     L.append("skills: " + "; ".join(f"{k} {' '.join(v) if v else '(코어 없음)'}" for k, v in rep["skills"].items()))
     kr = rep["kiki_root"]
     L.append(f"kiki_root: {kr['path']} ({kr['from']}, {'있음' if kr['exists'] else '없음'}) 하위 " + " ".join(f"{d}{'✓' if ok else '✗'}" for d, ok in kr["subdirs"].items()))
+    L.append(f"설정 폴더(우선): {rep.get('config_home', '')}")
     L.append("config: " + (rep["configs"] if isinstance(rep["configs"], str) else "; ".join(f"{os.path.basename(p)} {v}" for p, v in rep["configs"].items())))
     if rep.get("common_filled"):
         L.append("공통 항목 채움: " + " ".join(f"{k}{'✓' if v else '✗'}" for k, v in rep["common_filled"].items()))
@@ -192,9 +231,11 @@ def text(rep):
         L.append("참고: " + n)
     for i in rep["install"]:
         L.append("설치 필요: " + i)
-    L.append(f"[요약] {'문제 없음' if rep['ok'] and not rep['notes'] else ''}"
-             + (f"설치 필요 {len(rep['install'])}" if rep["install"] else "")
-             + (f"{', ' if rep['install'] else ''}참고 {len(rep['notes'])}" if rep["notes"] else "")
+    for b in rep.get("broken", []):
+        L.append("설정 파일 깨짐: " + b + " — JSON 형식을 고치거나, 옮겨 두고 해당 skill 설정을 다시")
+    parts = ([f"설정 깨짐 {len(rep['broken'])}"] if rep.get("broken") else []) + ([f"설치 필요 {len(rep['install'])}"] if rep["install"] else []) \
+        + ([f"참고 {len(rep['notes'])}"] if rep["notes"] else [])
+    L.append(f"[요약] {', '.join(parts) if parts else '문제 없음'}"
              + f" | token {'있음' if rep['token']['has_token'] else '없음'} | 스냅샷 {rep['wiki']['pages'] if isinstance(rep['wiki'], dict) else 0}쪽")
     return "\n".join(L)
 

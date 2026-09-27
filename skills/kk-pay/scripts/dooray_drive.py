@@ -2,7 +2,7 @@
 """kk-pay 코어 (2) — dooray drive 폴더 검색·구조파악·업로드·처리완료 아카이브.
 
 인증: dooray 개인 토큰 (업로드는 세션쿠키로 안 됨 → 토큰 필요).
-  토큰 로드 우선순위: 환경변수 DOORAY_TOKEN → <kiki_root>/token.txt → ~/.claude|.codex/kiki/token.txt → (구형) kiki.env
+  토큰 로드 우선순위: 환경변수 DOORAY_TOKEN → <kiki_root>/token.txt → 지금 쓰는 쪽(Claude/Codex) 설정 폴더의 token.txt·(구형) kiki.env → 다른 쪽
   발급: https://kist.gov-dooray.com/setting/api/token  (토큰은 repo·skill 에 저장 금지, 로컬 파일만)
 
 전사 공통(개인정보 아님, 내장 OK):
@@ -55,13 +55,29 @@ def _default_root() -> str:
     return r"C:\kiki" if sys.platform.startswith("win") else os.path.expanduser("~/kiki")
 
 
+def _kiki_homes() -> list:
+    """개인 설정 폴더 후보(앞이 우선) — 지금 실행 중인 쪽(Claude Code·Codex)의 설정·토큰을 먼저 쓴다(2026-09-27 Codex 점검:
+    Codex 에서도 ~/.claude 쪽을 먼저 집던 문제). KIKI_HOME(폴더 직접 지정) > KIKI_AGENT=claude|codex >
+    이 스크립트가 설치된 곳(~/.codex/skills/… 면 Codex) > 실행 환경(CLAUDECODE·CODEX_…) > Claude, Codex 순."""
+    home = os.environ.get("KIKI_HOME", "").strip()
+    if home:
+        return [os.path.normpath(os.path.expanduser(home))]
+    claude, codex = (os.path.normpath(os.path.expanduser(x)) for x in ("~/.claude/kiki", "~/.codex/kiki"))
+    who = os.environ.get("KIKI_AGENT", "").strip().lower()
+    if who not in ("claude", "codex"):
+        parts = os.path.abspath(__file__).replace("\\", "/").lower().split("/")
+        who = next((a[1:] for a, b in zip(parts, parts[1:]) if a in (".claude", ".codex") and b == "skills"), "")
+    if not who:
+        who = "claude" if os.environ.get("CLAUDECODE") else ("codex" if any(k.startswith("CODEX_") for k in os.environ) else "")
+    return [codex, claude] if who == "codex" else [claude, codex]
+
+
 def _kiki_root() -> str:
     """kiki 작업 폴더 — 환경변수 KIKI_ROOT → kiki.config.json(claude/codex) 의 kiki_root → 기본값(C:\\kiki / ~/kiki)."""
     r = os.environ.get("KIKI_ROOT", "").strip()
     if r:
         return os.path.expanduser(r)
-    for cfg in ("~/.claude/kiki/kiki.config.json", "~/.codex/kiki/kiki.config.json"):
-        p = os.path.expanduser(cfg)
+    for p in [os.path.join(h, "kiki.config.json") for h in _kiki_homes()]:
         if os.path.exists(p):
             try:
                 r = (json.load(open(p, encoding="utf-8-sig")).get("kiki_root") or "").strip()
@@ -113,11 +129,11 @@ def _token_from_file(p: str) -> str:
 
 
 def _token_candidates() -> list:
-    """우선순위: <kiki_root>/token.txt → ~/.claude|.codex/kiki/token.txt → (구형) kiki.env."""
+    """우선순위: <kiki_root>/token.txt → 지금 쓰는 쪽 설정 폴더의 token.txt·(구형) kiki.env → 다른 쪽."""
     root = _kiki_root()
     c = [os.path.join(root, "token.txt")] if root else []
-    c += [os.path.expanduser(x) for x in ("~/.claude/kiki/token.txt", "~/.codex/kiki/token.txt",
-                                          "~/.claude/kiki/kiki.env", "~/.codex/kiki/kiki.env")]
+    for h in _kiki_homes():
+        c += [os.path.join(h, "token.txt"), os.path.join(h, "kiki.env")]
     return c
 
 

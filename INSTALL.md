@@ -50,6 +50,7 @@ KIST 내부망에서 실행. KIST 밖(재택·출장)이면 **KIST VPN 접속 �
 | kk-meeting | **Claude 전용 새 Chrome 창** | 그 창에서 포탈 로그인 한 번 더 |
 | kk-inspect | **Claude 전용 새 Chrome 창** | 그 창에서 포탈 로그인 한 번 더 |
 
+- chrome-devtools-mcp 를 `--autoConnect` 로 등록했다면 '새 Chrome 창' 대신 **평소 Chrome 에 붙는다** — 로그인은 그대로이고, 처음 연결 때 Chrome 의 원격 디버깅 허용을 승인하면 된다.
 - 로그인은 **본인이 직접**(Claude 는 대신 로그인하지 않는다). 포탈 로그인 = `e.kist.re.kr`(2026-07 변경, 구 ekist.re.kr), 업무화면은 `p.kist.re.kr:8081`.
 - KIST 포탈은 **매일 정오 전체 세션 리셋** → 오후 작업은 다시 로그인.
 

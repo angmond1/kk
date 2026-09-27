@@ -108,7 +108,7 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
     if (url.startsWith('/v2/wapi/mails/report-spam')) { global.__spamBody = JSON.parse(opts.body); return { ok: true, status: 200, text: async () => JSON.stringify({ header: { isSuccessful: true } }) }; }
     return { ok: true, status: 200, text: async () => '' };
   };
-  ok('mail inject 1.8', load('kk-mail/scripts/kk_mail_ops.min.js') === 'kk-mail-ops/1.8 =^.^=');
+  ok('mail inject 1.9', load('kk-mail/scripts/kk_mail_ops.min.js') === 'kk-mail-ops/1.9 =^.^=');
   const K = window.kkMail;
   ok('mail 점수 규칙 제거', typeof K.spamHints === 'undefined' && typeof K.fmtSpam === 'undefined');
   const inbox = await K.listInbox({ days: 3650 });
@@ -155,6 +155,22 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
   global.fetch = async () => ({ ok: false, status: 502, text: async () => '<html>bad gateway</html>' });
   let e502 = ''; try { await K.listMailRules(); } catch (e) { e502 = String(e); }
   ok('mail 5xx → 서버 오류', /DOORAY: 서버 오류\(HTTP 502\)/.test(e502), e502);
+  // 2026-09-27 Codex 점검: 본문 거절을 빈 본문으로 / 안 읽음 복원 실패를 성공으로 / 상한 도달을 전부로 보이지 않는다
+  global.DOMParser = class { parseFromString(h) { return { body: { textContent: String(h).replace(/<[^>]+>/g, '') }, querySelectorAll: () => [] }; } };
+  global.fetch = async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ header: { isSuccessful: false, resultMessage: 'denied' } }) });
+  let eg = ''; try { await K.getMail('1', { wasRead: true }); } catch (e) { eg = String(e); }
+  ok('mail 본문 거절 → throw(빈 본문 아님)', /DOORAY 본문 조회 실패: denied/.test(eg), eg);
+  global.fetch = async (url) => ({ ok: true, status: 200, text: async () => JSON.stringify(url.endsWith('/unread') ? { header: { isSuccessful: false, resultMessage: 'restore rejected' } } : { header: { isSuccessful: true }, result: { content: { subject: 'S', body: { content: 'hello' }, users: {} } } }) });
+  let er = null; try { await K.getMail('1', { wasRead: false }); } catch (e) { er = e; }
+  ok('mail 안 읽음 복원 거절 → throw + 본문 보존', er && /안 읽음 복원 실패/.test(er.message) && er.mail && er.mail.text === 'hello' && er.mail.restoredUnread === false, er && er.message);
+  const gm = await K.getMails([{ id: '1', read: false }], { delayMs: 0 });
+  ok('mail getMails 복원 거절 → 본문 + ⚠ 머리줄', K.fmtBody(gm[0]).includes('안 읽음 복원 실패') && K.fmtBody(gm[0]).includes('hello'), K.fmtBody(gm[0]));
+  const one = { id: '1', createdAt: '2026-09-27T12:00:00+09:00', subject: 'S', users: {}, folderId: 'inbox', mailSummary: { flags: { read: true } } };
+  global.fetch = async (url) => ({ ok: true, status: 200, text: async () => JSON.stringify(url.startsWith('/v2/wapi/mails/search') ? { header: { isSuccessful: true }, result: { totalCount: 2, contents: [{ id: '1' }], references: { mailMap: { 1: one }, folderMap: { inbox: { name: 'inbox', type: 'system' } } } } } : { header: { isSuccessful: true }, result: { totalCount: 2, contents: [one] } }) });
+  const lm = await K.listMails({ size: 1, maxPages: 1 }), sm = await K.searchMails(['S'], { size: 1, maxPages: 1 }), sy = await K.searchMany([['S']], { size: 1, maxPages: 1 });
+  ok('mail 상한 도달 → truncated(목록·검색·묶음 검색) + 머리줄', lm.truncated === true && sm.truncated === true && sy.truncated === true && K.fmtList(lm).includes('⚠ 목록 잘림(전체 2 중 1)') && K.fmtList(sy).includes('⚠ 목록 잘림'), JSON.stringify([lm.truncated, sm.truncated, sy.truncated, K.fmtList(lm).split('\n')[0]]));
+  const lm2 = await K.listMails({ size: 5, maxPages: 3 }), sm2 = await K.searchMails(['S'], { size: 5, maxPages: 3 });
+  ok('mail 끝까지 읽음 → 잘림 아님', !lm2.truncated && lm2.end === 'all' && !sm2.truncated && sm2.end === 'all', JSON.stringify([lm2.end, sm2.end]));
 
   // ================= kk-wiki =================
   dom();

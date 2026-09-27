@@ -25,6 +25,7 @@ kiki 는 Chrome 창 두 종류를 쓴다. **skill 마다 쓰는 창이 정해져
 - **chrome-devtools-mcp** *(kk-inspect · kk-meeting · kk-pay 세금계산서 직접작성 필수)* — 도구 목록에 `upload_file`·`evaluate_script`·`select_page` 가 없으면 미등록: *"파일첨부 자동화에는 chrome-devtools-mcp 등록이 필요합니다: `claude mcp add --scope user chrome-devtools -- npx -y chrome-devtools-mcp@latest` (Node.js 필요) 후 Claude 재시작."* 미등록이면 입력까지만 자동·**첨부는 사용자 수동**으로 진행 여부를 묻는다.
 - ⭐ **첨부가 있는 작업은 *처음부터* chrome-devtools 창에서 시작한다** (2026-07-07 실측 교훈): Claude in Chrome 으로 작성·저장까지 해놓고 첨부 단계에서 갈아타면 **로그인·작성을 처음부터 다시** 하게 된다(Claude in Chrome `file_upload` 는 채팅에 첨부한 파일만 올릴 수 있어 로컬 증빙 첨부 불가). 첨부 없는 단순 조회만 Claude in Chrome 무방. chrome-devtools 는 자체 Chrome(별도 프로필)을 띄우며 도구 매핑·workspace root 제약은 [`nexacro_file_upload.md`](nexacro_file_upload.md) §4-6.
 - **새 창 안내 문구(첨부 작업 시작 전 반드시)**: *"파일첨부를 위해 Claude 전용 Chrome 창을 하나 띄웁니다. 평소 Chrome 과 로그인이 공유되지 않아 그 창에서 포탈(e.kist.re.kr)에 한 번 더 로그인해 주세요. 한 번 하면 그 창은 기억합니다(정오 리셋 제외)."*
+- **chrome-devtools-mcp 연결 방식 두 가지**: 기본 등록은 **새 Chrome 창**(별도 프로필 — 평소 로그인이 넘어오지 않아 그 창에서 포탈 로그인 한 번 더). `--autoConnect`(또는 `--browserUrl`)로 등록했다면 새 창이 아니라 **평소 쓰는 Chrome 에 붙는다** — 로그인은 그대로이고, 처음 연결 때 Chrome 의 원격 디버깅 허용을 사용자가 승인해야 한다. 어느 쪽인지 모르면 `list_pages` 에 평소 탭들이 보이는지로 판단한다(2026-09-27 Codex 점검). page 를 가리키는 인자 이름(`pageId`/`pageIdx`)은 버전마다 다르니 도구 스키마에 나온 이름을 따른다.
 - **도구 이름 표기 규칙 (2026-09 기준)**: kiki 문서는 도구를 **짧은 이름**(`javascript_tool`·`tabs_context_mcp`·`file_upload` / chrome-devtools 의 `evaluate_script`·`upload_file`·`select_page`·`handle_dialog` …)으로 적는다. 실제 전체 이름은 `mcp__<서버명>__<도구명>` 이고 **서버명은 앱 버전·설치 방식에 따라 바뀐다** — Claude in Chrome: `mcp__Claude_in_Chrome__…`(2026-06) → `mcp__claude-in-chrome__…`(2026-09 현재) / chrome-devtools-mcp: `claude mcp add chrome-devtools …` 로 등록하면 `mcp__chrome-devtools__…`, plugin 설치면 `mcp__plugin_chrome-devtools-mcp_chrome-devtools__…` / Codex 는 `mcp__chrome_devtools.<도구명>`. **서버명이 달라도 도구명이 같으면 같은 도구**다. 세션 시작 시 도구 목록(ToolSearch `select:` 또는 deferred 목록)으로 실제 이름을 확인해 호출하고, deferred 상태면 ToolSearch 로 먼저 로드한다. 안 되면 모델 탓보다 **도구명·MCP 버전**을 먼저 의심.
 
 ### 2. 로그인 세션 확인 (사용자 본인이 로그인 — Claude 가 대신 하지 않는다)
@@ -43,7 +44,7 @@ kiki 는 Chrome 창 두 종류를 쓴다. **skill 마다 쓰는 창이 정해져
 ### 4. Python 패키지 — **필요한 시점에, 그때그때** (부트스트랩에서 일괄 설치 X)
 - 선택: `faster-whisper`(kk-meeting 회의 녹음 → 글, 로컬 음성 인식). 기본은 휴대폰 녹음 앱·클로바노트로 바꾼 글을 받는다. 사용자가 녹음 파일을 그대로 주고 이 PC 에서 바꾸길 원할 때만 `kk-meeting/scripts/transcribe.py check <녹음>` 의 `[사용자 안내]` 한 줄로 묻고 동의받아 설치(그래픽카드가 없으면 오래 걸린다) → `kk-meeting/references/meeting_transcribe.md`.
 `python -c "import X"` 로 확인 → 없으면 *"`pip install X` 가 필요합니다(용도). 설치할까요?"* → confirm 후 설치. 크래시 X.
-- **OS 별 설치 명령**(에이전트가 셸에서 실행): Windows `python -m pip install X`(`python` 이 PATH 에 없으면 `py -3 -m pip install X`, 스크립트 실행도 `py -3 …`) / macOS·Linux `python3 -m pip install --user X`. Python 본체가 아예 없으면 4단계가 아니라 설치(`CLAUDE.md` Step 0 — Windows `winget install -e --id Python.Python.3.12 …`)부터 안내.
+- **OS 별 설치 명령**(에이전트가 셸에서 실행): Windows `python -m pip install X`(`python` 이 PATH 에 없으면 `py -3 -m pip install X`, 스크립트 실행도 `py -3 …`). **스크립트와 pip 는 같은 파이썬 하나로** — `python` 과 `py -3` 이 서로 다른 버전을 가리키는 PC 가 있다(2026-09-27 Codex 점검: `python` 3.11 에는 패키지가 있고 `py -3` 3.14 에는 없음). `kiki_doctor.py` 첫 줄의 파이썬 경로와 `참고: py -3 은 다른 파이썬…` 줄로 확인하고, 그 경로로 설치·실행한다 / macOS·Linux `python3 -m pip install --user X`. Python 본체가 아예 없으면 4단계가 아니라 설치(`CLAUDE.md` Step 0 — Windows `winget install -e --id Python.Python.3.12 …`)부터 안내.
   - macOS(Homebrew Python)·최신 Ubuntu 는 `externally-managed-environment` 오류로 막힐 수 있다 → `python3 -m pip install --user --break-system-packages X` (여기 쓰는 패키지는 순수 라이브러리라 시스템에 영향 없음). 그래도 안 되면 `python3 -m venv ~/.claude/kiki/venv` 후 그 venv 의 python 으로 skill 스크립트 실행.
   - `pywin32` 는 Windows 전용(macOS·Linux 는 건너뜀). `Pillow`·`PyMuPDF`·`openpyxl`·`requests` 는 세 OS 모두 wheel 로 설치된다.
 
@@ -81,7 +82,7 @@ kiki 는 Chrome 창 두 종류를 쓴다. **skill 마다 쓰는 창이 정해져
 
 ## 막혔을 때 (처음부터 안내하지 말고, 증상이 나올 때만)
 - **포탈 팝업 창(검수창·지급신청 별도창·회의록 팝업)이 안 뜸** → Chrome 팝업 차단. 설정 → 개인정보 보호 및 보안 → 사이트 설정 → 팝업 및 리디렉션 → "팝업 전송 및 리디렉션 허용" 에 `https://p.kist.re.kr` 추가. **Claude 전용 새 창(chrome-devtools 프로필)도 별도 설정** 필요(팝업이 안 뜨면 이것부터 의심). 근거: wiki 데이터정보팀 「1-7 HTTPS 적용에 따른 브라우저 설정 안내」(2026-06-26). 평소 포탈을 쓰던 PC 는 대개 이미 돼 있다.
-- **`upload_file` 이 "not within any configured workspace roots"** → chrome-devtools 는 Claude 를 연 폴더(cwd) 하위 파일만 올린다 → 증빙을 `<cwd>/_tmp/`(Claude 를 연 폴더 아래, gitignore 됨) 로 복사해 그 경로로 올린다(`nexacro_file_upload.md` §4-6).
+- **`upload_file` 이 "not within any configured workspace roots"** → chrome-devtools-mcp 는 허용된 폴더 안 파일만 올린다. **OS 임시 폴더는 항상 허용**(Windows `%TEMP%`, 2026-09-27 Codex 실측 — Codex 에서는 작업 폴더(cwd) 하위도 거부됐다) → 증빙을 `%TEMP%\kiki_upload\<건>\` 로 복사해 그 경로로 올리고, 첨부가 끝나면 그 복사본 폴더를 지운다(`nexacro_file_upload.md` §4-6). Claude Code 에서는 `<cwd>/_tmp/` 도 대개 된다.
 - **HTTPS 접속이 안 됨** → 캐시·쿠키 삭제 후 브라우저 재시작(위 wiki 안내 ③).
 - **엑셀 저장 `PermissionError`** → 파일이 열려 있음. 닫아달라 안내 후 재시도.
 

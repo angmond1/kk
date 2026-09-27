@@ -88,7 +88,7 @@ DevTools take_snapshot   # 또는 find / 접근성 트리
 
 ### 4-3. 그 UID 에 `upload_file` 직접
 ```
-upload_file({ pageId: <page>, uid: "<found_uid>", filePaths: ["<cwd>\\_tmp\\파일.pdf"] })   // chrome-devtools-mcp 도구. 전체 이름은 mcp__<서버명>__upload_file (서버명은 설치방식별 상이 — environment_setup.md "도구 이름 표기 규칙"). 파일은 workspace root(cwd) 안이어야 함(§4-6)
+upload_file({ pageId: <page>, uid: "<found_uid>", filePaths: ["<TEMP>\\kiki_upload\\파일.pdf"] })   // chrome-devtools-mcp 도구. 전체 이름은 mcp__<서버명>__upload_file (서버명은 설치방식별 상이 — environment_setup.md "도구 이름 표기 규칙"). 파일은 workspace root(cwd) 안이어야 함(§4-6)
 ```
 한 파일씩 반복 (mcs_0003 실증). 복수 동시도 가능한지는 화면별 확인.
 
@@ -133,9 +133,9 @@ Claude in Chrome(`javascript_tool`)은 입력은 되지만 **`window.open` 팝�
 | 첨부 | `take_snapshot` → `btn_selectFiles`("파일추가") uid → `upload_file({pageId, uid, filePaths:[…]})` 파일별 |
 | 신청 | 사용자(`btn_registration`) |
 
-**★ workspace root 제약 (필수 — 2026-06-19 발견)**: chrome-devtools-mcp 의 `upload_file` 은 **configured workspace roots(보통 세션 cwd) 안의 파일만** 허용. 밖(예 다른 드라이브의 증빙 폴더)이면 즉시 `Error: Access denied: ... is not within any configured workspace roots`. → **증빙을 cwd 하위 임시폴더로 복사한 뒤 그 경로로 `upload_file`**.
+**★ workspace root 제약 (필수 — 2026-06-19 발견, 2026-09-27 보강)**: chrome-devtools-mcp 의 `upload_file` 은 **configured workspace roots 안의 파일과 OS 임시 폴더만** 허용. 밖(예 다른 드라이브의 증빙 폴더)이면 즉시 `Error: Access denied: ... is not within any configured workspace roots`. roots 가 세션 cwd 를 포함하는지는 에이전트마다 다르다(Codex 실측: cwd 하위도 거부, OS 임시 폴더는 성공 — chrome-devtools-mcp 1.10.1 소스도 OS 임시 폴더를 항상 허용). → **증빙을 OS 임시 폴더 아래로 복사한 뒤 그 경로로 `upload_file`**, 첨부가 끝나면 그 복사본 폴더를 지운다.
 ```powershell
-$dst="<cwd>\_tmp\inspect_<case>"; New-Item -ItemType Directory -Force $dst | Out-Null
+$dst="$env:TEMP\kiki_upload\inspect_<case>"; New-Item -ItemType Directory -Force $dst | Out-Null
 Copy-Item "<원본폴더>\<파일패턴>" $dst -Force   # 파일명에 연속 공백 있으면 wildcard
 ```
 - 파일명에 **연속 공백**(예 `○○부품  A`) 이 있으면 정확 경로 매칭이 깨짐 → wildcard(`○○부품*A.jpg`) 로 복사하고 실제 `FullName` 으로 `upload_file`.
