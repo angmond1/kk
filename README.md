@@ -46,7 +46,10 @@ https://github.com/angmond1/kk 설치해줘
 
 ### 3. chrome-devtools-mcp 설치 (파일첨부용)
 - claude desktop: 대화창에서 "chrome-devtools-mcp 설치해줘"  
-- codex: 설정 → MCP 서버 → 서버 추가 → 이름 chrome-devtools  
+- codex app에서 좌하단 자기 이니셜 클릭 → 설정 → 좌측 탭의 "플러그인" → "MCP" 선택 → 우상단의 MCP 서버 검색에 "chrome-devtools"  
+- Chrome chatgpt 확장 프로그램 설치: https://chromewebstore.google.com/detail/chatgpt/hehggadaopoacecdllhhajmbjkdcmajg?pli=1  
+
+  그리고 나서 codex app에서 좌하단 이니셜 클릭 → 설정 → 좌측 탭의 "컴퓨터 사용" → Google Chrome 사용
 
 ### 4. chrome 브라우저로 KIST 포탈·Dooray 로그인 필요
 - kk-mail, kk-budget 스킬은 먼저 chrome 브라우저로 KIST 포탈에 로그인해 둔 채로 진행  
