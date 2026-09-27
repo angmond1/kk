@@ -56,7 +56,7 @@ KIST 행정 자동화 skill 6종(`kk-mail`·`kk-wiki`·`kk-pay`·`kk-meeting`·`
    claude mcp add --scope user chrome-devtools -- npx -y chrome-devtools-mcp@latest
    ```
    (`--scope user` 라 Claude Desktop 도 같은 등록을 읽는다. plugin 경로도 가능: `claude plugin install chrome-devtools-mcp@claude-plugins-official`.) `claude` CLI 가 PATH 에 없으면(데스크톱 앱만 설치) 먼저 **환경변수 `CLAUDE_CODE_EXECPATH`** 의 실행 파일(데스크톱 앱에 들어 있는 Claude Code)로 같은 명령을 돌린다: `"$CLAUDE_CODE_EXECPATH" mcp add --scope user chrome-devtools -- npx -y chrome-devtools-mcp@latest` (2026-09-28 Windows 실측: 격리한 설정 폴더에서 CLI·앱 내장본 모두 등록 후 `mcp list` 가 6초 만에 `✔ Connected`, `cmd /c` 없이 `npx` 그대로 동작). 그것도 없을 때만 사용자 홈의 **`.claude.json`**(Windows `C:\Users\<이름>\.claude.json`, macOS `~/.claude.json` — Claude Code 와 Desktop 의 Code 탭이 공통으로 읽는 사용자 설정)을 직접 편집한다(같은 결과): 파일이 없으면 `{"mcpServers": {"chrome-devtools": {"type": "stdio", "command": "npx", "args": ["-y", "chrome-devtools-mcp@latest"]}}}` 로 새로 만들고, 있으면 JSON 을 파싱해 `mcpServers` 에 이 항목만 **병합**(다른 키 보존, 편집 전 백업). 등록 후 재시작 필요.
-   ⭐ **사용자가 "chrome-devtools-mcp 설치해줘" 라고만 말해도 이 항목을 수행한다**(README 준비물 3): Node.js(`npx`) 확인 → 없으면 Step 0 대로 설치 → 등록 → "재시작 후 도구 목록에 `upload_file` 이 보이면 성공" 안내. 사용자에게 **"파일첨부 때는 Claude 전용 새 Chrome 창이 뜨고, 거기서 포탈 로그인을 한 번 더 해야 한다"** 를 미리 알려준다.
+   ⭐ **사용자가 "chrome-devtools mcp 설치해서 사용 가능하게 해줘"(README 준비물 3 문구)나 "chrome-devtools-mcp 설치해줘" 라고만 말해도 이 항목을 수행한다**: Node.js(`npx`) 확인 → 없으면 Step 0 대로 설치 → 등록 → "재시작 후 도구 목록에 `upload_file` 이 보이면 성공" 안내. 사용자에게 **"파일첨부 때는 Claude 전용 새 Chrome 창이 뜨고, 거기서 포탈 로그인을 한 번 더 해야 한다"** 를 미리 알려준다.
 
 ### Step 4 — 토큰 파일 안내 (Dooray 토큰)
 설치로 `<root>/token.txt` 가 생겼다. **절대경로를 그대로 보여주며** 안내한다:
