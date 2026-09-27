@@ -140,7 +140,7 @@ open(os.path.join(T, "m.vtt"), "w", encoding="utf-8").write("WEBVTT\n\n00:00:01.
 open(os.path.join(T, "old.hwp"), "wb").write(b"\xd0\xcf")
 EOF
 $PY "$TR" check "$T/회의 260915_130200.wav" > "$T/t1" 2>&1
-chk "check: 녹음 길이·파일 이름 시각·권장 요약 줄" "grep -q '녹음 2분' '$T/t1' && grep -q '파일 이름 시각 2026-09-15 13:02' '$T/t1' && grep -q '^\[요약\] 권장 ' '$T/t1'"
+chk "check: 녹음 길이·파일 이름 시각·사용자 안내 한 줄·요약 줄" "grep -q '녹음 2분' '$T/t1' && grep -q '파일 이름 시각 2026-09-15 13:02' '$T/t1' && [ \$(grep -c '^\[사용자 안내\] ' '$T/t1') -eq 1 ] && grep -q '^\[요약\] 설치됨 ' '$T/t1'"
 "$PY" - "$S/kk-meeting/scripts" > "$T/t2" 2>&1 <<'EOF'
 import sys
 sys.path.insert(0, sys.argv[1])
@@ -161,6 +161,27 @@ print("cpu2", route(2, 16, None))
 print("ram4", route(8, 4, None))
 EOF
 chk "check: 사양별 권장(그래픽카드·8코어·4코어 62분·2코어·메모리 4GB)" "grep -q \"gpu ('local-gpu', 'local-cpu')\" '$T/t2' && grep -q \"cpu8 ('local-cpu', 'phone')\" '$T/t2' && grep -q \"cpu4_62min ('phone', 'local-cpu')\" '$T/t2' && grep -q \"cpu2 ('phone', 'local-cpu')\" '$T/t2' && grep -q \"ram4 ('phone', 'local-cpu')\" '$T/t2'"
+"$PY" - "$S/kk-meeting/scripts" > "$T/t2b" 2>&1 <<'EOF'
+import sys, re
+sys.path.insert(0, sys.argv[1])
+import transcribe as t
+t.audio_info = lambda p: {"file": "x.m4a", "size_mb": 30, "duration": 62 * 60, "created": None, "how": "mp4", "mtime": "2026-09-15 14:05"}
+def msg(installed, cores, gpu):
+    t._installed = lambda: {"faster_whisper": "1.2.1" if installed else None, "models": ["small", "turbo"] if installed else [], "gpu_libs": installed}
+    t._cpu = lambda: {"name": "", "logical": cores * 2, "physical": cores}
+    t._ram_gb = lambda: 16
+    t._gpu = lambda: gpu
+    return t.user_message(t.assess("x.m4a"))
+G = {"name": "NVIDIA RTX", "mem_gb": 12}
+m = {"설치됨·그래픽카드": msg(True, 12, G), "설치됨·CPU": msg(True, 4, None), "미설치·그래픽카드": msg(False, 12, G), "미설치·CPU": msg(False, 4, None)}
+ok = ("바로 글로 바꾸겠습니다" in m["설치됨·그래픽카드"] and "설치할까요" not in m["설치됨·그래픽카드"]
+      and "다른 일을 하셔도" in m["설치됨·CPU"] and "설치할까요" not in m["설치됨·CPU"]
+      and "빠르지만" in m["미설치·그래픽카드"] and m["미설치·그래픽카드"].endswith("설치할까요?")
+      and "그래픽카드가 없어 오래 걸립니다" in m["미설치·CPU"] and m["미설치·CPU"].endswith("설치할까요?")
+      and not any(re.search(r"pip|faster|whisper|nvidia|cudnn|turbo|small|--", v, re.I) for v in m.values()))
+print("MSG_OK" if ok else "MSG_BAD " + repr(m))
+EOF
+chk "check: 사용자 안내 네 가지(설치됨이면 묻지 않음·미설치면 설치할까요·CPU 는 오래 걸림·기술 용어 없음)" "grep -q '^MSG_OK' '$T/t2b'"
 $PY "$TR" text "$T/메모.docx" > "$T/t3" 2>&1; $PY "$TR" text "$T/m.vtt" >> "$T/t3" 2>&1; $PY "$TR" text "$T/old.hwp" >> "$T/t3" 2>&1
 chk "text: docx 줄바꿈·자막 화자·hwp 안내" "grep -q '담당 김키키' '$KIKI_ROOT/meeting/transcripts/메모_회의기록.txt' && grep -q '이키키: 시작하겠습니다.' '$KIKI_ROOT/meeting/transcripts/m_회의기록.txt' && grep -q 'hwpx 나 pdf 로 저장' '$T/t3'"
 mkdir -p "$T/nofw/faster_whisper"; echo 'raise ImportError("selftest: 설치 안 된 PC 흉내")' > "$T/nofw/faster_whisper/__init__.py"   # 이 PC 에 설치돼 있어도 '없음' 경로를 시험

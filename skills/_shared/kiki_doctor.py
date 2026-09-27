@@ -174,7 +174,7 @@ def run():
 def text(rep):
     L = [f"[kiki doctor] Python {rep['python']} | 패키지 " + ", ".join(f"{k}{'✓' if v else '✗'}" for k, v in rep["packages"].items())
          + f" | Node {'✓' if rep['node']['node'] and rep['node']['npx'] else '✗'} {rep['node']['version']}"]
-    L.append("선택: " + ", ".join(f"{k}{'✓' if v else '✗'}" for k, v in rep.get("optional", {}).items()) + " (kk-meeting 회의 녹음 → 글, 녹음이 있을 때 transcribe.py check 후 동의받고 설치)")
+    L.append("선택: " + ", ".join(f"{k}{'✓' if v else '✗'}" for k, v in rep.get("optional", {}).items()) + " (kk-meeting 회의 녹음 → 글. 기본은 휴대폰·클로바노트로 바꾼 글, 사용자가 원할 때만 설치)")
     L.append("skills: " + "; ".join(f"{k} {' '.join(v) if v else '(코어 없음)'}" for k, v in rep["skills"].items()))
     kr = rep["kiki_root"]
     L.append(f"kiki_root: {kr['path']} ({kr['from']}, {'있음' if kr['exists'] else '없음'}) 하위 " + " ".join(f"{d}{'✓' if ok else '✗'}" for d, ok in kr["subdirs"].items()))

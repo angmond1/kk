@@ -41,7 +41,7 @@ kiki 는 Chrome 창 두 종류를 쓴다. **skill 마다 쓰는 창이 정해져
 - 조회 전용(kk-budget·kk-inspect)·세션쿠키(kk-mail)·세금계산서 직접작성은 토큰 불요.
 
 ### 4. Python 패키지 — **필요한 시점에, 그때그때** (부트스트랩에서 일괄 설치 X)
-- 선택: `faster-whisper`(kk-meeting 회의 녹음 → 글, 로컬 음성 인식). 녹음이 있을 때 `kk-meeting/scripts/transcribe.py check <녹음>` 로 이 PC 사양을 보고 권장될 때만, 크기(패키지 약 100MB + 모델 0.5~1.6GB)를 알리고 동의받아 설치. ffmpeg·그래픽카드 불필요. 사양이 낮으면 설치 대신 휴대폰 녹음 앱·클로바노트 안내 → `kk-meeting/references/meeting_transcribe.md`.
+- 선택: `faster-whisper`(kk-meeting 회의 녹음 → 글, 로컬 음성 인식). 기본은 휴대폰 녹음 앱·클로바노트로 바꾼 글을 받는다. 사용자가 녹음 파일을 그대로 주고 이 PC 에서 바꾸길 원할 때만 `kk-meeting/scripts/transcribe.py check <녹음>` 의 `[사용자 안내]` 한 줄로 묻고 동의받아 설치(그래픽카드가 없으면 오래 걸린다) → `kk-meeting/references/meeting_transcribe.md`.
 `python -c "import X"` 로 확인 → 없으면 *"`pip install X` 가 필요합니다(용도). 설치할까요?"* → confirm 후 설치. 크래시 X.
 - **OS 별 설치 명령**(에이전트가 셸에서 실행): Windows `python -m pip install X`(`python` 이 PATH 에 없으면 `py -3 -m pip install X`, 스크립트 실행도 `py -3 …`) / macOS·Linux `python3 -m pip install --user X`. Python 본체가 아예 없으면 4단계가 아니라 설치(`CLAUDE.md` Step 0 — Windows `winget install -e --id Python.Python.3.12 …`)부터 안내.
   - macOS(Homebrew Python)·최신 Ubuntu 는 `externally-managed-environment` 오류로 막힐 수 있다 → `python3 -m pip install --user --break-system-packages X` (여기 쓰는 패키지는 순수 라이브러리라 시스템에 영향 없음). 그래도 안 되면 `python3 -m venv ~/.claude/kiki/venv` 후 그 venv 의 python 으로 skill 스크립트 실행.

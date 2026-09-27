@@ -353,7 +353,7 @@ def _est(dur_min: float, rtf: float, f: float = 1.0) -> tuple:
 def _rng(lo: int, hi: int) -> str:
     """예상 시간 문구: 1분 안 / 약 N분 / 약 A~B분."""
     if hi <= 1:
-        return "1분 안"
+        return "1분 이내"
     return f"약 {lo}분" if lo == hi else f"약 {lo}~{hi}분"
 
 
@@ -419,6 +419,35 @@ def assess(path: str | None = None) -> dict:
     return rep
 
 
+def _dl_gb(r: dict) -> float:
+    """처음 한 번 내려받을 양(GB) — 프로그램 약 0.1 + 모델(small 0.5·turbo 1.6) + 그래픽카드 라이브러리 약 1.4."""
+    i = r["installed"]
+    gb = (0 if i["faster_whisper"] else 0.1) + (r["model_download_gb"] or 0)
+    if r["route"] == "local-gpu" and not i["gpu_libs"]:
+        gb += 1.4
+    return round(gb, 1)
+
+
+def user_message(r: dict) -> str:
+    """사용자에게 그대로 전할 한 줄(설치 명령·모델 이름 같은 세부는 넣지 않는다)."""
+    a, i = r["audio"], r["installed"]
+    lo, hi = r["estimate"]
+    dur = f"{a['duration'] / 60:.0f}분 녹음 기준" if a and a["duration"] else "한 시간 녹음 기준"
+    blocked = [w for w in r["why"] if w.startswith(("파이썬", "여유 공간"))]
+    if blocked:
+        return "이 PC 에서는 음성 인식 프로그램을 쓰기 어렵습니다(" + "; ".join(blocked) + "). 휴대폰 녹음 앱이나 클로바노트로 글로 바꿔 주세요."
+    gpu = r["route"] == "local-gpu"
+    if i["faster_whisper"]:
+        extra = f" 처음 한 번 약 {r['model_download_gb']}GB 를 내려받습니다." if r["model_download_gb"] else ""
+        if gpu:
+            return f"이 PC 에 설치된 음성 인식으로 바로 글로 바꾸겠습니다(그래픽카드, {dur} {_rng(lo, hi)}).{extra}"
+        return f"이 PC 에 설치된 음성 인식으로 바로 글로 바꾸겠습니다. 그래픽카드가 없어 시간이 걸리니({dur} {_rng(lo, hi)}) 그동안 다른 일을 하셔도 됩니다.{extra}"
+    if gpu:
+        return f"이 PC 에 음성 인식 프로그램을 설치하면 직접 바꿀 수 있습니다. 그래픽카드가 있어 빠르지만({dur} {_rng(lo, hi)}), 처음 한 번 약 {_dl_gb(r)}GB 를 내려받습니다. 설치할까요?"
+    return (f"이 PC 에 음성 인식 프로그램을 설치하면 직접 바꿀 수는 있지만, 그래픽카드가 없어 오래 걸립니다({dur} {_rng(lo, hi)}). "
+            f"처음 한 번 약 {_dl_gb(r)}GB 도 내려받습니다. 설치할까요?")
+
+
 def fmt_assess(r: dict) -> str:
     c, g, i, a = r["cpu"], r["gpu"], r["installed"], r["audio"]
     L = [f"[이 PC] {c['name'] or 'CPU'} · 물리 {c['physical']}코어(논리 {c['logical']}) · 메모리 {r['ram_gb']:.0f}GB · 그래픽카드 "
@@ -430,29 +459,20 @@ def fmt_assess(r: dict) -> str:
         t = "녹음 시작 " + a["created"] + "(파일 정보)" if a.get("created") else ("파일 이름 시각 " + a["name_time"] if a.get("name_time") else "녹음 시작 시각 정보 없음")
         L.append(f"[녹음] {a['file']} · {a['size_mb']}MB · " + (f"{a['duration'] / 60:.0f}분" if a["duration"] else "길이 모름") + f" · {t} · 파일 수정 {a['mtime']}")
     lo, hi = r["estimate"]
-    base = f"{r['ref_minutes']}분 녹음 기준" + ("" if a and a["duration"] else "(길이 모름 — 1시간으로 가정)")
-    inst_note = ""
-    if r["needs_install"]:
-        parts = []
-        if r["install_cmd"]:
-            parts.append(f"설치 명령 {r['install_cmd']} (내려받기 약 {r['install_mb']}MB" + (", 그래픽카드 라이브러리는 설치 후 약 2GB" if r["install_mb"] > 1000 else "") + ")")
-        if r["model_download_gb"]:
-            parts.append(f"모델 {r['model']} 약 {r['model_download_gb']}GB 내려받기")
-        inst_note = " 처음 한 번: " + ", ".join(parts) + ". 사용자 동의를 받은 뒤 설치."
-    names = {"turbo": "정확한 모델 turbo", "small": "가벼운 모델 small", "medium": "중간 모델 medium"}
-    cm = r.get("cpu_model", "small")
-    if r["route"] == "local-gpu":
-        cl, ch = r["estimates"]["cpu_" + cm]
-        L.append(f"[권장] 이 PC 에서 변환 — 그래픽카드, 정확한 모델 turbo, {base} 예상 {_rng(lo, hi)}.{inst_note} 그래픽카드가 안 되면 CPU 로 자동 전환({names[cm]}, {_rng(cl, ch)}).")
-    elif r["route"] == "local-cpu":
-        other = "small" if r["model"] == "turbo" else "turbo"
-        ol, oh = r["estimates"]["cpu_" + other]
-        L.append(f"[권장] 이 PC 에서 변환 — CPU, {names[r['model']]}, {base} 예상 {_rng(lo, hi)}({names[other]} 는 {_rng(ol, oh)}).{inst_note} run 에 --model {r['model']}")
-    else:
-        L.append("[권장] 휴대폰 녹음 앱의 텍스트 변환 또는 클로바노트 " + CLOVA_URL + " 로 바꾼 글을 받는다 — 이유: " + ("; ".join(r["why"]) or "이 PC 사양")
-                 + ". 클로바노트는 녹음이 외부 서버로 올라가므로 내부 회의면 보안 기준 확인."
-                 + (f" 사용자가 원하면 이 PC 에서도 가능({names[r['model']]}, {base} {_rng(lo, hi)}, run 에 --model {r['model']}).{inst_note}" if r["alt"] == "local-cpu" else ""))
-    L.append(f"[요약] 권장 {r['route']}" + (f"(대안 {r['alt']})" if r["alt"] else "") + f" | 예상 {_rng(lo, hi)} | 설치 필요 {'예' if r['needs_install'] else '아니오'}"
+    gpu = r["route"] == "local-gpu"
+    blocked = any(w.startswith(("파이썬", "여유 공간")) for w in r["why"])
+    how = "어려움" if blocked else ("그래픽카드" if gpu else "CPU")
+    claude = f"[Claude] 이 PC 변환 {how} · 모델 {r['model']} · run 에 --model {r['model']}" + ("" if gpu else " --device cpu")
+    if r["install_cmd"]:
+        claude += f" · 설치 명령(동의 후) {r['install_cmd']}"
+    if r["model_download_gb"]:
+        claude += f" · 모델 첫 내려받기 약 {r['model_download_gb']}GB"
+    if gpu:
+        cl, ch = r["estimates"]["cpu_" + r.get("cpu_model", "small")]
+        claude += f" · 그래픽카드가 안 되면 run 이 CPU 로 자동 전환({_rng(cl, ch)})"
+    L.append(claude)
+    L.append("[사용자 안내] " + user_message(r))
+    L.append(f"[요약] 설치됨 {'예' if i['faster_whisper'] else '아니오'} | 이 PC 변환 {how} | 예상 {_rng(lo, hi)} | 첫 내려받기 {_dl_gb(r)}GB"
              + (f" | 녹음 {a['duration'] / 60:.0f}분" if a and a["duration"] else ""))
     return "\n".join(L)
 
