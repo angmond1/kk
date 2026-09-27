@@ -254,6 +254,7 @@ f.rqstGrid_oncellclick(rqstGridComp, ei);  // ei.row=row, ei.cell=0, ei.col=0
 ## 8-1. 첨부/저장 후 화면 클릭 막힘 (NEXACRO modal layer — tool 무관)
 첨부·저장(`gfn_upload`/`doSave`) 후 **빈 NEXACRO modal layer 가 화면 전체를 덮어** 이후 클릭(시간칸·그리드 등)이 안 먹는 경우가 있다. 임시 input 때문이 아니라 저장 후 남은 modal 레이어가 클릭을 가로채는 것 (2026-06-07 codex 실증, Claude 도 동일).
 - 진단: `document.elementFromPoint(500,300)` → 반환이 `..._form_modalPopDiv` / `...modalPopDivScrollableInnerContainerElement(_inner)` 류면 그 레이어가 가로챔.
+- 먼저 실제 확인창·입력 팝업이 열려 있는지 본다 — 열려 있으면 그 창을 정상 처리한다. **빈 레이어만 남은 것을 확인했을 때만** 아래를 쓴다(살아 있는 모달의 확인·입력을 건너뛰는 용도 금지, 2026-09-27 Codex 문서 정리에서 보강).
 - 해결: 그 레이어들에 `pointer-events:none !important` 주입:
 ```js
 let s = document.getElementById("kk-clickfix-style")
