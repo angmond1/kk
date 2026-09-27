@@ -10,7 +10,7 @@
 <br>
 
 ## 구성
-| skill | 용도 | 기능 | 권장모델<br>(Claude / Codex) |
+| skill | 용도 | 기능 | 권장모델 |
 |-------|------|------|:--------:|
 | **kk-pay** | 지급신청 | 세금계산서 지급신청서 자동작성,<br>카드결제건 RPA 자동처리 | Opus / Sol<br>(RPA는 Sonnet / Luna) |
 | **kk-meeting** | 회의비처리 | 회의록, 회의비 지급신청서 자동 작성  | Opus / Sol |
