@@ -14,7 +14,7 @@ r"""kk-meeting 회의 기록 → 글. 녹음은 이 PC 밖으로 나가지 않�
       pdf 는 Claude 가 바로 읽는다. hwp(구형)는 한글에서 hwpx·pdf 로 저장해 달라고 한다.
 
 설치(사용자 동의 후 처음 한 번): python -m pip install faster-whisper      — ffmpeg 불필요(PyAV 가 오디오를 읽는다), 그래픽카드 불필요.
-  NVIDIA 그래픽카드를 쓰려면 추가로: python -m pip install nvidia-cublas-cu12 "nvidia-cudnn-cu12==9.*"   (약 1GB 이상; 안 되면 CPU 로 자동 전환)
+  NVIDIA 그래픽카드를 쓰려면 추가로: python -m pip install nvidia-cublas-cu12 "nvidia-cudnn-cu12==9.*"   (내려받기 약 1.4GB, 설치 후 약 2GB; 안 되면 CPU 로 자동 전환)
 모델은 처음 변환할 때 {kiki_root}/_models/whisper 로 내려받는다(small 약 0.5GB, medium 약 1.5GB, turbo 약 1.6GB).
 속도는 공식 벤치마크(small·int8·8스레드 데스크톱에서 13분 녹음 1분 42초)를 바탕으로 한 추정치 — 실제 시간은 run 요약 줄로 확인한다.
 """
@@ -413,7 +413,7 @@ def assess(path: str | None = None) -> dict:
     if route == "local-gpu" and not inst["gpu_libs"]:
         pkgs += ["nvidia-cublas-cu12", "nvidia-cudnn-cu12==9.*"]
     rep.update({"route": route, "alt": alt, "model": model, "estimate": est, "why": why,
-                "install_cmd": _pip_cmd(*pkgs) if pkgs else "", "install_mb": (100 if "faster-whisper" in pkgs else 0) + (1100 if len(pkgs) > 1 else 0),
+                "install_cmd": _pip_cmd(*pkgs) if pkgs else "", "install_mb": (100 if "faster-whisper" in pkgs else 0) + (1400 if len(pkgs) > 1 else 0),
                 "model_download_gb": 0 if model in inst["models"] else MODELS[model][1],
                 "needs_install": bool(pkgs) or model not in inst["models"]})
     return rep
@@ -435,7 +435,7 @@ def fmt_assess(r: dict) -> str:
     if r["needs_install"]:
         parts = []
         if r["install_cmd"]:
-            parts.append(f"설치 명령 {r['install_cmd']} (약 {r['install_mb']}MB)")
+            parts.append(f"설치 명령 {r['install_cmd']} (내려받기 약 {r['install_mb']}MB" + (", 그래픽카드 라이브러리는 설치 후 약 2GB" if r["install_mb"] > 1000 else "") + ")")
         if r["model_download_gb"]:
             parts.append(f"모델 {r['model']} 약 {r['model_download_gb']}GB 내려받기")
         inst_note = " 처음 한 번: " + ", ".join(parts) + ". 사용자 동의를 받은 뒤 설치."
