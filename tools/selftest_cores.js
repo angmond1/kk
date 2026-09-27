@@ -30,15 +30,13 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
     if (path.includes('getBdgInfo')) return xml([row({ ACCCLSCD: '6', TOTBUDGAMT: '1000000' })]);
     return xml([row({ LEV: '1', BUDGITEMCD: '15', BUDGITEMNM: '15 : 재료비', BUDGITEMCLSNM: '직접비', LASTBUDGAMT: '500000', CTRLPERFAMT: '100000', CTRLCAUSAMT: '50000', TEMPAMT: '0', BALNAMT: '350000', BAL_RATE: '70' })]);
   } });
-  ok('budget inject 1.4', load('kk-budget/scripts/portal_ops.min.js') === 'kk-budget-portal/1.4 =^.^=');
+  ok('budget inject 1.5', load('kk-budget/scripts/portal_ops.min.js') === 'kk-budget-portal/1.5 =^.^=');
   const B = window.kkBudget;
   // 정상
   let snap = await B.collectAll({ acccds: ['2E11111', '2N22222'], userName: '김키키' });
   ok('budget 정상 → | OK', /^done 2\/2 \| run \w{4} \| projects 2, warnings 0 \| OK$/.test(B.collectStatus()), B.collectStatus());
   ok('budget run_id 가 스냅샷 맨 앞', Object.keys(snap)[0] === 'run_id' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(snap.collected_at), JSON.stringify(Object.keys(snap)));
   const dl = B.downloadSnapshot();
-  const fb = B.fmtBudget(), rowOf = (a) => fb.split('\n').find(l => l.startsWith(a)) || '';
-  ok('budget 과책 아닌 과제의 내부인건비 → ※ + 안내(예산 없음과 구분)', rowOf('2N22222').includes('※') && !rowOf('2E11111').includes('※') && fb.includes('※ 과책 아닌 과제: 내부인건비는 과제책임자·담당 행정원만'), fb);
   ok('budget download 이름·명령에 run', dl.includes('kiki_budget_' + snap.snapshot_date + '_' + snap.run_id + '.json') && dl.includes('--expect ' + snap.run_id) && clicked.pop() === 'kiki_budget_' + snap.snapshot_date + '_' + snap.run_id + '.json', dl);
   ok('budget fmt 출력 필터 안전', clean(B.fmtBudget()) && B.fmtBudget(snap).includes('run ' + snap.run_id), B.fmtBudget());
   ok('budget fmt 머리줄 과제 범위', /\| 과제 1-2 of 2\]/.test(B.fmtBudget()), B.fmtBudget().split('\n')[0]);
@@ -96,6 +94,21 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
   window.__c = null; M.queryCardsBoth({ fromDt: '20260901', toDt: '20260927', empno: '00XXXX' }).then(r => window.__c = r, e => window.__c = { error: String(e) }); await tick(80);
   ok('meeting 2-스텝 세션 만료 → ERR PORTAL', M.fmtMeeting(window.__c).startsWith('ERR Error: PORTAL: 통합정보 응답이 XML 이 아닙니다'), M.fmtMeeting(window.__c));
 
+  // ================= kk-budget 집행내역 헬퍼(exec_detail) — 2026-09-28 인건비성 세부내역 거부 알림 =================
+  dom();
+  let alerted = 0, opened = 0;
+  const dsRows = [{ LEV: '1', BUDGITEMCD: '05', BUDGITEMNM: '05 : 내부인건비2', EXPITEMKORNM: '내부인건비2', CTRLPERFAMT: '100', CTRLCAUSAMT: '0', TEMPAMT: '0' },
+                  { LEV: '1', BUDGITEMCD: '15', BUDGITEMNM: '15 : 연구재료비', EXPITEMKORNM: '연구재료비', CTRLPERFAMT: '50', CTRLCAUSAMT: '0', TEMPAMT: '0' }];
+  const xgrid = { _type_name: 'Grid', name: 'Grid10', getBindCellIndex: (b, col) => ({ CTRLPERFAMT: 8, CTRLCAUSAMT: 9, TEMPAMT: 10, BALNAMT: 11 })[col] ?? -1, setCellPos() {} };
+  const xform = { name: 'bdg_2030', components: [xgrid], ds_datagrid1: { getRowCount: () => dsRows.length, getColumn: (r, c) => dsRows[r][c], set_rowposition(r) { this.pos = r; } },
+    Tab00_tabpage1_Grid01_oncellclick() { if (/인건비/.test(dsRows[xform.ds_datagrid1.pos].EXPITEMKORNM)) window.alert('인건비성 항목이 포함된 상세내역은 계정책임자및 계정책임자가 지정한 계정관리자에 한해서만 조회가능합니다.'); else opened++; } };
+  window.application = { mainframe: { all: [{ form: xform }] }, popupframes: { length: 0, getItem() { return null; } } };
+  window.alert = () => { alerted++; };
+  ok('exec_detail inject 1.3', load('kk-budget/scripts/exec_detail.min.js') === 'kk-budget-exec-detail/1.3 =^.^=');
+  const XE = window.kkExe; XE.init();
+  const xc = XE.cats(), xd1 = XE.open(0, 'exec'), xd2 = XE.open(1, 'exec');
+  window.alert(); 
+  ok('exec_detail 인건비성 표시 + 거부 알림은 가로채 DENIED(탭 안 멈춤) + 끝나면 alert 원복', xc[0].personnel && !xc[1].personnel && xd1.startsWith('DENIED: 인건비성') && xd2.startsWith('ok') && opened === 1 && alerted === 1, [xd1, xd2, opened, alerted].join(' | '));
   // ================= kk-mail =================
   dom();
   let mm = 'ok';

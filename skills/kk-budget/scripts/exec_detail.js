@@ -85,7 +85,9 @@
         nm: String(ds.getColumn(r, 'BUDGITEMNM') || '').replace(/&#32;/g, ' '),
         exec: num(ds.getColumn(r, 'CTRLPERFAMT')),
         pd: num(ds.getColumn(r, 'CTRLCAUSAMT')),
-        pp: num(ds.getColumn(r, 'TEMPAMT'))
+        pp: num(ds.getColumn(r, 'TEMPAMT')),
+        // 인건비성(외부·내부인건비·학생인건비·연구수당): 세부내역은 계정책임자·지정 계정관리자만(포털 BDG_CHK_0143, 연구수당은 계정책임자만)
+        personnel: /인건비|연구수당/.test(String(ds.getColumn(r, 'EXPITEMKORNM') || '') + String(ds.getColumn(r, 'BUDGITEMNM') || '')) || String(ds.getColumn(r, 'BUDGITEMCD') || '') === '29'
       });
     }
     return out;
@@ -93,19 +95,26 @@
 
   // ★ 핸들러는 인자의 e.row 가 아니라 "그리드 현재 행"을 본다.
   //   set_rowposition 을 먼저 하지 않으면 무조건 첫 행 팝업이 열린다.
+  // 2026-09-28 실측: 권한 없는 인건비성 항목을 누르면 포털이 네이티브 alert("인건비성 항목이 포함된 상세내역은 계정책임자및 …")를 띄우고,
+  //   알림창이 떠 있는 동안 탭 전체가 멈춰 자동화 명령이 45초 시간초과로 끝난다(사용자가 '확인'을 눌러야 풀림).
+  //   → 셀클릭 호출 동안만 window.alert 를 가로채 메시지를 받고 'DENIED …' 를 돌려준다. 팝업은 열리지 않는다.
   function open(dsRow, kind) {
     var c = S.cell[kind || 'exec'];
     if (c == null || c < 0) return 'ERR: bad kind';
+    var msgs = [], orig = window.alert;
     try {
       close();                                  // 잔류 팝업 정리(정식 경로)
       S.form.ds_datagrid1.set_rowposition(dsRow);
       try { S.grid.setCellPos(c); } catch (e) { }
+      window.alert = function (m) { msgs.push(String(m == null ? '' : m)); };
       S.form.Tab00_tabpage1_Grid01_oncellclick(S.grid, {
         row: dsRow, cell: c, col: c,
         fromobject: S.grid, fromreferenceobject: S.grid, eventid: 'oncellclick'
       });
-      return 'ok r' + dsRow + ' c' + c;
     } catch (e) { return 'ERR:' + String(e).slice(0, 120); }
+    finally { window.alert = orig; }
+    if (msgs.length) return 'DENIED: ' + msgs[0].replace(/\s+/g, ' ').slice(0, 160);
+    return 'ok r' + dsRow + ' c' + c;
   }
 
   // 팝업은 application.popupframes 최상단.
@@ -206,7 +215,7 @@
 
   window.kkExe = {
     init: init, cats: cats, open: open, parse: parse, close: close, pop: pop,
-    _version: 'kk-budget-exec-detail/1.2'
+    _version: 'kk-budget-exec-detail/1.3'
   };
   return window.kkExe._version + ' =^.^=';
 })();
