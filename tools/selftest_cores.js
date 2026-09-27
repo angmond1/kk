@@ -30,13 +30,15 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
     if (path.includes('getBdgInfo')) return xml([row({ ACCCLSCD: '6', TOTBUDGAMT: '1000000' })]);
     return xml([row({ LEV: '1', BUDGITEMCD: '15', BUDGITEMNM: '15 : 재료비', BUDGITEMCLSNM: '직접비', LASTBUDGAMT: '500000', CTRLPERFAMT: '100000', CTRLCAUSAMT: '50000', TEMPAMT: '0', BALNAMT: '350000', BAL_RATE: '70' })]);
   } });
-  ok('budget inject 1.3', load('kk-budget/scripts/portal_ops.min.js') === 'kk-budget-portal/1.3 =^.^=');
+  ok('budget inject 1.4', load('kk-budget/scripts/portal_ops.min.js') === 'kk-budget-portal/1.4 =^.^=');
   const B = window.kkBudget;
   // 정상
   let snap = await B.collectAll({ acccds: ['2E11111', '2N22222'], userName: '김키키' });
   ok('budget 정상 → | OK', /^done 2\/2 \| run \w{4} \| projects 2, warnings 0 \| OK$/.test(B.collectStatus()), B.collectStatus());
   ok('budget run_id 가 스냅샷 맨 앞', Object.keys(snap)[0] === 'run_id' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(snap.collected_at), JSON.stringify(Object.keys(snap)));
   const dl = B.downloadSnapshot();
+  const fb = B.fmtBudget(), rowOf = (a) => fb.split('\n').find(l => l.startsWith(a)) || '';
+  ok('budget 과책 아닌 과제의 내부인건비 → ※ + 안내(예산 없음과 구분)', rowOf('2N22222').includes('※') && !rowOf('2E11111').includes('※') && fb.includes('※ 과책 아닌 과제: 내부인건비는 과제책임자·담당 행정원만'), fb);
   ok('budget download 이름·명령에 run', dl.includes('kiki_budget_' + snap.snapshot_date + '_' + snap.run_id + '.json') && dl.includes('--expect ' + snap.run_id) && clicked.pop() === 'kiki_budget_' + snap.snapshot_date + '_' + snap.run_id + '.json', dl);
   ok('budget fmt 출력 필터 안전', clean(B.fmtBudget()) && B.fmtBudget(snap).includes('run ' + snap.run_id), B.fmtBudget());
   ok('budget fmt 머리줄 과제 범위', /\| 과제 1-2 of 2\]/.test(B.fmtBudget()), B.fmtBudget().split('\n')[0]);

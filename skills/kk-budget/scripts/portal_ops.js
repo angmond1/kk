@@ -212,11 +212,17 @@
       if (!snap || !snap.projects) return notReady();
     }
     var mm = function (v) { return (Math.round((v || 0) / 100000) / 10).toFixed(1); };
+    // 2026-09-28 사용자 지시: 예실대비표의 내부인건비(1·2)는 과제책임자·담당 행정원만 조회된다 → 과책 아닌 과제에서 그 항목이 없으면
+    //   '-'(예산 없음)가 아니라 '※'(볼 수 없음). 포스닥 인건비는 내부인건비2 라 파악 불가, 직접비 합계에도 빠져 있다.
+    var hidden = false;
     var rows = snap.projects.slice(from).map(function (p) {
-      var cells = snap.track_categories.map(function (c) { var x = p.categories[c]; return x ? mm(x.D) : '-'; });
-      return p.acccd + ' (' + (p.pi || '') + (p.role ? '·' + p.role : '') + ') | ' + cells.join(' | ') + ' | ' + mm(p.direct.D) + ' / ' + mm(p.direct.A);
+      var hid = !!p.role && p.role !== '주관' && !Object.keys(p.all_categories || p.categories || {}).some(function (k) { return /^내부인건비/.test(k); });
+      if (hid) hidden = true;
+      var cells = snap.track_categories.map(function (c) { var x = p.categories[c]; return x ? mm(x.D) : (hid && /^내부인건비/.test(c) ? '※' : '-'); });
+      return p.acccd + ' (' + (p.pi || '') + (p.role ? '·' + p.role : '') + ') | ' + cells.join(' | ') + ' | ' + mm(p.direct.D) + ' / ' + mm(p.direct.A) + (hid ? '※' : '');
     });
-    var tail = (snap.warnings || []).map(function (w) { return '⚠ ' + String(w).slice(0, 160); });
+    var tail = (hidden ? ['※ 과책 아닌 과제: 내부인건비는 과제책임자·담당 행정원만 조회(예산 없음 아님) — 포스닥 인건비(내부인건비2) 파악 불가, 직접비 합계에도 빠짐'] : [])
+      .concat((snap.warnings || []).map(function (w) { return '⚠ ' + String(w).slice(0, 160); }));
     if (snap.not_found && snap.not_found.length) tail.push('⚠ 참여 과제 목록에 없음: ' + snap.not_found.join(', '));
     var shown = fitRows(rows.concat(tail), 150), end = from + Math.min(shown.length, rows.length);
     var head = '[' + snap.snapshot_date + (snap.run_id ? ' run ' + snap.run_id : '') + ' | 과제 ' + (from + 1) + '-' + end + ' of ' + snap.projects.length + (shown.length < rows.length + tail.length ? ' ▶ 다음 조각 fmtBudget(null, ' + end + ')' : '') + '] 과제 | ' + snap.track_categories.join(' | ') + ' | 직접비 잔액/총액 (백만원)';
@@ -227,7 +233,7 @@
     parseRows: parseRows, decodeEnt: decodeEnt, num: num, CAT_MAP: CAT_MAP, esc: esc,
     queryProjects: queryProjects, queryBudgetTable: queryBudgetTable,
     collectAll: collectAll, collectStatus: collectStatus, downloadSnapshot: downloadSnapshot, fmtBudget: fmtBudget, get snapshot() { return snapshot; },
-    _version: 'kk-budget-portal/1.3',
+    _version: 'kk-budget-portal/1.4',
   };
   return window.kkBudget._version + ' =^.^=';
 })();

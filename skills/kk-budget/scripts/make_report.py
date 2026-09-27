@@ -2,7 +2,7 @@
 """
 kk-budget 예산 리포트 렌더러.
 입력: fetch 수집 JSON (snapshot_date / track_categories / projects) — projects 는 {acccd:{…}} 사전 또는 [{acccd,…}] 목록 둘 다 됨.
-  과제 = {name, pi, role, direct{A,D}, categories:{표시명:{A,exec,pendingDone,pendingProg,D}}} (kkBudget.queryBudgetTable 반환 그대로; 없는 비목은 키를 빼야 '-' 로 표시)
+  과제 = {name, pi, role, direct{A,D}, categories:{표시명:{A,exec,pendingDone,pendingProg,D}}} (kkBudget.queryBudgetTable 반환 그대로; 없는 비목은 키를 빼야 '-' 로 표시 — 과책 아닌 과제(role≠주관)의 내부인건비는 '조회불가')
 출력: 과제 행 x 카테고리(총액/잔액) + (한 칸 띄우고) 직접비(잔액/총액) 엑셀.
 사용: python make_report.py <input.json> <output.xlsx>
 credential-free. 개인 식별자/경로 하드코딩 없음(전부 인자/JSON).
@@ -115,14 +115,20 @@ def main(json_path, out_path):
     ws.row_dimensions[r2].height = 20
 
     row = r2 + 1
+    hidden = 0          # 과책 아닌 과제의 내부인건비 칸(볼 수 없음) — '-'(예산 없음)와 구분해 '조회불가'
     for code, p in projs.items():
+        role = str(p.get("role") or "")
+        hid = bool(role) and role != "주관" and not any(str(k).startswith("내부인건비") for k in (p.get("all_categories") or p.get("categories") or {}))
         txt(ws.cell(row=row, column=1, value=code), bold=True, align="center")
         txt(ws.cell(row=row, column=2, value=p.get("name", "")), bold=True)
         txt(ws.cell(row=row, column=3, value=f'{p.get("pi","")}/{p.get("role","")}'), align="center")
         col = 4
         for cat in cats:
             data = p.get("categories", {}).get(cat)
-            if not data:
+            if not data and hid and cat.startswith("내부인건비"):
+                dash(ws, row, col, "조회불가")
+                hidden += 1
+            elif not data:
                 dash(ws, row, col)
             else:
                 money(ws.cell(row=row, column=col, value=data.get("A", 0)), muted=True)
@@ -135,6 +141,10 @@ def main(json_path, out_path):
             money(ws.cell(row=row, column=direct_col + 1, value=direct.get("A", 0)), muted=True)
         ws.row_dimensions[row].height = 22
         row += 1
+    if hidden:
+        note = ws.cell(row=row + 1, column=1, value="※ 조회불가 — 내부인건비는 과제책임자·담당 행정원만 예실대비표에서 조회됩니다(과책 아닌 과제). "
+                                                        "포스닥 인건비(내부인건비2) 사용분은 파악할 수 없고, 그 과제의 직접비 합계에도 빠져 있습니다. '-' 는 그 비목 예산이 없는 것입니다.")
+        note.font = Font(size=9, color="7F7F7F")
 
     ws.column_dimensions["A"].width = 11
     ws.column_dimensions["B"].width = 30
@@ -163,6 +173,8 @@ def main(json_path, out_path):
         print("  ⚠", w)
     if nf:
         print("  ⚠ 참여 과제 목록에 없음:", ", ".join(nf))
+    if hidden:
+        print(f"  ※ 과책 아닌 과제의 내부인건비 {hidden}칸은 '조회불가'(과제책임자·담당 행정원만 조회 — 예산 없음이 아님, 포스닥 인건비 파악 불가)")
     return out
 
 

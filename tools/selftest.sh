@@ -80,6 +80,19 @@ $M --from-downloads --expect r001 --out "$T/o.xlsx" --save-snapshot "$T/snap" > 
 chk "run 짝짓기 + 경고 표시 + 보관" "grep -q 'run r001, 경고 1' '$T/b1' && [ -f '$T/o.xlsx' ] && [ -f '$T/snap/260927.json' ]"
 $M --from-downloads --expect r000 --out "$T/o0.xlsx" --save-snapshot "$T/snap0" > "$T/b2" 2>&1
 chk "과제 0건 스냅샷은 엑셀·보관 모두 거부" "grep -q '과제가 0건' '$T/b2' && [ ! -f '$T/o0.xlsx' ] && [ ! -d '$T/snap0' ]"
+# 2026-09-28: 과책 아닌 과제는 내부인건비가 안 보인다 → '-'(예산 없음)가 아니라 '조회불가' + 각주
+"$PY" - "$T/dl" <<'EOF'
+import json, os, sys
+s = {"run_id": "r002", "collected_at": "2026-09-28 10:00", "snapshot_date": "2026-09-28", "track_categories": ["재료비", "내부인건비2"], "user_name": "김키키",
+     "projects": [{"acccd": "2N22222", "name": "○○", "pi": "이키키", "role": "참여", "direct": {"A": 100, "D": 50},
+                   "categories": {"재료비": {"A": 100, "D": 50, "exec": 50, "pendingDone": 0, "pendingProg": 0}}},
+                  {"acccd": "2E11111", "name": "○○", "pi": "김키키", "role": "주관", "direct": {"A": 100, "D": 50},
+                   "categories": {"재료비": {"A": 100, "D": 50, "exec": 50, "pendingDone": 0, "pendingProg": 0}}}], "not_found": [], "warnings": []}
+json.dump(s, open(os.path.join(sys.argv[1], "kiki_budget_2026-09-28_r002.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+EOF
+$M --from-downloads --expect r002 --out "$T/o2.xlsx" > "$T/b3" 2>&1
+"$PY" -c "from openpyxl import load_workbook; ws=load_workbook(r'$T/o2.xlsx').active; v=[c.value for r in ws.iter_rows() for c in r if c.value is not None]; print('HID', v.count('조회불가'), any(isinstance(x,str) and x.startswith('※ 조회불가') for x in v))" > "$T/b4" 2>&1
+chk "과책 아닌 과제 내부인건비 → 엑셀 '조회불가'(과책 과제는 '-') + 각주" "grep -q 'HID 2 True' '$T/b4' && grep -q '조회불가' '$T/b3'"
 
 echo "== 4. 지급신청 파일(kk_pay_files.py) · 업로드 파일명(dooray_drive.py)"
 K="$PY $S/kk-pay/scripts/kk_pay_files.py"
