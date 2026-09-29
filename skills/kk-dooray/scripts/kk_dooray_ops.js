@@ -2,7 +2,8 @@
 // kk-dooray 코어 — KIST Dooray 업무·드라이브 찾기 (window.kkDooray)
 // ------------------------------------------------------------
 // 동작 원리: kist.gov-dooray.com 탭의 "세션 쿠키"로 Dooray 검색창과 같은 서버 검색(internal wapi)을 부른다.
-//   → API 토큰·비번·Python 불필요. 본인 로그인 세션으로 본인이 볼 수 있는 것만 보인다. 조회 전용(쓰기 호출 없음).
+//   → API 토큰·비번·Python 불필요. 본인 로그인 세션으로 본인이 볼 수 있는 것만 보인다. 이 코어는 조회 전용(쓰기 호출 없음) —
+//   업무 글·댓글·첨부 올리기, 드라이브 올리기, 파일을 PC 폴더로 받기는 scripts/dooray_io.py(공식 API·토큰, 미리보기 → --yes).
 // 사용법: 이 파일(주입은 .min.js)을 Read → Claude in Chrome javascript_tool 로 1회 inject →
 //   이후 window.kkDooray.<함수>() 호출. (개인정보·하드코딩 식별자 없음)
 // 출력 제약: javascript_tool 반환은 ~1,000자에서 잘리고 `a=b&c=d` 꼴이 섞이면 통째로 가려진다 → 결과는 window 에 두고 fmt* 로 조각 회수.
@@ -504,6 +505,29 @@
     catch (e) { return { name, error: '읽기 실패: ' + errText(e) }; }
   }
 
+  // ---------- 6. 브라우저로 내려받기 (토큰이 없을 때만 — ⚠️ 파일마다 사용자 허락 후: 이름·크기·출처를 먼저 알린다) ----------
+  // 토큰이 있으면 dooray_io.py task-download·drive-download 를 쓴다(폴더 지정·여러 파일·덮어쓰기 없음). 이 길은 Chrome 의 다운로드 폴더로 한 파일씩.
+  //   같은 탭에서 자동 다운로드를 연달아 하면 Chrome 이 두 번째부터 막는다(kiki 실측) → 여러 파일이면 사용자에게 주소창의 '여러 파일 다운로드' [허용]을 부탁.
+  async function saveFile(f, { maxMB = 200 } = {}) {
+    const name = String((f && (f.name || f.fileName)) || 'file'), size = +(f && f.size) || 0, dl = f && (f.dl || f.downloadUrl);
+    if (!dl) return { name, error: '내려받기 주소 없음(폴더이거나 목록 항목이 아님)' };
+    if (size > maxMB * 1048576) return { name, error: `파일이 ${(size / 1048576).toFixed(0)}MB — 브라우저 받기 한도 ${maxMB}MB 초과(토큰 경로 dooray_io.py 권장)` };
+    const r = await fetch(dl, { credentials: 'include' });
+    if (!r.ok) return { name, error: `DOORAY: 파일 받기 실패(HTTP ${r.status})` };
+    const blob = await r.blob();
+    if (/text\/html/i.test(blob.type || '') && !/\.html?$/i.test(name)) return { name, error: 'DOORAY: 파일 대신 웹 화면이 왔습니다 — 로그인이 풀렸을 수 있습니다' };
+    const url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = name; a.style.display = 'none';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    return { name, size: blob.size, saved: 'Chrome 다운로드 폴더' };
+  }
+  function fmtSaved(r) {
+    if (r == null) return notYet();
+    if (r.error) return 'ERR ' + sanitize((r.name ? r.name + ': ' : '') + r.error);
+    return sanitize(`받기 요청됨 ${r.name} (${kb(r.size)}) → ${r.saved} — Chrome 아래쪽·주소창의 다운로드 표시로 확인(여러 파일이면 '여러 파일 다운로드' 허용이 필요할 수 있음)`);
+  }
+
   // ---------- 대화형 후속 질문용 거르기 (다시 검색하지 않고 들고 있는 결과로) ----------
   // only(x, { kind:'file'|'folder'|'task', ext:'pptx|hwp', name:/정규식/, who:/사람/, project:/프로젝트·드라이브/, text:/본문·댓글/, since, until })
   function only(x, c = {}) {
@@ -615,10 +639,11 @@
     const seen = new Set(fromC.map(f => f.id).filter(Boolean));
     return (d.fileList || []).filter(f => !f.id || !seen.has(f.id)).map(f => Object.assign({ where: '본문' }, f)).concat(fromC);
   }
-  function fmtFiles(it, from = 0, to = 15) {
+  // {ids:true} 면 줄 끝에 첨부 id — 받기(dooray_io.py task-download <업무 링크> --file <id>)에 그대로 넘긴다
+  function fmtFiles(it, from = 0, to = 15, { ids = false } = {}) {
     if (it == null) return notYet();
     if (!it.detail) return '(자세히 없음 — getTask 먼저)';
-    const fs = filesOf(it), rows = fitRows(fs.slice(from, to).map((f, k) => sanitize(`${from + k} | ${f.name.slice(0, 50)} | ${kb(f.size)} | ${f.by.slice(0, 6)} | ${d8(f.created)} | ${f.where}`)));
+    const fs = filesOf(it), rows = fitRows(fs.slice(from, to).map((f, k) => sanitize(`${from + k} | ${f.name.slice(0, 50)} | ${kb(f.size)} | ${f.by.slice(0, 6)} | ${d8(f.created)} | ${f.where}` + (ids ? ` | id ${f.id}` : ''))));
     const end = from + rows.length;
     return `[첨부 ${from}-${end} of ${fs.length}]` + (end < Math.min(to, fs.length) ? ` ▶ 다음 조각 ${end}` : '') + '\n' + rows.join('\n');
   }
@@ -646,9 +671,9 @@
     dfetch, apiErr,
     searchTasks, searchTasksMany, getTask, getTasks,
     searchDrive, searchDriveMany, drivePath, drivePaths,
-    find, only, filesOf, readFile, readBytes,
-    fmtFind, fmtTasks, fmtDrive, fmtTask, fmtComments, fmtFiles, fmtLinks, fmtText, sanitize, hyId,
-    _version: 'kk-dooray-ops/1.0',
+    find, only, filesOf, readFile, readBytes, saveFile,
+    fmtFind, fmtTasks, fmtDrive, fmtTask, fmtComments, fmtFiles, fmtLinks, fmtText, fmtSaved, sanitize, hyId,
+    _version: 'kk-dooray-ops/1.1',
   };
   return window.kkDooray._version + ' =^.^=';
 })();

@@ -29,8 +29,8 @@
 - 이 창은 **평소 Chrome 과 로그인이 공유되지 않는다** → 첨부 작업 때 그 창에서 `e.kist.re.kr` 에 **한 번 더 로그인**(이후 기억).
 
 ### 0-4. Python 3 + Node.js (설치 때 에이전트가 기본으로 설치)
-- 어느 skill 에 필요한가: **kk-mail·kk-dooray 없음 / kk-budget·kk-wiki Python / kk-pay·kk-meeting·kk-inspect Python + Node.js**(파일첨부 도구 chrome-devtools-mcp 가 Node 프로그램). 전체 설치(기본)면 둘 다.
-- **직접 할 일은 없다** — "kiki 설치해줘" 과정에서 에이전트가 없는 것을 찾아 안내와 함께 바로 설치한다(Windows `winget`, 1~3분; kk-mail·kk-dooray 만 설치할 때는 건너뜀). **설치 중 '사용자 계정 컨트롤' 창이나 설치 화면이 뜨면 '예 / 다음'**만 눌러 주면 된다.
+- 어느 skill 에 필요한가: **kk-mail 없음 / kk-dooray 찾기는 없음·받기·쓰기·올리기는 Python / kk-budget·kk-wiki Python / kk-pay·kk-meeting·kk-inspect Python + Node.js**(파일첨부 도구 chrome-devtools-mcp 가 Node 프로그램). 전체 설치(기본)면 둘 다.
+- **직접 할 일은 없다** — "kiki 설치해줘" 과정에서 에이전트가 없는 것을 찾아 안내와 함께 바로 설치한다(Windows `winget`, 1~3분; kk-mail 만 설치할 때는 건너뜀). **설치 중 '사용자 계정 컨트롤' 창이나 설치 화면이 뜨면 '예 / 다음'**만 눌러 주면 된다.
 - `winget` 은 Windows 11·최신 Windows 10 에 기본 포함(PowerShell 어디서든 실행). 새 PC 에서 `winget` 이 안 잡히면 Microsoft Store 를 열어 '앱 설치 관리자'가 업데이트되게 하거나, 회사 정책으로 막힌 PC 면 에이전트가 다운로드 페이지를 열어 주고 설치 마법사 단계를 안내한다 — Python 은 첫 화면의 **"Add python.exe to PATH" 체크** 가 핵심, Node.js 는 기본값으로 Next 만 누르면 된다.
 - 미리 깔아두고 싶으면: Python https://www.python.org/downloads/ (PATH 체크) / Node.js(LTS) https://nodejs.org/en/download . macOS `brew install python node` / Ubuntu `sudo apt install python3 python3-pip nodejs npm`(macOS 에 Homebrew 가 없으면 `.pkg` 설치 파일로, 새 Mac 은 `python3` 첫 실행 때 Xcode 개발자 도구 설치 창이 뜰 수 있음).
 - 확인: 새 터미널에서 `python --version`(macOS/Linux `python3 --version`), `node --version`, `npx --version`. Windows 는 `py -3 --version` 도 됨(python.org 설치본의 py 런처 — `python` 이 PATH 에 없어도 동작). `python` 입력 시 Microsoft Store 가 열리면 아직 미설치. 설치 직후 열려 있던 창에서 `python` 이 안 잡히면 `py -3` 로 진행하거나 Claude 를 재시작.
@@ -43,7 +43,7 @@ KIST 내부망에서 실행. KIST 밖(재택·출장)이면 **KIST VPN 접속 �
 | skill / 작업 | Chrome 창 | 로그인 |
 |--------------|-----------|--------|
 | kk-mail | 평소 쓰는 Chrome(확장) | Dooray `https://kist.gov-dooray.com` |
-| kk-dooray | 평소 쓰는 Chrome(확장) | Dooray `https://kist.gov-dooray.com` (토큰·설정 없음) |
+| kk-dooray | 평소 쓰는 Chrome(확장) (+ 받기·쓰기·올리기는 `token.txt`) | Dooray `https://kist.gov-dooray.com`. **새 창 없음** |
 | kk-budget | 평소 쓰는 Chrome(확장) | 포탈 `https://e.kist.re.kr` |
 | kk-wiki | 평소 쓰는 Chrome(확장) — 토큰이 있으면 브라우저 없이 Python 만 | Dooray(위키) + 담당자표는 포탈 |
 | kk-pay — 카드결제건 RPA 업로드 | 평소 쓰는 Chrome(확장) + `token.txt` | 포탈 + Dooray(업로드 확인 페이지). **새 창 없음** |
@@ -135,7 +135,7 @@ mkdir -p budget meeting inspect _tmp
 | skill | Python 패키지 (필요할 때 skill 이 확인·설치) | 첫 실행 | 사용 예 |
 |-------|------------|---------|---------|
 | **kk-mail** | — | `kk-mail 설정해줘` | `지난주 광고 스팸 골라줘` / `앞으로 nature.com 은 저널 폴더로` / `작년 ○○대 세미나 관련 메일 찾아줘` |
-| **kk-dooray** | — | `kk-dooray 설정해줘` (설정할 것 없음 — 기능 안내만) | `○○ 과제 보고서 작성하던 업무 어디 있지` / `4월 이후 ○○ 가 올린 발표 슬라이드 찾아줘` |
+| **kk-dooray** | `requests` (받기·쓰기·올리기 때만, 토큰도) | `kk-dooray 설정해줘` (설정할 것 없음 — 기능 안내만) | `○○ 과제 보고서 작성하던 업무 어디 있지` / `그 첨부 내려받아줘` / `이 파일 드라이브 ○○ 폴더에 올려줘` |
 | **kk-pay** | `Pillow` `requests` (+Windows 변환 시 `pywin32`) | `kk-pay 설정해줘` (토큰·행정원 폴더·영수증 폴더) | `이번달 영수증 지급신청 처리해줘` |
 | **kk-meeting** | `openpyxl` (hwpx 회의록 옵션은 추가 설치 없음) | `kk-meeting 설정해줘` (hwpx 동봉 여부·업로드 여부) | `회의비 처리하자` |
 | **kk-budget** | `openpyxl` | `kk-budget 설정해줘` (추적 과제·카테고리) | `예산 수집해줘` / `예산 잔액 표로` |

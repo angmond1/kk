@@ -318,7 +318,7 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
     if (url.startsWith('/v2/wapi/drives/D1/files/')) return J({ header: { isSuccessful: true }, result: { content: { parentFile: { id: '5100000000000000002', path: 'root/2026/2026-06' } } } });
     return { ok: false, status: 404, text: async () => '{}' };
   };
-  ok('dooray inject 1.0', load('kk-dooray/scripts/kk_dooray_ops.min.js') === 'kk-dooray-ops/1.0 =^.^=');
+  ok('dooray inject 1.1', load('kk-dooray/scripts/kk_dooray_ops.min.js') === 'kk-dooray-ops/1.1 =^.^=');
   const DR = window.kkDooray;
   const noQ = (s) => !/=/.test(s) && !/\w=\w*&/.test(s);
   window.__d = null; DR.find([['가나다'], ['가나다', '보고서']], { since: '2026-04-01' }).then(r => window.__d = r, e => window.__d = { error: String(e) });
@@ -382,6 +382,12 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
   global.fetch = async (url) => url === '/files/HTML' ? { ok: true, status: 200, arrayBuffer: async () => Buffer.from('<!DOCTYPE html><html>login</html>') } : { ok: true, status: 200, arrayBuffer: async () => Buffer.from(hwpOf(1)) };
   const big1 = await DR.readFile({ name: '큰.hwp', size: 90 * 1048576, dl: '/files/X' }), lg = await DR.readFile({ name: 'a.hwp', size: 10, dl: '/files/HTML' }), okf = await DR.readFile({ name: '보고서_초안.hwp', size: 4096, dl: '/files/F1' });
   ok('dooray readFile: 한도 초과 거부·로그인 화면 감지·정상', /기본 한도 30MB 초과/.test(big1.error) && /웹 화면이 왔습니다/.test(lg.error) && okf.fmt === 'hwp' && okf.textLen > 2000, JSON.stringify([big1.error, lg.error, okf.fmt]));
+  // 첨부 id 표시(받기 명령에 그대로) + 토큰 없을 때 브라우저 받기(한 파일, 다운로드 폴더)
+  ok('dooray fmtFiles {ids:true} → 줄 끝 첨부 id', /보고서_초안\.hwp .*\| id F1$/m.test(DR.fmtFiles(t1, 0, 15, { ids: true })) && !/\| id F1/.test(DR.fmtFiles(t1)), DR.fmtFiles(t1, 0, 15, { ids: true }));
+  clicked = [];
+  global.fetch = async (url) => url === '/files/LOGIN' ? { ok: true, status: 200, blob: async () => ({ type: 'text/html', size: 30 }) } : { ok: true, status: 200, blob: async () => ({ type: 'application/octet-stream', size: 5 }) };
+  const sv = await DR.saveFile({ name: '보고서_초안.hwp', size: 5, dl: '/files/F1' }), sl = await DR.saveFile({ name: 'a.hwp', size: 5, dl: '/files/LOGIN' }), sb = await DR.saveFile({ name: 'big.zip', size: 500 * 1048576, dl: '/files/B' });
+  ok('dooray saveFile: 받기 1회(파일 이름)·로그인 화면 거부·한도 초과 거부', clicked.length === 1 && clicked[0] === '보고서_초안.hwp' && DR.fmtSaved(sv).startsWith('받기 요청됨 보고서_초안.hwp') && /웹 화면/.test(sl.error) && /한도 200MB 초과/.test(sb.error) && DR.fmtSaved(sl).startsWith('ERR a.hwp'), JSON.stringify([clicked, sv, sl.error, sb.error]));
   const tx = DR.fmtText(okf, 60);
   ok('dooray fmtText 머리줄·조각·= 없음', tx.startsWith('보고서_초안.hwp | hwp | ') && tx.includes('시험 문단 R&D 가나다') && tx.length < 200 && noQ(DR.fmtText({ name: 'q.txt', fmt: 'txt', size: 9, textLen: 20, text: 'size=100&page=0 끝', parts: '' })), tx);
 

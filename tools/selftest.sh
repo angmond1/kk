@@ -262,6 +262,11 @@ EOF
 PYTHONPATH="$T/fakefw" $PY "$TR" run "$T/회의 260915_130200.wav" --device cuda --hint "촉매 전극" > "$T/t5" 2>&1; rc=$?
 chk "run: 그래픽카드 강제 종료 → CPU 자동 전환, 지어낸 문구 2개 제거, 요약 줄" "[ $rc -eq 0 ] && grep -q 'CPU 로 다시' '$T/t5' && grep -q '지어낸 문구 2개 뺌' '$T/t5' && grep -q '^\[요약\] 녹음 2분 → 글' '$T/t5' && ! grep -q '시청해' \"$KIKI_ROOT/meeting/transcripts/회의 260915_130200_녹취록.txt\""
 
+echo "== 8. 두레이 쓰기·받기(kk-dooray dooray_io.py) — 127.0.0.1 가짜 서버"
+$PY "$REPO/tools/selftest_dooray_io.py" > "$T/dio.txt" 2>&1; rc=$?
+grep -E "^FAIL" "$T/dio.txt"; tail -1 "$T/dio.txt"
+chk "쓰기·받기 시험 전부 통과(미리보기 무동작·307·토큰 보호·덮어쓰기 없음·모호하면 멈춤)" "[ $rc -eq 0 ]"
+
 echo
 echo "[요약] $((n - fail))/$n PASS" $([ $fail -gt 0 ] && echo "— $fail FAIL")
 exit $([ $fail -eq 0 ] && echo 0 || echo 1)

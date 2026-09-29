@@ -14,9 +14,9 @@ KIST 행정 자동화 skill 7종(`kk-mail`·`kk-dooray`·`kk-wiki`·`kk-pay`·`k
 ## 1. 설치 절차 (에이전트가 그대로 실행)
 
 ### Step 0 — 실행 환경 (Python · Node.js · 사내망)
-- **Python 3 와 Node.js 는 설치 때 기본으로 갖춘다** — 전체 설치(기본)면 둘 다, 사용자가 skill 을 골랐으면: kk-mail·kk-dooray 만 → 둘 다 불필요 / kk-budget·kk-wiki → Python / **kk-pay·kk-meeting·kk-inspect(첨부 skill) → Python + Node.js**(chrome-devtools-mcp 가 Node 프로그램).
+- **Python 3 와 Node.js 는 설치 때 기본으로 갖춘다** — 전체 설치(기본)면 둘 다, 사용자가 skill 을 골랐으면: kk-mail 만 → 둘 다 불필요 / kk-dooray → Python(받기·쓰기·올리기 때 — 찾기만이면 불필요) / kk-budget·kk-wiki → Python / **kk-pay·kk-meeting·kk-inspect(첨부 skill) → Python + Node.js**(chrome-devtools-mcp 가 Node 프로그램).
 - 확인: `python --version`(macOS/Linux `python3`), `node --version`, `npx --version`. Windows 는 `python` 이 없어도 `py -3 --version` 이 되면 설치된 것(py 런처는 항상 PATH 에 있음) — 그 경우 이후 모든 명령을 `python` 대신 `py -3` 로 실행한다. `python` 을 쳤을 때 **Microsoft Store 창이 열리면 미설치**(Windows 의 가짜 python.exe).
-- 없으면 **에이전트가 바로 설치를 시작한다**(kk-mail·kk-dooray 만 설치하는 경우 제외 — 확인 질문 없이, 시작 전에 한 줄만 알린다): *"Python(과 Node.js)이 없어 지금 설치합니다 — Python 은 엑셀·증빙 변환, Node.js 는 파일첨부 도구에 필요합니다. 1~3분 걸리고, 중간에 '사용자 계정 컨트롤' 창이나 설치 화면이 뜨면 **예 / 다음**을 눌러 주세요."* 그 다음:
+- 없으면 **에이전트가 바로 설치를 시작한다**(kk-mail 만 설치하는 경우 제외 — 확인 질문 없이, 시작 전에 한 줄만 알린다): *"Python(과 Node.js)이 없어 지금 설치합니다 — Python 은 엑셀·증빙 변환, Node.js 는 파일첨부 도구에 필요합니다. 1~3분 걸리고, 중간에 '사용자 계정 컨트롤' 창이나 설치 화면이 뜨면 **예 / 다음**을 눌러 주세요."* 그 다음:
   - Windows: `winget install -e --id Python.Python.3.12 --accept-source-agreements --accept-package-agreements` → `winget install -e --id OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements` (조용히 설치. Node.js 는 PC 전체 설치라 **UAC 창이 뜬다** — 사용자가 '예'를 눌러야 진행되니 실행 직후 그 사실을 다시 알린다. 타임아웃은 5분 이상으로.)
   - `winget` 은 Windows 11·최신 Windows 10 에 기본 포함이라 PowerShell·cmd 어디서든 된다. 단 **새 PC 는 Microsoft Store 가 '앱 설치 관리자'를 업데이트하기 전엔 `winget` 이 안 잡힐 수 있고**(Store 열어 업데이트하면 해결), 회사 정책으로 Store/winget 이 막힌 PC 도 있다. 그땐 다운로드 페이지를 열어주고(`start https://www.python.org/downloads/`, `start https://nodejs.org/en/download`) 설치 마법사를 **단계별로 안내**한다 — Python: 첫 화면 아래 **"Add python.exe to PATH" 체크 → Install Now → UAC 예 → Close** / Node.js: **Next → 약관 동의 체크 → Next → Next → (Tools for Native Modules 는 체크 안 함) → Next → Install → UAC 예 → Finish**. 끝났다고 하면 다시 확인.
   - macOS(미실측): 새 Mac 은 Python 이 **없다**(`python3` 는 Xcode 명령줄 도구를 설치하라는 스텁). 순서 — ① `xcode-select --install` 을 실행하면 **"명령어 라인 개발자 도구를 설치하시겠습니까?" 창**이 뜬다 → 사용자에게 "설치 → 동의" 클릭 안내(5~10분, 끝나면 Apple 제공 python3 + pip 사용 가능) ② Node.js 는 Homebrew 가 있으면 `brew install node`, 없으면 nodejs.org 의 macOS `.pkg` 를 내려받아 `open` 으로 열어주고 "계속 → 동의 → 설치 → **Mac 암호 입력** → 닫기" 안내(Homebrew 설치 스크립트는 암호를 대화식으로 묻기 때문에 에이전트 셸에서 돌릴 수 없다 — 사용자가 직접 할 때만). ③ 확인 `python3 --version`·`node --version`.
@@ -83,7 +83,7 @@ KIST 행정 자동화 skill 7종(`kk-mail`·`kk-dooray`·`kk-wiki`·`kk-pay`·`k
 | skill / 작업 | Chrome 창 | 로그인 |
 |--------------|-----------|--------|
 | kk-mail | 평소 Chrome(확장) | Dooray |
-| kk-dooray | 평소 Chrome(확장) | Dooray (토큰·설정 없음) |
+| kk-dooray | 평소 Chrome(확장) (+ 받기·쓰기·올리기는 `token.txt`) | Dooray. 새 창 없음 |
 | kk-budget | 평소 Chrome(확장) | 포탈 `e.kist.re.kr` |
 | kk-wiki | 평소 Chrome(확장) 또는 토큰만(브라우저 불요) | Dooray(위키) + 담당자표는 포탈 |
 | kk-pay 카드 RPA 업로드 | 평소 Chrome(확장) + `token.txt` | 포탈 + Dooray. 새 창 없음 |

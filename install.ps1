@@ -121,7 +121,7 @@ function Test-Node { try { $null = & node --version 2>&1; if ($LASTEXITCODE -ne 
 $hasPy   = Test-Python
 $hasNode = Test-Node
 Write-Host ""
-if ($hasPy)   { Write-Host "[확인] Python  있음" } else { Write-Warning "Python 이 없습니다 - kk-budget/kk-pay/kk-meeting/kk-inspect/kk-wiki 에 필요. https://www.python.org/downloads/ (설치 시 'Add python.exe to PATH' 체크) 또는  winget install -e --id Python.Python.3.12" }
+if ($hasPy)   { Write-Host "[확인] Python  있음" } else { Write-Warning "Python 이 없습니다 - kk-budget/kk-pay/kk-meeting/kk-inspect/kk-wiki(와 kk-dooray 받기·쓰기·올리기) 에 필요. https://www.python.org/downloads/ (설치 시 'Add python.exe to PATH' 체크) 또는  winget install -e --id Python.Python.3.12" }
 if ($hasNode) { Write-Host "[확인] Node.js 있음" } else { Write-Warning "Node.js 가 없습니다 - 파일첨부(chrome-devtools-mcp) 에 필요. https://nodejs.org/ (LTS) 또는  winget install -e --id OpenJS.NodeJS.LTS" }
 
 Write-Host ""

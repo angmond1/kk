@@ -114,7 +114,7 @@ fi
 # 5) Python / Node.js 확인 (실제로 실행해 본다 — 이름만 있는 스텁은 제외; 설치는 안내만)
 echo ""
 if python3 -c 'import sys' >/dev/null 2>&1 || python -c 'import sys' >/dev/null 2>&1; then echo "[확인] Python  있음"
-else echo "[주의] Python 이 없습니다 — kk-budget/kk-pay/kk-meeting/kk-inspect/kk-wiki 에 필요. macOS: brew install python  /  Linux: sudo apt install python3 python3-pip  /  https://www.python.org/downloads/"; fi
+else echo "[주의] Python 이 없습니다 — kk-budget/kk-pay/kk-meeting/kk-inspect/kk-wiki(와 kk-dooray 받기·쓰기·올리기) 에 필요. macOS: brew install python  /  Linux: sudo apt install python3 python3-pip  /  https://www.python.org/downloads/"; fi
 if node --version >/dev/null 2>&1 && npx --version >/dev/null 2>&1; then echo "[확인] Node.js 있음"
 else echo "[주의] Node.js 가 없습니다 — 파일첨부(chrome-devtools-mcp) 에 필요. macOS: brew install node  /  Linux: sudo apt install nodejs npm  /  https://nodejs.org/ (LTS)"; fi
 
