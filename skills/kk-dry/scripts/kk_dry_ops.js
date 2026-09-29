@@ -1554,16 +1554,17 @@
     // 링크용 부모 폴더는 보일 드라이브 파일만(찾기 때 전부 채우지 않음) — 첫 파일 그림을 받는 동안 함께
     const needPath = picks.map(p => p.v.f).filter(f => f && f.kind === 'file' && f.driveId && !f.folderId);
     const wait = needPath.length ? pool(needPath, 3, drivePath) : null;
-    const places = cP.reduce((s, p) => s + p.units.length, 0), tPlaces = tP.reduce((s, p) => s + p.passages.length, 0), badN = S.files.filter(v => !v.hits).length;
+    const places = cP.reduce((s, p) => s + p.units.length, 0), tPlaces = tP.reduce((s, p) => s + p.passages.length, 0), badN = S.files.filter(v => !v.hits).length, readN = S.files.length - badN;   // 읽은 파일 = 읽기에 성공한 것만(못 읽은 파일은 따로 — Codex 실계정 검토)
     const ttl = title || Q.spec.title || `kk-dry 결과 — '${friendly(Q.spec.q)}' 파일 속 찾기`;
     const moreTxt = `더 보려면 대화창에서 <b>"더 보여줘"</b>${first ? ' (또는 "①번 더", "그중 ○○만")' : ''}.`;
     // 없음이 아닌 것들 — 찾기 오류(로그인 만료 등)·시간 한도·파일 수 한도·못 읽은 파일은 요약·머리글·탭 제목에 먼저 드러낸다
     const warn = first ? [(RP.errors || []).length ? '찾기 오류 ' + RP.errors.join(' / ') : '', S.late && S.late.length ? `시간 한도로 ${S.late.length}개 안 봄` : '',
-      S.cut && S.cut.length ? `파일이 많아 ${S.cut.length}개 안 봄` : '', badN ? `못 읽은 파일 ${badN}개` : ''].filter(Boolean) : [];
+      S.cut && S.cut.length ? `파일이 많아 ${S.cut.length}개 안 봄` : '', badN ? `못 읽은 파일 ${badN}개` : '',
+      S.noDetail ? `첨부를 안 본 업무 ${S.noDetail}건` : ''].filter(Boolean) : [];
     const warnHtml = warn.length ? `<b>⚠ ${esc(warn.join(' · '))} — 없음이 아님(맨 아래 목록).</b> ` : '';
     const lead = warnHtml + (!S.files.length ? `찾기 결과에 속을 읽을 수 있는 파일이 없습니다(업무 ${listOf(RP.tasks).length}건 · 드라이브 ${listOf(RP.drive).length}건). 다른 말로 찾으려면 대화창에서 말씀하세요.`
-      : !Q.hitF.length ? `찾은 파일 ${S.files.length}개를 읽었지만 찾을 말이 나오는 곳이 없습니다${badN ? ` — 못 읽은 파일 ${badN}개는 아래 목록(없음이 아님)` : ''}. 다른 말로 찾으려면 대화창에서 말씀하세요.`
-        : (first ? `파일 ${S.files.length}개를 읽어 <b>${Q.hitF.length}개</b>에서 찾았습니다 — ` : `앞서 본 곳 다음 순위 — `)
+      : !Q.hitF.length ? (readN ? `찾은 파일 ${readN}개를 읽었지만 찾을 말이 나오는 곳이 없습니다` : `찾은 파일 ${S.files.length}개를 모두 읽지 못했습니다`) + (badN ? ` — 못 읽은 파일 ${badN}개는 아래 목록(없음이 아님)` : '') + '. 다른 말로 찾으려면 대화창에서 말씀하세요.'
+        : (first ? `파일 ${readN}개를 읽어 <b>${Q.hitF.length}개</b>에서 찾았습니다 — ` : `앞서 본 곳 다음 순위 — `)
           + (cP.length ? `슬라이드·쪽 그림은 이 화면에 파일마다 ${first ? '주요 ' : ''}<b>${Q.top}곳</b>까지` : '')
           + (cP.length && tP.length ? ', ' : '') + (tP.length ? `문서(한글·워드·엑셀·PDF 등)에서 찾은 글·표는 <b>대화창</b>에 보여 드립니다` : '')
           + (first && Q.hitF.length > picks.length ? ` (파일은 위 ${picks.length}개, 나머지는 맨 아래 목록)` : '') + '. ' + moreTxt);
@@ -1582,7 +1583,7 @@
     progress = '';
     const findFail = first && (RP.errors || []).length && !S.files.length && !(S.cut && S.cut.length);
     const summary = (findFail ? 'ERR 찾기 실패(없음이 아님) — ' + RP.errors.join(' / ') + ' | ' : '')
-      + `■ kk-dry ${first ? 'quick' : 'more'} — 읽은 파일 ${S.files.length} · 걸린 ${Q.hitF.length} · Chrome 화면 파일 ${okF.size}개 ${okPlaces}곳${okPlaces < places ? `(그림을 못 받은 ${places - okPlaces}곳은 '더 보여줘'로 다시)` : ''} · 채팅 글 파일 ${tP.length}개 ${tPlaces}곳 | ${res} | ${((Date.now() - (first ? Q.t0 : t2)) / 1000).toFixed(1)}초`
+      + `■ kk-dry ${first ? 'quick' : 'more'} — 읽은 파일 ${readN}${badN ? `(못 읽음 ${badN})` : ''} · 걸린 ${Q.hitF.length} · Chrome 화면 파일 ${okF.size}개 ${okPlaces}곳${okPlaces < places ? `(그림을 못 받은 ${places - okPlaces}곳은 '더 보여줘'로 다시)` : ''} · 채팅 글 파일 ${tP.length}개 ${tPlaces}곳 | ${res} | ${((Date.now() - (first ? Q.t0 : t2)) / 1000).toFixed(1)}초`
       + (warn.length && !findFail ? ' | ⚠ ' + warn.join(' · ') : '');
     return { summary, shown: res, files: okF.size + tP.length, places: okPlaces, chat: tPlaces };
   }
@@ -1591,7 +1592,7 @@
     const Q = lastQuick, S = Q.S, R = Q.R || lastReport || {}, sec = (ms) => (ms / 1000).toFixed(1) + '초';
     const noneF = S.files.filter(v => v.hits && !v.hits.length), badF = S.files.filter(v => !v.hits);
     const where = whereOf;
-    const L = [`■ kk-dry ${first ? '찾기' : '더 보기'} — ${R.groups ? '검색어 ' + R.groups.map(g => '[' + g + ']').join(' ') + ' | ' : ''}파일 속 ${S.label} | 읽은 파일 ${S.files.length} · 걸린 ${Q.hitF.length} · 없음 ${noneF.length}${badF.length ? ' · 못 읽음 ' + badF.length : ''}`
+    const L = [`■ kk-dry ${first ? '찾기' : '더 보기'} — ${R.groups ? '검색어 ' + R.groups.map(g => '[' + g + ']').join(' ') + ' | ' : ''}파일 속 ${S.label} | 읽은 파일 ${S.files.length - badF.length} · 걸린 ${Q.hitF.length} · 없음 ${noneF.length}${badF.length ? ' · 못 읽음 ' + badF.length : ''}`
       + ' | ' + (first ? [Q.T.find != null ? '찾기 ' + sec(Q.T.find) : '', '파일 속 ' + sec(Q.T.scan), '그림 ' + sec(msShow), '합계 ' + sec(Date.now() - Q.t0)].filter(Boolean).join(' · ') : '그림 ' + sec(msShow))];
     if (first) {
       (R.errors || []).forEach(e => L.push('⚠ ' + e + ' (없음이 아님)'));
@@ -1979,7 +1980,7 @@
     find, report, last, show, showItems, showFiles, showText, only, filesOf, readFile, readBytes, saveFile,
     scanFiles, scanned, showFigures, showPages, quick, more, _tableMd: tableMd, _tmo: TMO, previewOf, pageText, pageTexts, unitsOf, driveUrl, _inflate: inflateJS,
     fmtFind, fmtTasks, fmtDrive, fmtTask, fmtComments, fmtFiles, fmtLinks, fmtText, fmtSaved, sanitize, hyId,
-    _version: 'kk-dry-ops/2.3',
+    _version: 'kk-dry-ops/2.4',
   };
   window.kkDooray = window.kkDry;   // 옛 이름(2026-09-29 kk-dooray → kk-dry 개명 전) — 같은 객체
   return window.kkDry._version + ' =^.^=';

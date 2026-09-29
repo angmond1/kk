@@ -330,7 +330,7 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
     if (url.startsWith('/v2/wapi/drives/D1/files/')) return J({ header: { isSuccessful: true }, result: { content: { parentFile: { id: '5100000000000000002', path: 'root/2026/2026-06' } } } });
     return { ok: false, status: 404, text: async () => '{}' };
   };
-  ok('dry inject 2.3', load('kk-dry/scripts/kk_dry_ops.min.js') === 'kk-dry-ops/2.3 =^.^=');
+  ok('dry inject 2.4', load('kk-dry/scripts/kk_dry_ops.min.js') === 'kk-dry-ops/2.4 =^.^=');
   const DR = window.kkDry;
   const noQ = (s) => !/=/.test(s) && !/\w=\w*&/.test(s);
   window.__d = null; DR.find([['가나다'], ['가나다', '보고서']], { since: '2026-04-01' }).then(r => window.__d = r, e => window.__d = { error: String(e) });
@@ -806,6 +806,13 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
   pvDown = false; m3fail = false;
   const q3c = await DR.more();
   ok('codex M3 오류가 풀리면 더 보여줘가 같은 슬라이드를 다시 보임', /Chrome 화면 파일 1개 1곳/.test(q3c.summary) && document.body.innerHTML.includes('<h4>슬라이드 1</h4>'), q3c.summary);
+  // Codex 실계정 검토(2026-09-30): quick 요약의 '읽은 파일'은 읽기에 성공한 파일만 — 못 읽은 파일은 따로 센다
+  qSearch = [QC('5300000000000000061', '좋은.pptx', '/scan/okdeck'), QC('5300000000000000062', '깨진.pptx', '/scan/baddeck')];
+  BIN['/scan/okdeck'] = deck; BIN['/scan/baddeck'] = new Uint8Array(Buffer.from('not a zip file'));
+  const qrd = await DR.quick({ find: [['좋은']], tasks: false, q: /전압|voltage/i, top: 1 });
+  const QRD = document.body.innerHTML;
+  ok('실계정 검토: quick 요약의 읽은 파일은 성공한 것만(못 읽음 따로)', /^■ kk-dry quick — 읽은 파일 1\(못 읽음 1\) · 걸린 1 /.test(qrd.summary) && /⚠ 못 읽은 파일 1개/.test(qrd.summary)
+    && QRD.includes('파일 1개를 읽어 <b>1개</b>에서 찾았습니다') && /읽은 파일 1 · 걸린 1 · 없음 0 · 못 읽음 1/.test(QRD), qrd.summary);
   qSearch = null;
   global.location = { pathname: '/task/to' };
   ok('dooray quick·more: 작업 탭이 아니면 거부', (await DR.quick({ q: /x/ })).summary.startsWith('ERR 작업 탭') && (await DR.more()).summary.startsWith('ERR 작업 탭'));

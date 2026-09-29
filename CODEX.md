@@ -2,7 +2,7 @@
 
 > kiki 의 skill 본문은 **Claude (Claude Code / Claude in Chrome)** 기준으로 쓰여 있다. 이 문서는 **Codex Desktop / Codex CLI** 의 도구 이름·설치 경로·환경 차이만 정리하는 **Codex 어댑터**다.
 > 정본은 [CLAUDE.md](CLAUDE.md)·[INSTALL.md](INSTALL.md)·[README](README.md)·[환경 점검](skills/_shared/environment_setup.md)과 각 skill 의 `SKILL.md`다. 상세 절차는 정본을 따르고, 여기서는 Codex 차이만 적용한다.
-> 문서 동기화: **2026-09-29, v0.7.3** ([변경 이력](docs/HISTORY.md)). 통합정보·메일의 Codex 브라우저 실측은 2026-09-27, kk-dry의 큰 결과 반환 실측은 2026-09-29 격리된 합성 페이지 기준이다. kk-dry 2.2의 Dooray 실계정 실행은 아직 검증하지 않았다. 버전·연결 방식에 따른 차이는 따로 표시한다.
+> 문서 동기화: **2026-09-30, v0.7.5** ([변경 이력](docs/HISTORY.md)). 통합정보·메일의 Codex 브라우저 실측은 2026-09-27, kk-dry의 큰 결과 반환 실측은 2026-09-29 격리된 합성 페이지 기준이다. kk-dry 2.3은 2026-09-30 Dooray 실계정에서 검색·본문/첨부·슬라이드/문서 읽기와 공식 API 파일 스트림(메모리)·미리보기를 확인했다(2.4는 quick 요약의 파일 수 표시만 다름). `--yes` 저장·게시·업로드는 검증하지 않았다. 버전·연결 방식에 따른 차이는 따로 표시한다.
 
 ## 1. 설치 구조 (Codex)
 **설치 폴더부터 묻는다**: 기본 `C:\kiki`(Windows) / `~/kiki`(macOS/Linux) 또는 사용자 지정 경로. 선택한 `kiki_root`에 패키지를 확보하고 그 폴더에서 진행한다(git 불요: ZIP/동료 폴더 가능). 원본 `skills/`를 아래 Codex 경로에 복사한다. 배포본 `install.ps1`·`install.sh`는 Claude 경로용이므로 Codex 설치에는 아래 복사 예를 쓴다.
@@ -133,12 +133,12 @@ s.textContent = `[id*="_form_modalPopDiv"], [id*="modalPopDivScrollableInnerCont
 
 [SKILL](skills/kk-dry/SKILL.md)의 `browser_batch`·`javascript_tool`·`get_page_text`를 현재 세션에서는 `list_pages`/`new_page`·`evaluate_script`·`evaluate_script`의 DOM 읽기로 옮긴다. 아래 `pageId`는 `list_pages`나 `new_page`가 반환한 실제 숫자로 바꾼다. 브라우저 조회는 로그인된 Dooray와 같은 origin의 `https://kist.gov-dooray.com/robots.txt` 작업 탭에서 한다. 기존 작업 탭이 있으면 재사용하고, 없으면 `new_page({url:"https://kist.gov-dooray.com/robots.txt", background:true})`로 만든다. `take_snapshot({pageId})`으로 탭 URL과 본문이 나타난 것을 확인한 뒤 코어를 주입한다. `isolatedContext`를 지정하면 기존 로그인 세션과 분리되므로 이 용도로 쓰지 않는다. 결과 그림을 띄우지 않았다면 작업 뒤 만든 탭을 닫고, 그림을 띄웠다면 사용자가 보도록 남긴다.
 
-코어는 선택한 설치본의 [kk_dry_ops.min.js](skills/kk-dry/scripts/kk_dry_ops.min.js) **2.3**를 사용한다. 먼저 `evaluate_script`로 저장된 코어의 버전을 확인하고, 없거나 다르면 파일 입력을 만든다. `function` 인자 예:
+코어는 선택한 설치본의 [kk_dry_ops.min.js](skills/kk-dry/scripts/kk_dry_ops.min.js) **2.4**를 사용한다. 먼저 `evaluate_script`로 저장된 코어의 버전을 확인하고, 없거나 다르면 파일 입력을 만든다. `function` 인자 예:
 
 ```js
 () => {
   const c = localStorage.getItem('kk.dry.core') || '';
-  if (c.includes('kk-dry-ops/2.3')) return (0, eval)(c);
+  if (c.includes('kk-dry-ops/2.4')) return (0, eval)(c);
   document.body.innerHTML = '';
   const i = document.createElement('input');
   i.type = 'file'; i.id = 'kkcore'; i.setAttribute('aria-label', 'kk core file');
@@ -147,14 +147,14 @@ s.textContent = `[id*="_form_modalPopDiv"], [id*="modalPopDivScrollableInnerCont
 }
 ```
 
-`NEED_UPLOAD`이면 `take_snapshot({pageId})`에서 **최신** 파일 입력의 `uid`를 얻어 `upload_file({pageId, uid, filePaths:["<설치본>/scripts/kk_dry_ops.min.js의 절대경로"]})`를 호출한다. 이어서 아래 함수를 `evaluate_script({pageId, function:"async () => { ... }"})`로 실행하고 `kk-dry-ops/2.3 =^.^=` 반환을 확인한다. 파일 경로가 도구의 workspace 검사에서 거부되면 §5처럼 **코어 파일만** OS 임시폴더에 복사해 업로드한다. 새로고침 뒤에는 저장된 코어의 버전을 확인해 다시 주입한다. 전역은 `window.kkDry`이며 `window.kkDooray`는 구 이름 별칭이다.
+`NEED_UPLOAD`이면 `take_snapshot({pageId})`에서 **최신** 파일 입력의 `uid`를 얻어 `upload_file({pageId, uid, filePaths:["<설치본>/scripts/kk_dry_ops.min.js의 절대경로"]})`를 호출한다. 이어서 아래 함수를 `evaluate_script({pageId, function:"async () => { ... }"})`로 실행하고 `kk-dry-ops/2.4 =^.^=` 반환을 확인한다. 파일 경로가 도구의 workspace 검사에서 거부되면 §5처럼 **코어 파일만** OS 임시폴더에 복사해 업로드한다. 새로고침 뒤에는 저장된 코어의 버전을 확인해 다시 주입한다. 전역은 `window.kkDry`이며 `window.kkDooray`는 구 이름 별칭이다.
 
 ```js
 async () => {
   const f = document.getElementById('kkcore')?.files?.[0];
   if (!f) return 'ERR 코어 파일 없음';
   const c = await f.text();
-  if (!c.includes('kk-dry-ops/2.3')) return 'ERR 코어 버전 다름';
+  if (!c.includes('kk-dry-ops/2.4')) return 'ERR 코어 버전 다름';
   localStorage.setItem('kk.dry.core', c);
   return (0, eval)(c);
 }
@@ -175,7 +175,7 @@ async () => {
 
 큰 결과는 `evaluate_script`로 `({length:document.body.innerText.length, text:document.body.innerText.slice(10000,20000)})`처럼 **서로 다른 offset의 1만 자 구간**을 끝까지 읽는다. `take_snapshot`은 요소 `uid` 확인에 유용하지만 접근성 트리가 화면 글을 모두 담는다는 보장은 없다. 2026-09-29 격리된 `about:blank` 합성 페이지에서는 `evaluate_script`가 45,000자 문자열을 온전히 반환하고 `take_snapshot`도 45,000자 `<pre>`를 포함했다. 이는 실제 Dooray·다른 도구 버전의 출력 한도 보장이 아니다. SKILL의 `javascript_tool` 약 1,000자·`get_page_text` 5만 자 한도는 **Claude 실측**이며 Codex 한도로 옮겨 적지 않는다. 코어 자체가 `report` 화면을 4.5만 자 안팎으로 줄이므로 잘림 경고가 있으면 `showFiles`·`getTask` 등으로 해당 부분을 더 읽는다. 특히 `detail.textCut` 또는 댓글 `cut`이 있으면 `only({text:…})`의 0건은 뒷부분까지 확인한 결론이 아니다.
 
-받기·댓글·글쓰기·올리기는 [dooray_io.py](skills/kk-dry/scripts/dooray_io.py)의 개인 토큰·대상 미리보기·사용자 확인 절차를 따른다. 위 브라우저 읽기 경로와 쓰기 경로를 혼동하지 않는다. 이 절의 Codex 도구 대응과 합성 출력 시험은 확인했지만 **kk-dry 2.2의 Dooray 실계정 검색·미리보기·다운로드·쓰기·업로드는 이번 검토에서 실행하지 않았다.**
+받기·댓글·글쓰기·올리기는 [dooray_io.py](skills/kk-dry/scripts/dooray_io.py)의 개인 토큰·대상 미리보기·사용자 확인 절차를 따른다. 위 브라우저 읽기 경로와 쓰기 경로를 혼동하지 않는다. 이 절의 Codex 도구 대응과 합성 출력 시험에 더해 **2026-09-30 kk-dry 2.3을 Dooray 실계정에서 검색·본문/첨부·슬라이드/문서 읽기, 공식 API 파일 스트림(메모리)과 다운로드·댓글·새 업무 미리보기까지 확인했다. `--yes` 저장·게시·업로드는 검증하지 않았다.**
 
 ## 7. 안전 경계 (Claude·Codex 공통)
 - 조회·로컬 파일 작성 = 자동 가능.
