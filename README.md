@@ -17,7 +17,7 @@
 | **kk-inspect** | 물품검수 | 소액 검수 신청서 자동 작성 | Sonnet / Sol |
 | **kk-budget** | 예산조회 | 과제 예실대비표 예산현황 자동조회  | Sonnet / Luna |
 | **kk-mail** | 메일관리 | 자연어 메일검색, 자동 폴더분류,<br>불건전 학회/저널 메일 자동스팸 | Opus / Sol<br>(분류, 스팸처리 Sonnet / Luna) |
-| **kk-dry** | 두레이 업무, 드라이브 자연어 검색 | 업무·첨부·드라이브 파일 찾기,<br>파일 속 슬라이드·글·표 찾기, 파일 받기·올리기 | Sonnet / Luna |
+| **kk-dry** | 두레이 검색 | 업무 게시글 첨부파일 자연어 검색<br>드라이브 파일 자연어 검색 | Sonnet / Luna |
 | **kk-wiki** | 규정, 담당자 검색 | KIST WIKI, 업무담당자 자연어 검색 | Opus / Sol |
 
 <br><br>
