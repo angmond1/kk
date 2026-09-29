@@ -99,3 +99,42 @@ DELETE /v2/wapi/mail-rules/{rule-id}
 - 주소 `GET /mail/popup/mails/{mailId}` — Dooray 메일 화면의 새 창 버튼(`fa-external-link` 아이콘)이 `window.open('/mail/popup/mails/{id}?_t={시각}', '_blank', 'resizable=yes,toolbar=no,location=no,…,width=720,height=800')` 로 여는 주소. 목록·사이드바 없이 그 메일 한 통과 답장·전달 버튼만 나온다. 폴더와 무관(받은·보낸 메일 모두 확인), `_t` 는 없어도 된다. 열면 읽음 처리.
 - 스크립트(javascript_tool)만으로 `window.open` 하면 Chrome 팝업 차단기가 막는다(null 반환). 페이지에 임시 버튼을 넣고 Claude in Chrome `computer left_click` 으로 실제 클릭하면 사용자 동작으로 인정돼 팝업 창이 열린다 → 코어 `openMail`·`popupStatus`·`closePopups`.
 - ⚠️ 새 창 버튼의 주소를 가로채려고 `window.open` 을 null 을 돌려주는 가짜로 바꾸면 Dooray 가 알림창을 띄워 탭이 멈춘다(CDP 입력 30초 타임아웃, 탭을 다시 불러와 복구). 가로챌 때는 가짜 창 객체를 돌려줄 것.
+
+## 메일 보내기 (기능 5, ✅ 2026-09-30 쓰기 화면 캡처 + 본인에게 발송 1통)
+Dooray 쓰기 화면(`/mail/write/new` — 메일함의 '새 메일' 버튼은 `window.open('/mail/write/new?_t=…','_blank')` 새 창)의 호출을, 보내기 요청을 막은 채 기록했다.
+```
+POST /v2/wapi/search-email-addresses?page=0&size=30        // 받는 사람·참조 칸 검색
+{ "all": "이름 또는 주소 일부",
+  "typeList": ["member","distributionList","projectMail","contact","recent","contactsLabel","sharedMailMember"],
+  "tenantMemberRoles": ["admin","owner","member","subMember","guest","dummy"] }
+→ result.contents[{type, <type>:{name, emailAddress, departments[{name,primaryFlag}], rank, …}}], totalCount
+   (all 이 빈 글이면 최근 받는 사람 목록. member 에는 사번·전화번호도 있으니 꺼내지 않는다)
+
+POST /v2/wapi/mail-drafts                                   // 초안 만들기 — body 는 배열
+[{ "id": null,
+   "users": { "from": {"type":"emailUser","emailUser":{"name":"…","emailAddress":"…"}},
+              "to": [ {"type":"emailUser","emailUser":{"name":"…","emailAddress":"…"}} ], "cc": [ … ], "bcc": [ … ] },
+   "subject": "…", "priority": 3,
+   "body": { "mimeType": "text/html", "content": "<div style=\"font-family: Arial; font-size: 16px\"><div>줄</div>…<div><br></div><!-- begin signature -->서명<!-- end signature --></div>" },
+   "fileList": [], "fileIdList": [],
+   "security": { "level": "normal", "resend": true, "autoDelete": false, "retentionDays": 0 },
+   "relation": {}, "reservation": { "type": "", "toBeSentAt": null, "toBeSentTimezone": null },
+   "individualSend": false, "securityEditable": true, "version": 0, "mimeSize": 0 }]
+→ result: [{ id, version, mimeSize }]
+
+PUT  /v2/wapi/mail-drafts/{id}      // 쓰기 화면이 보내기 직전에 같은 모양(id 채움)으로 다시 저장 — 처음 POST 에 내용을 다 담으면 필요 없다
+POST /v2/wapi/mails/send            { "draftId": "{id}" }     // 보내기
+```
+- 받는 사람(`to`)·참조(`cc`)·숨은 참조(`bcc`)는 같은 모양이다. 주소로 쓸 수 없는 글이 들어가면 `emailAddress:"invalid"` 가 된다(쓰기 화면의 빨간 칩).
+- 보내는 사람 = `GET /v2/wapi/members/me/settings/mail.write-from` 의 `result.content.value.{selectedName, selectedEmailAddress}`. 보낼 수 있는 내 주소 목록 = `GET /v2/wapi/members/me/email-addresses?page=0&size=100&status=confirmed&emailAddressTypes=general%2CmemberAlias&sendable=true`.
+- 서명 = `GET /v2/wapi/members/me/settings/mail.signature` 의 `value.{enabled, options:{new, reply, forward}, useIndex, signatures[{name, content}]}` — 쓰기 화면은 `signatures[useIndex].content` 를 `<!-- begin signature -->`·`<!-- end signature -->` 사이에 그대로 넣는다. 글꼴 = `mail.write` 의 `value.format.{font, fontSize}`.
+- 쓰기 화면의 '미리 보기' 창(보내기/취소)은 개인 설정 `mail.write.preview`(value `all`)일 뿐 API 단계가 아니다. 보낸 메일은 보낸 메일함(`folderName=sent`)에 남는다 → 코어 `checkSent` 가 목록에서 같은 제목·보낸 시각 이후의 메일을 찾아 받는 사람을 대조한다.
+## 답장 (기능 6, ✅ 2026-09-30 답장 버튼 화면 캡처 + 사용자 승인 답장 1통)
+- 받은 메일의 답장 버튼 = `window.open('/mail/write/reply/{mailId}?_t=…','_blank')`. 쓰기 화면이 저장하는 초안은 새 메일과 같은 모양에 `"relation": {"type": "reply", "mailId": "{원래 메일}"}`, 제목 `RE: 원제목`, 받는 사람 = 원래 보낸 사람.
+- 서명은 설정 `mail.signature` 의 `options.reply`(꺼져 있으면 `<!-- begin signature --><!-- end signature -->` 빈 표시만). 본문 뒤 원문 인용 블록:
+  `</div><br><br>-----Original Message-----<br>From:  "이름" &lt;주소&gt;<br>To:     "이름" &lt;주소&gt;; <br>Cc:    <br>Sent:  YYYY-MM-DD (요일) HH:MM:SS (UTC+09:00)<br>Subject: 원제목<br><br>` + 원문 본문 HTML(`GET /v2/wapi/mails/{id}` 의 `body.content`)
+- 보내면(`POST /v2/wapi/mails/send {draftId}`) 원래 메일의 목록 표시 `mailSummary.flags.replied` 가 true, 보낸 메일의 id 는 초안 id 와 같다.
+- 받은 메일 목록(`GET /v2/wapi/mails?folderName=inbox…`)의 `mailSummary.flags` 에 `replied`·`forwarded` 가 있다 → 답장 안 한 메일 찾기(코어 `unrepliedMails`).
+- 전체 답장(받는 사람 모두) 버튼의 형식은 아직 캡처하지 않았다.
+
+- 아직 없는 것: 첨부 파일(업로드 API 미캡처)·전체 답장·전달(`relation` 형식 미캡처)·예약 발송(`reservation`)·중요 표시(priority 값 미확인)·메일 지우기(휴지통 이동 요청 미캡처).

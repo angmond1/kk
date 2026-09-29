@@ -134,7 +134,7 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
     if (url.startsWith('/v2/wapi/mails/report-spam')) { global.__spamBody = JSON.parse(opts.body); return { ok: true, status: 200, text: async () => JSON.stringify({ header: { isSuccessful: true } }) }; }
     return { ok: true, status: 200, text: async () => '' };
   };
-  ok('mail inject 1.9', load('kk-mail/scripts/kk_mail_ops.min.js') === 'kk-mail-ops/1.9 =^.^=');
+  ok('mail inject 1.11', load('kk-mail/scripts/kk_mail_ops.min.js') === 'kk-mail-ops/1.11 =^.^=');
   const K = window.kkMail;
   ok('mail 점수 규칙 제거', typeof K.spamHints === 'undefined' && typeof K.fmtSpam === 'undefined');
   const inbox = await K.listInbox({ days: 3650 });
@@ -197,6 +197,124 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
   ok('mail 상한 도달 → truncated(목록·검색·묶음 검색) + 머리줄', lm.truncated === true && sm.truncated === true && sy.truncated === true && K.fmtList(lm).includes('⚠ 목록 잘림(전체 2 중 1)') && K.fmtList(sy).includes('⚠ 목록 잘림'), JSON.stringify([lm.truncated, sm.truncated, sy.truncated, K.fmtList(lm).split('\n')[0]]));
   const lm2 = await K.listMails({ size: 5, maxPages: 3 }), sm2 = await K.searchMails(['S'], { size: 5, maxPages: 3 });
   ok('mail 끝까지 읽음 → 잘림 아님', !lm2.truncated && lm2.end === 'all' && !sm2.truncated && sm2.end === 'all', JSON.stringify([lm2.end, sm2.end]));
+  // 기능 5 메일 보내기(2026-09-30) — 미리보기는 서버에 아무것도 만들지 않고, 보내기는 초안 → 보내기 한 번씩, 같은 준비물은 두 번 못 보낸다, 보낸 메일함으로 확인
+  const MJ = (o) => ({ ok: true, status: 200, text: async () => JSON.stringify(o) }), MOK = { isSuccessful: true };
+  const mcalls = []; let smode = 'ok', sentList = [];
+  global.fetch = async (url, opts) => {
+    const m = (opts && opts.method) || 'GET', b = opts && opts.body ? JSON.parse(opts.body) : null;
+    mcalls.push([m, url.replace(/[?].*/, ''), b]);
+    if (url.startsWith('/v2/wapi/search-email-addresses')) return MJ({ header: MOK, result: { totalCount: 3, contents: [
+      { type: 'member', member: { name: '김키키', emailAddress: 'kiki@kist.re.kr', rank: '책임연구원', departments: [{ name: '○○연구센터', primaryFlag: true }], employeeNumber: '009999', tel: '02-000-0000' } },
+      { type: 'member', member: { name: '김키키', emailAddress: 'kiki2@kist.re.kr', rank: '선임연구원', departments: [{ name: '△△연구단', primaryFlag: true }] } },
+      { type: 'recent', recent: { name: '김키키', emailAddress: 'KIKI@kist.re.kr', company: null } }] } });
+    if (url.includes('mail.write-from')) return MJ({ header: MOK, result: { content: { value: { selectedEmailAddress: 'me@kist.re.kr', selectedName: '나키키' } } } });
+    if (url.includes('mail.signature')) return MJ({ header: MOK, result: { content: { value: { enabled: true, options: { new: true, reply: false }, useIndex: 0, signatures: [{ name: '기본', content: '<div>SIG</div>' }] } } } });
+    if (url.includes('mail.write')) return MJ({ header: MOK, result: { content: { value: { format: { font: 'Arial', fontSize: 16 } } } } });
+    if (url.startsWith('/v2/wapi/mail-drafts')) return smode === 'draftfail' ? MJ({ header: { isSuccessful: false, resultMessage: 'draft denied' } }) : MJ({ header: MOK, result: [{ id: '4432000000000000001', version: 0, mimeSize: 100 }] });
+    if (url.startsWith('/v2/wapi/mails/send')) return smode === 'sendfail' ? MJ({ header: { isSuccessful: false, resultMessage: 'send denied' } }) : MJ({ header: MOK });
+    if (url.startsWith('/v2/wapi/mails?folderName=sent')) return MJ({ header: MOK, result: { totalCount: sentList.length, contents: sentList } });
+    if (/^\/v2\/wapi\/mails\/\d+$/.test(url)) return MJ({ header: MOK, result: { content: { subject: '회의 일정', body: { content: 'x' }, users: { to: [{ emailUser: { emailAddress: 'kiki@kist.re.kr' } }], cc: [{ emailUser: { emailAddress: 'lee@kist.re.kr' } }] } } } });
+    return MJ({ header: MOK });
+  };
+  const fa1 = await K.findAddress('김키키'), ff1 = K.fmtAddress(fa1);
+  ok('mail findAddress: 같은 주소는 한 번(대소문자 무관) + 사번·전화번호 안 꺼냄', fa1.list.length === 2 && fa1.list[0].dept === '○○연구센터' && fa1.list[0].rank === '책임연구원' && !JSON.stringify(fa1).includes('009999') && !JSON.stringify(fa1).includes('02-000-0000'), JSON.stringify(fa1));
+  ok('mail fmtAddress: 이름·주소·부서·직급·종류(동명이인 2명)', ff1.startsWith("[주소 검색 '김키키' 0-2 of 2]") && ff1.includes('0 | 김키키 | kiki@kist.re.kr | ○○연구센터 | 책임연구원 | 조직도') && ff1.includes('1 | 김키키 | kiki2@kist.re.kr | △△연구단'), ff1);
+  mcalls.length = 0;
+  const pbad = await K.prepareMail({ to: ['김키키'], subject: 'S', text: 'T' });
+  ok('mail prepareMail: 이름만(주소 없음)이면 보내지 않고 findAddress 로 정하라고', pbad.error && /findAddress/.test(pbad.error) && !mcalls.some(c => /mail-drafts|mails\/send/.test(c[1])), JSON.stringify(pbad));
+  const pp = await K.prepareMail({ to: ['김키키 <kiki@kist.re.kr>', 'kiki@kist.re.kr'], cc: [{ name: '이키키', email: 'lee@kist.re.kr' }], bcc: ['x@example.org'], subject: '회의 일정', text: '안녕하세요.\n\n다음 주 <목요일> 회의입니다.' });
+  const fpp = K.fmtPrepared(pp);
+  ok('mail prepareMail: 서버에 아무것도 만들지 않음(설정 조회만) + 받는 사람 중복 한 번', !mcalls.some(c => /mail-drafts|mails\/send/.test(c[1])) && pp.to.length === 1 && pp.cc[0].email === 'lee@kist.re.kr' && pp.signature === true && JSON.stringify(pp.external) === '["x@example.org"]', JSON.stringify(pp));
+  ok('mail fmtPrepared: 아직 안 보냄·보내는 사람·받는 사람·참조·숨은 참조·외부 주소 경고·본문, 출력 필터 안전', fpp.startsWith('[보낼 메일 미리보기 — 아직 보내지 않음') && fpp.includes('보내는 사람: 나키키 <me@kist.re.kr>') && fpp.includes('받는 사람: 김키키 <kiki@kist.re.kr>') && fpp.includes('참조: 이키키 <lee@kist.re.kr>') && fpp.includes('숨은 참조: x@example.org') && fpp.includes('⚠ 외부 주소 1개') && fpp.includes('다음 주 <목요일> 회의입니다.') && !/=/.test(fpp), fpp);
+  mcalls.length = 0;
+  const sr = await K.sendPrepared(pp.key);
+  const dcall = mcalls.find(c => c[1] === '/v2/wapi/mail-drafts'), scall = mcalls.find(c => c[1] === '/v2/wapi/mails/send');
+  const dr = dcall && dcall[2][0];
+  ok('mail sendPrepared: 초안(POST 배열) → 보내기({draftId}) 순서, 주소 모양·본문 줄·서명', sr.ok && mcalls.map(c => c[1]).join() === '/v2/wapi/mail-drafts,/v2/wapi/mails/send' && Array.isArray(dcall[2]) && dr.id === null && dr.users.from.emailUser.emailAddress === 'me@kist.re.kr'
+    && dr.users.to[0].type === 'emailUser' && dr.users.to[0].emailUser.emailAddress === 'kiki@kist.re.kr' && dr.users.cc[0].emailUser.name === '이키키' && dr.users.bcc[0].emailUser.emailAddress === 'x@example.org'
+    && dr.body.content === '<div style="font-family: Arial; font-size: 16px"><div>안녕하세요.</div><div><br></div><div>다음 주 &lt;목요일&gt; 회의입니다.</div><div><br></div><!-- begin signature --><div>SIG</div><!-- end signature --></div>'
+    && JSON.stringify(scall[2]) === '{"draftId":"4432000000000000001"}', JSON.stringify(mcalls).slice(0, 600));
+  let edup = ''; try { await K.sendPrepared(pp.key); } catch (e) { edup = String(e); }
+  ok('mail sendPrepared: 같은 준비물은 두 번 보내지 않음', /이미 보낸/.test(edup) && mcalls.filter(c => c[1] === '/v2/wapi/mails/send').length === 1, edup);
+  const p2 = await K.prepareMail({ to: ['kiki@kist.re.kr'], subject: 'S2', text: 'T', signature: false });
+  smode = 'draftfail'; mcalls.length = 0;
+  let edf = ''; try { await K.sendPrepared(p2); } catch (e) { edf = String(e); }
+  ok('mail 초안 만들기 실패 → 보내지 않음(보내기 호출 없음)', /초안 만들기 실패\(보내지 않음\): draft denied/.test(edf) && !mcalls.some(c => c[1] === '/v2/wapi/mails/send'), edf);
+  const p3 = await K.prepareMail({ to: ['kiki@kist.re.kr'], subject: 'S3', text: 'T', signature: false });
+  smode = 'sendfail';
+  let esf = null; try { await K.sendPrepared(p3.key); } catch (e) { esf = e; }
+  ok('mail 보내기 실패 → 오류 + 초안 번호(임시 보관함에 남음)', esf && /보내기 실패 — 초안은 임시 보관함에 남음: send denied/.test(esf.message) && esf.draftId === '4432000000000000001', esf && esf.message);
+  smode = 'ok'; mcalls.length = 0;
+  const p4 = await K.prepareMail({ to: ['kiki@kist.re.kr'], subject: 'S4', text: '줄', signature: false });
+  const r4 = await K.sendPrepared(p4.key);
+  ok('mail signature:false → 서명 없음', !mcalls.find(c => c[1] === '/v2/wapi/mail-drafts')[2][0].body.content.includes('begin signature'), '');
+  // 보낸 메일함 확인: 같은 제목·보낸 뒤 시각 + 받는 사람 대조 / 아직 없음 / 옛 메일은 섞지 않음
+  const kstNow = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 16), kstOld = new Date(Date.now() - 3600000 + 9 * 3600000).toISOString().slice(0, 16);
+  const sentMail = (id, subject, t) => ({ id, subject, createdAt: t + ':30+09:00', users: { from: { emailUser: { name: '나키키', emailAddress: 'me@kist.re.kr' } } }, mailSummary: { flags: { read: true } } });
+  sentList = [];
+  const c0 = await K.checkSent(sr);
+  ok('mail checkSent: 보낸 메일함에 아직 없으면 found false(보냄으로 적지 않음)', c0.found === false && K.fmtSent(c0).startsWith('보낸 메일함에 아직 없음'), K.fmtSent(c0));
+  sentList = [sentMail('4432000000000000009', '회의 일정', kstOld)];
+  const c1 = await K.checkSent(sr);
+  ok('mail checkSent: 한 시간 전 같은 제목 메일은 이번 것으로 치지 않음', c1.found === false, JSON.stringify(c1));
+  sentList = [sentMail('4432000000000000010', '회의 일정', kstNow), sentMail('4432000000000000009', '회의 일정', kstOld)];
+  const c2 = await K.checkSent(sr), fs2 = K.fmtSent(c2);
+  ok('mail checkSent: 보낸 메일함 확인 ✓ + 받는 사람·참조 일치', c2.found && c2.recipientsOk && c2.mail.id === '4432000000000000010' && fs2.startsWith('보낸 메일함 확인 ✓') && fs2.includes('받는 사람 일치') && fs2.includes('4432-0000-0000-0000-010') && !/=/.test(fs2), fs2);
+  const c3 = await K.checkSent(Object.assign({}, sr, { to: ['kiki@kist.re.kr', 'park@kist.re.kr'] }));
+  ok('mail checkSent: 빠진 받는 사람이 있으면 ⚠', c3.found && !c3.recipientsOk && K.fmtSent(c3).includes('⚠ 빠진 주소: park@kist.re.kr'), K.fmtSent(c3));
+  // 답장(2026-09-30) — 답장 안 한 메일 찾기 → 답장 미리보기(서버에 안 씀) → 임시 보관함 저장(원래 메일과 연결) → 그 초안 보내기 → 보낸 메일함·답장함 표시 확인
+  const RID = '4432000000000000077', RID2 = '4432000000000000078', RDRAFT = '4432000000000000055';
+  const rcalls = []; let rInbox = [], rSent = [];
+  const inboxMail = (id, from, subj, replied, read) => ({ id, subject: subj, createdAt: kstNow + ':00+09:00', users: { from: { emailUser: { name: 'N', emailAddress: from } }, to: [{ emailUser: { emailAddress: 'me@kist.re.kr' } }] }, mailSummary: { flags: { read, replied } } });
+  global.fetch = async (url, opts) => {
+    const m = (opts && opts.method) || 'GET', b = opts && opts.body ? JSON.parse(opts.body) : null;
+    rcalls.push([m, url.replace(/[?].*/, ''), b]);
+    if (url === '/v2/wapi/mails/' + RID) return MJ({ header: MOK, result: { content: { subject: '두레이 테스트', createdAt: '2026-09-30T01:06:45+09:00',
+      users: { from: { emailUser: { name: '이키키', emailAddress: 'lee@example.org' } }, to: [{ emailUser: { name: '나키키 책임연구원', emailAddress: 'me@kist.re.kr' } }], cc: [] },
+      body: { mimeType: 'text/html', content: '<div dir="ltr">본문</div>' } } } });
+    if (url === '/v2/wapi/mails/' + RID2) return MJ({ header: MOK, result: { content: { subject: 'Re: 이전 논의', createdAt: '2026-09-29T10:00:00+09:00', users: { from: { emailUser: { name: '박키키', emailAddress: 'park@kist.re.kr' } }, to: [], cc: [] }, body: { content: 'x' } } } });
+    if (url === '/v2/wapi/mails/' + RDRAFT) return MJ({ header: MOK, result: { content: { subject: 'RE: 두레이 테스트', body: { content: 'y' }, users: { to: [{ emailUser: { emailAddress: 'lee@example.org' } }], cc: [] } } } });
+    if (url === '/v2/wapi/mails/unread') return MJ({ header: MOK });
+    if (url.startsWith('/v2/wapi/mail-drafts')) return MJ({ header: MOK, result: [{ id: RDRAFT, version: 0, mimeSize: 10 }] });
+    if (url.startsWith('/v2/wapi/mails/send')) return MJ({ header: MOK });
+    if (url.startsWith('/v2/wapi/mails?folderName=inbox')) return MJ({ header: MOK, result: { totalCount: rInbox.length, contents: rInbox } });
+    if (url.startsWith('/v2/wapi/mails?folderName=sent')) return MJ({ header: MOK, result: { totalCount: rSent.length, contents: rSent } });
+    return MJ({ header: MOK });
+  };
+  rInbox = [inboxMail('4432000000000000081', 'a@kist.re.kr', '[결재] 알림', true, true), inboxMail(RID, 'lee@example.org', '두레이 테스트', false, false), inboxMail('4432000000000000083', 'kim@kist.re.kr', '자료 부탁드립니다', false, true)];
+  rSent = [Object.assign(sentMail('4432000000000000090', 'RE: 자료 부탁드립니다', kstNow), { users: { from: { emailUser: { emailAddress: 'me@kist.re.kr' } }, to: [{ emailUser: { emailAddress: 'kim@kist.re.kr' } }] } })];
+  const ury = await K.unrepliedMails({ days: 7 }), fury = K.fmtUnreplied(ury);
+  ok('mail unrepliedMails: 답장함 표시 꺼진 것만 + 다른 곳에서 답한 것 표시', ury.mails.length === 2 && ury.repliedCount === 1 && !ury.mails[0].repliedElsewhere && ury.mails[1].repliedElsewhere === true
+    && fury.startsWith('[답장 안 한 받은 메일 0-2 of 2 | 최근 7일 받은 3통 중 답장함 1통 제외]') && fury.includes('보낸 메일함에 답장 있음') && !/[=&?;]/.test(fury), fury);
+  rcalls.length = 0;
+  const rpy = await K.prepareReply(ury.mails[0], { text: '안녕하세요.\n\n잘 받았습니다.\n\n감사합니다.' });
+  const frpy = K.fmtPrepared(rpy);
+  ok('mail prepareReply: 서버에 안 씀(원래 메일 읽기 + 안 읽음 복원만) + RE: 제목·받는 사람 = 원래 보낸 사람', !rcalls.some(c => /mail-drafts|mails\/send/.test(c[1])) && rcalls.some(c => c[1] === '/v2/wapi/mails/unread')
+    && rpy.subject === 'RE: 두레이 테스트' && rpy.to.length === 1 && rpy.to[0].email === 'lee@example.org' && rpy.reply.mailId === RID && rpy.signature === false, JSON.stringify(rpy).slice(0, 300));
+  ok('mail fmtPrepared(답장): 답장할 메일·원문 인용 표시', frpy.startsWith('[답장 미리보기 — 아직 보내지 않음') && frpy.includes('답장할 메일: 2026-09-30 01:06 | lee@example.org | 두레이 테스트 (원문 인용 붙음)') && frpy.includes('⚠ 외부 주소 1개') && !/=/.test(frpy), frpy);
+  rcalls.length = 0;
+  const sdy = await K.saveDraft(rpy.key);
+  const rdy = rcalls.find(c => c[1] === '/v2/wapi/mail-drafts')[2][0];
+  ok('mail saveDraft: 임시 보관함에 답장 초안(원래 메일과 연결 relation reply) + 화면과 같은 원문 인용', sdy.ok && sdy.draftId === RDRAFT && rpy.draftId === RDRAFT && JSON.stringify(rdy.relation) === JSON.stringify({ type: 'reply', mailId: RID }) && rdy.subject === 'RE: 두레이 테스트'
+    && rdy.body.content === '<div style="font-family: Arial; font-size: 16px"><div>안녕하세요.</div><div><br></div><div>잘 받았습니다.</div><div><br></div><div>감사합니다.</div><div><br></div><!-- begin signature --><!-- end signature --></div>'
+      + '<br><br>-----Original Message-----<br>From:  "이키키" &lt;lee@example.org&gt;<br>To:     "나키키 책임연구원" &lt;me@kist.re.kr&gt;; <br>Cc:    <br>Sent:  2026-09-30 (수) 01:06:45 (UTC+09:00)<br>Subject: 두레이 테스트<br><br><div dir="ltr">본문</div>'
+    && !rcalls.some(c => /mails\/send/.test(c[1])), rdy && rdy.body && rdy.body.content);
+  ok('mail fmtPrepared: 저장 뒤 임시 보관함 표시', K.fmtPrepared(rpy).includes('임시 보관함에 저장됨') && K.fmtPrepared(rpy).includes('초안 id 4432-0000-0000-0000-055'), K.fmtPrepared(rpy));
+  rcalls.length = 0;
+  const sd2y = await K.saveDraft(rpy.key);
+  ok('mail saveDraft 두 번 → 다시 저장하지 않음', sd2y.already === true && !rcalls.length, JSON.stringify(sd2y));
+  const rsy = await K.sendPrepared(rpy.key);
+  ok('mail sendPrepared(저장된 답장 초안) → 초안을 새로 만들지 않고 그 초안을 보냄', rsy.ok && rsy.replyTo === RID && rcalls.map(c => c[1]).join() === '/v2/wapi/mails/send' && JSON.stringify(rcalls[0][2]) === JSON.stringify({ draftId: RDRAFT }), JSON.stringify(rcalls));
+  rSent = [Object.assign(sentMail(RDRAFT, 'RE: 두레이 테스트', kstNow), {})];
+  const rcy = await K.checkSent(rsy);
+  ok('mail checkSent: 보낸 메일 id = 초안 id 로 바로 찾음 + 받는 사람 일치', rcy.found && rcy.mail.id === RDRAFT && rcy.recipientsOk, K.fmtSent(rcy));
+  rInbox[1].mailSummary.flags.replied = true; rcalls.length = 0;
+  const rry = await K.checkReplied(rsy);
+  ok('mail checkReplied: 원래 메일 답장함 표시(목록에서 — 원래 메일을 열지 않음)', rry.found && rry.replied === true && !rcalls.some(c => c[1] === '/v2/wapi/mails/' + RID), JSON.stringify(rry));
+  const rp2y = await K.prepareReply(RID2, { text: '네' });
+  ok('mail prepareReply: 이미 Re: 로 시작하는 제목은 RE: 를 겹치지 않음', rp2y.subject === 'Re: 이전 논의' && rp2y.to[0].email === 'park@kist.re.kr' && rp2y.external.length === 0, rp2y.subject);
+  const rp3y = await K.prepareReply(RID, { text: '' });
+  ok('mail prepareReply: 본문 없으면 ERR', rp3y.error && K.fmtPrepared(rp3y).startsWith('ERR '), JSON.stringify(rp3y));
 
   // ================= kk-wiki =================
   dom();

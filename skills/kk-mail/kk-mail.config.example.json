@@ -4,15 +4,23 @@
     "enabled": false,
     "_comment": "기능 2 폴더 분류 사용 여부. false면 메일 찾기(1)·자연어 규칙(3)·스팸 처리(4)만.",
     "folders": {
-      "광고": { "use": false },
-      "공고": { "use": false },
-      "학회": { "use": false }
+      "광고": {
+        "use": false
+      },
+      "공고": {
+        "use": false
+      },
+      "학회": {
+        "use": false
+      }
     }
   },
   "personalRules": [
     {
       "_comment": "개인 자동분류 규칙 메모(실등록은 kk-mail이 createRule로). 예시 1건:",
-      "fromEmails": ["noreply@example-journal.org"],
+      "fromEmails": [
+        "noreply@example-journal.org"
+      ],
       "subjectKeywords": [],
       "toFolderName": "학회",
       "applyBefore": true
@@ -22,5 +30,7 @@
     "_comment": "개인이 누적한 발신처 분류 학습. skill 본문에는 안 담고 여기에만.",
     "toSpam": [],
     "toFolder": {}
-  }
+  },
+  "replyDrafts": "both",
+  "_replyDrafts": "기능 6 답장 초안 두는 곳: both(기본 — 대화창에 보여 주고 Dooray 임시 보관함에도 저장) | chat(대화창만) | dooray(임시 보관함만)"
 }
