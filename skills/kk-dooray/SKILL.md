@@ -39,19 +39,32 @@ description: |
 
 ---
 
-## 실행 준비 (매 작업 시작 시)
-1. `tabs_context_mcp` → `kist.gov-dooray.com` 탭이 있으면 그 탭(어느 화면이든 된다), 없으면 `navigate` `https://kist.gov-dooray.com/task/to`. 로그인 화면이 뜨면 "Dooray 에 로그인해 주세요" 안내 후 중단.
-2. **코어 주입**: `scripts/kk_dooray_ops.min.js` 를 Read → `javascript_tool` 로 inject → 반환 `kk-dooray-ops/1.2 =^.^=` 이면 성공. 원본 `kk_dooray_ops.js` 는 읽을 필요 없다(주석만 다름). 탭을 새로고침하면 다시 주입.
-3. **2-스텝**: 비동기 호출은 결과를 window 에 두고 마지막 식은 문자열로 — `window.__d=null; kkDooray.find(…).then(r=>window.__d=r, e=>window.__d={error:String(e)}); 'started'` → 다음 호출에서 `kkDooray.fmtFind(window.__d)`. 아직이면 `(아직 — …)` 이 오니 2~3초 뒤 다시. 오류 처리(`e=>…`)를 빼면 로그인 만료가 영원히 '아직'으로 남는다.
-4. **출력 제약**: 반환 문자열은 ~1,000자에서 잘린다 → `fmt*` 포매터가 글자 수로 끊고 `▶ 다음 조각 N` 을 알려준다. `size=100&page=0` 같은 쿼리 꼴이 섞이면 결과가 통째로 `[BLOCKED…]` 가 되므로 포매터가 `=` 를 전각 `＝` 로 바꿔 둔다. URL·19자리 id 는 그대로 통과한다(2026-09-29 실측 — 링크는 `fmtLinks` 가 주소 그대로). 포매터 첫 줄이 `ERR …` 면 결과가 아니라 오류다(로그인 → 탭 새로고침 → 재주입 1회).
-5. **받기·쓰기 준비(기능 4~5 를 처음 쓸 때 한 번)**: `python scripts/dooray_io.py check` → `[요약] 인증 OK — 이름`. 토큰이 없거나 만료면 한 줄 안내가 나온다(값은 출력하지 않는다). `requests` 가 없으면 설치 명령을 알려 주고 사용자 확인 뒤 설치.
+## ⚡ 빠른 길 (기본 — 질문 하나에 자료 모으기 30초~1분, 2026-09-29 실측)
+사용자 지적("15분 걸리면 직접 하는 게 빠르다") 뒤 바꾼 기본 경로. 느렸던 이유 = ① 코어(4만 자)를 매번 대화창에 붙여넣기 ② 결과를 1,000자씩 여러 번 나눠 읽기 ③ 단계마다 왕복. → **코어는 파일로 올려 브라우저에 저장**, **찾기·프로젝트 전체·본문·댓글·첨부는 `report()` 한 번**, **결과는 작업 탭에 글로 펼쳐 `get_page_text` 한 번에**(3~4만 자, 1,000자 잘림·가림 없음). 같은 질문이 15분 → 66초(첫 사용·코어 올리기 포함).
+
+1. **작업 탭 + 코어** — 한 번의 `browser_batch`:
+   - `tabs_context_mcp` → 주소가 `https://kist.gov-dooray.com/robots.txt` 인 탭이 있으면 그 탭, 없으면 `tabs_create_mcp` → `navigate` 그 주소. **이 작업 탭만 쓴다**(쓰던 Dooray 화면은 건드리지 않는다. 같은 origin 이라 로그인 세션으로 조회된다. 로그인이 풀려 있으면 Dooray 에 로그인해 달라고 안내).
+   - `javascript_tool`: `(function(){ var c = localStorage.getItem('kk.dooray.core') || ''; return c.indexOf("kk-dooray-ops/1.3'") > 0 ? (0, eval)(c) : 'NEED_UPLOAD'; })()` → `kk-dooray-ops/1.3 =^.^=` 면 준비 끝.
+   - `NEED_UPLOAD`(이 PC 처음·새 버전) → 파일로 올린다(대화창에 붙여넣지 않음): `javascript_tool` `document.body.innerHTML=''; var i=document.createElement('input'); i.type='file'; i.id='kkcore'; i.setAttribute('aria-label','kk core file'); document.body.appendChild(i); 'ok'` + `find` "kk core file" → `file_upload`(paths=[**이 skill 폴더**`/scripts/kk_dooray_ops.min.js` 절대경로], ref) → `javascript_tool` `window.__ld=null; document.getElementById('kkcore').files[0].text().then(t=>{localStorage.setItem('kk.dooray.core',t); window.__ld=(0,eval)(t);}, e=>window.__ld='ERR '+e); 'started'` → 다음 호출 `String(window.__ld)`. `file_upload` 가 막히면 옛 방식(min.js 를 Read → `javascript_tool` 에 붙여넣기).
+2. **한 번에 찾고 읽기** — 한 번의 `browser_batch`: `javascript_tool` `window.__rep=null; kkDooray.report([['…'],['…','…']], {since:'…'}).then(r=>window.__rep=r, e=>window.__rep={error:String(e)}); 'started'` → `computer` wait 5~8초 → `get_page_text`. 화면이 `(kk-dooray 찾는 중 …)` 이면 몇 초 뒤 `get_page_text` 만 다시.
+   - 결과 글: 머리줄(검색어·건수·시간·⚠ 오류·잘림) → 업무마다 `[T번호] 수정일 | 프로젝트 #번호 | 제목 | 작성→담당 | 상태 | 링크 | 본문 | 첨부(이름·크기·누가·언제·본문/댓글) | 댓글 전부(오래된 순)` → 드라이브 `[F번호] 수정일 | 종류 | 드라이브 경로 | 이름 | 크기 | 올린 사람 | 링크`.
+   - `expand:true` — **사람·공동연구처럼 이름이 글에 없을 수 있는 질문**("○○ 박사님과 한 일"): 결과가 2건 이상 몰린 프로젝트(없으면 1위)의 업무 전체를 더해 모두 읽는다(서버 검색은 작성자·담당자 칸을 안 본다). 주제어 검색은 보통 끈다.
+   - 옵션: `since`·`until`(수정일, 'YYYY-MM-DD'), `tasks:false`·`drive:false`, `kind`, `ext`, `maxPages`, `limits:{detail:30, comments:100, body:3000, comment:1200}`(글이 4.5만 자를 넘으면 스스로 줄인다).
+3. **답 쓰기** — `get_page_text` 한 번에 필요한 것이 다 있다. 날짜순 경과·결론·링크로 정리(아래 기능 1 의 5). 더 볼 것만 후속으로:
+   - 걸러 보기 `kkDooray.showItems(kkDooray.only(kkDooray.last().tasks, {who:'○○'}))` → `get_page_text` (결과 객체는 `kkDooray.last()`).
+   - 파일 내용(허락 후) `window.__r=null; kkDooray.readFile(kkDooray.last().drive.items[N]).then(r=>{window.__r=r; kkDooray.showText(r);}, e=>window.__r={error:String(e)}); 'started'` → `get_page_text` — 800자씩 나눠 읽지 않는다.
+- **받기·쓰기 준비(기능 4~5 를 처음 쓸 때 한 번)**: `python scripts/dooray_io.py check` → `[요약] 인증 OK`. 토큰이 없거나 만료면 한 줄 안내(값은 출력하지 않는다). `requests` 가 없으면 설치 명령을 알려 주고 사용자 확인 뒤 설치.
+
+## 세부 조작 (작은 확인용 — 결과가 짧을 때만)
+- `javascript_tool` 반환은 ~1,000자에서 잘리고 `size=100&page=0` 같은 쿼리 꼴이 섞이면 통째로 `[BLOCKED…]` → `fmt*` 포매터가 글자 수로 끊고(`▶ 다음 조각 N`) `=` 를 전각으로 바꾼다. 여러 조각을 읽어야 하면 빠른 길의 작업 탭 + `get_page_text` 가 훨씬 빠르다.
+- 2-스텝: `window.__d=null; kkDooray.find(…).then(r=>window.__d=r, e=>window.__d={error:String(e)}); 'started'` → 다음 호출 `kkDooray.fmtFind(window.__d)`. 오류 처리(`e=>…`)를 빼면 로그인 만료가 영원히 '아직'으로 남는다. 포매터 첫 줄이 `ERR …` 면 오류(로그인 → 탭 새로고침 → 재주입 1회).
 
 ---
 
 ## 기능 1. 찾기 (대화형, 조회 전용 · confirm 불필요) — ★ 기본
 "작년에 ○○ 과제 보고서 작성하던 업무 어디 있지", "4월 이후 ○○ 가 올린 에폭시화 발표 슬라이드 찾아줘", "견적서 첨부했던 업무".
 1. **말 → 검색어 묶음** — 핵심어와 동의어·영문·약어·사람 이름을 **묶음**으로 만든다. 한 묶음 안 낱말은 AND, 묶음끼리는 합친다. 예: `[['○○사업'], ['영문 사업명'], ['○○사업','보고서']]`. 드라이브를 위해 파일 이름에 들어갈 말(발표자 이름·`yymmdd`·"발표")을 묶음으로 더한다. 기간은 `since`·`until`('YYYY-MM-DD', 한국시간, **수정일** 기준). 애매하면 **한 번만** 되묻고 시작.
-2. **한 번에 검색** — `window.__d=null; kkDooray.find([['…'],['…','…']], {since:'2026-04-01'}).then(r=>window.__d=r, e=>window.__d={error:String(e)}); 'started'` → `kkDooray.fmtFind(window.__d)`.
+2. **한 번에 검색** — 기본은 빠른 길 2 의 `report()`(찾기+본문·댓글·첨부·경로를 작업 탭에 펼쳐 `get_page_text` 한 번). 짧게 확인만 할 땐 `window.__d=null; kkDooray.find([['…'],['…','…']], {since:'2026-04-01'}).then(r=>window.__d=r, e=>window.__d={error:String(e)}); 'started'` → `kkDooray.fmtFind(window.__d)`.
    - 옵션: `tasks:false`·`drive:false`(한쪽만), `detail:5`(본문·첨부·댓글까지 읽어 둘 위쪽 업무 수), `paths:10`(폴더 경로를 붙일 드라이브 항목 수), `comments:10`, `kind:'file'|'folder'`, `ext:'pptx|hwp'`, `projectId`, `maxPages:3`(묶음당 100건씩).
    - 머리줄 `⚠ 잘림` = 상한에서 멈춤 → 낱말을 더해 좁히거나 `maxPages` 를 늘린다. `⚠ 업무:`·`⚠ 드라이브:` = 그쪽 검색 오류(**없음이 아니다**).
 3. **더 보기** — `kkDooray.fmtTasks(window.__d.tasks, 6)` / `kkDooray.fmtDrive(window.__d.drive, 6)` (둘째 인자 = 시작 번호).
@@ -61,7 +74,7 @@ description: |
    - 업무 `https://kist.gov-dooray.com/task/{프로젝트}/{업무}` · 드라이브 `https://kist.gov-dooray.com/drive/{프로젝트}/views/{파일}`(드라이브에서 그 파일이 선택되고 오른쪽에 경로·미리보기가 뜬다).
    - 주소가 가려져 보이면 `fmtLinks(x, 0, 12, {hy:true})` 의 하이픈 번호에서 `-` 를 지워 위 형식으로 조합.
    - 무엇을 제외했는지 한 줄 덧붙인다.
-6. **사람과 함께 한 일**("○○ 박사님과 한 논문 작업") — 서버 검색은 **글 속에 이름이 있는 업무만** 찾는다(작성자·담당자 칸은 안 봄). 이름으로 찾은 업무들이 한 프로젝트(공동연구 프로젝트 등)에 몰려 있으면 그 프로젝트 **전체 목록**을 받아 모두 읽는다: `window.__pt=null; kkDooray.projectTasks(window.__d.tasks.items[N].projectId).then(r=>kkDooray.getTasks(r,{n:30, comments:60}).then(()=>window.__pt=r), e=>window.__pt={error:String(e)}); 'started'` → `kkDooray.fmtTasks(window.__pt)`. 같은 식으로 `searchTasks(['논문'], {projectId})` 는 그 프로젝트 안만. 약어에 주의(예: 연구실 기록의 '과수' = 과산화수소)하고, 요약은 날짜순 경과표 + 성과물(논문·특허·보고서·제안서)로.
+6. **사람과 함께 한 일**("○○ 박사님과 한 논문 작업") — `report([['○○○'],['○박사'],['영문 성']], {expand:true})` 한 번이면 된다(아래는 원리). 서버 검색은 **글 속에 이름이 있는 업무만** 찾는다(작성자·담당자 칸은 안 봄). 이름으로 찾은 업무들이 한 프로젝트(공동연구 프로젝트 등)에 몰려 있으면 그 프로젝트 **전체 목록**을 받아 모두 읽는다: `window.__pt=null; kkDooray.projectTasks(window.__d.tasks.items[N].projectId).then(r=>kkDooray.getTasks(r,{n:30, comments:60}).then(()=>window.__pt=r), e=>window.__pt={error:String(e)}); 'started'` → `kkDooray.fmtTasks(window.__pt)`. 같은 식으로 `searchTasks(['논문'], {projectId})` 는 그 프로젝트 안만. 약어에 주의(예: 연구실 기록의 '과수' = 과산화수소)하고, 요약은 날짜순 경과표 + 성과물(논문·특허·보고서·제안서)로.
 7. **후속 질문은 들고 있는 결과로** — "그중 hwp 만" → `kkDooray.fmtDrive(kkDooray.only(window.__d.drive, {ext:'hwp'}))`, "○○ 가 올린 것만" → `only(…, {who:'○○'})`, "댓글에 ○○ 나온 업무" → `only(window.__d.tasks, {text:'○○'})`(본문·댓글을 읽어 둔 건만 대상), 기간 → `{since, until}`, 종류 → `{kind:'folder'}`. 새 낱말이 필요할 때만 다시 `find`.
 
 ## 기능 2. 자세히 (조회 전용)

@@ -73,3 +73,9 @@ GET /v2/wapi/drives/{driveId}/files/{fileId}
 - 탭이 뒤에 있어도(`visibilityState: hidden`) fetch·타이머는 돌았다. 다만 응답 처리 코드에서 예외가 나면 2-스텝 변수가 `null` 로 남는다 → 코어는 항목별 실패를 `{error}` 로 남긴다.
 - 사람 이름 조회가 따로 필요하면 `GET /v2/wapi/members/{memberId}` → `result.content.name`(검색 응답에 이미 이름이 있어 코어는 안 쓴다).
 - 공식 REST API(토큰)로도 같은 일을 할 수 있지만 느리다 — 프로젝트 44곳 × 검색어 7개를 하나씩 도는 데 약 100초, 드라이브 폴더 161개를 훑는 데 95초(2026-09-29). 공식 API 의 업무 검색은 제목(`subjects=`)만 된다.
+
+## 9. 빠른 길 통로 (2026-09-29 실측 — 사용자 지적 "15분 걸리면 직접 하는 게 빠르다")
+- **작업 탭** `https://kist.gov-dooray.com/robots.txt`: 가벼운 text/plain 문서지만 같은 origin 이라 세션 쿠키로 wapi 가 조회된다. 쓰던 Dooray 화면과 분리.
+- **코어 올리기**: Claude in Chrome `file_upload` 로 `kk_dooray_ops.min.js` 를 작업 탭의 `<input type=file>` 에 넣고 `file.text()` → `localStorage['kk.dooray.core']` 저장 → `(0,eval)`. 대화창에 4만 자를 붙여넣지 않는다. 다음부터는 `localStorage` 에서 한 줄로(버전 문자열로 확인). Dooray 페이지에서 `eval`·`new Function`·localStorage 60KB·`crypto.subtle` 모두 된다(실측).
+- **큰 결과 꺼내기**: 결과 글을 작업 탭 `<pre>` 에 쓰고 `get_page_text` 한 번 → 2.7만 자 그대로(1,000자 잘림 없음, `size=100&page=0`·URL 도 가려지지 않음).
+- **시간(같은 질문)**: 이전 약 15분(코어 붙여넣기, 1,000자 조각 읽기 10여 번, 주소 디버깅) → 66초(탭 확인·코어 올리기·`report` 3.9초·`get_page_text` 1회, 첫 사용 기준). 코어가 이미 저장돼 있으면 올리기 3단계가 빠진다.

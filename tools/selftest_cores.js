@@ -294,6 +294,7 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
   let dmode = 'ok'; const dcalls = [];
   const T1 = { id: '4100000000000000001', projectId: '3300000000000000001', number: 7, subject: '가나다 과제 보고서 작성', workflowId: 'W1', workflowClass: 'working', users: { from: { type: 'member', member: { name: '김키키' } }, to: [{ type: 'member', member: { name: '이키키' } }], cc: [] }, createdAt: '2026-09-01T10:00:00+09:00', updatedAt: '2026-09-20T10:00:00+09:00', fileIdList: ['F1'], subPostCount: 1 };
   const T2 = Object.assign({}, T1, { id: '4100000000000000002', number: 3, subject: '옛 보고서', updatedAt: '2026-03-01T10:00:00+09:00', fileIdList: [] });
+  const T3 = Object.assign({}, T1, { id: '4100000000000000003', number: 9, subject: '같은 프로젝트 다른 업무', updatedAt: '2026-05-01T10:00:00+09:00', fileIdList: [] });
   const TREFS = { projectMap: { '3300000000000000001': { code: '○○-공동연구' } }, workflowMap: { W1: { name: '진행' } } };
   const DC = (id, name, type, upd, extra) => Object.assign({ id, driveId: 'D1', projectId: '3300000000000000009', name, type, createdAt: upd, updatedAt: upd, size: 2048, createOrganizationMemberId: 'M1', lastUpdateOrganizationMemberId: 'M1', isTrashed: false, downloadUrl: '/drive/v1/downloads/D1/' + id }, extra || {});
   const DREFS = { driveMap: { D1: { name: '연구실-공지', projectId: '3300000000000000009', type: 'project' } }, organizationMemberMap: { M1: { name: '박키키' } } };
@@ -303,7 +304,7 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
     if (dmode === 'html') return { ok: true, status: 200, text: async () => HTML };
     if (dmode === '401') return { ok: false, status: 401, text: async () => '' };
     if (dmode === 'reject') return J({ header: { isSuccessful: false, resultCode: -1, resultMessage: 'not allowed' } });
-    if (/^\/wapi\/task\/v1\/projects\/!\d+\/tasks\?/.test(url)) return J({ header: { isSuccessful: true }, result: [T1], totalCount: 1, references: TREFS });   // 한 프로젝트 목록('!' 필수)
+    if (/^\/wapi\/task\/v1\/projects\/!\d+\/tasks\?/.test(url)) return J({ header: { isSuccessful: true }, result: [T1, T3], totalCount: 2, references: TREFS });   // 한 프로젝트 목록('!' 필수) — T3 는 검색에 안 걸리는 같은 프로젝트 업무
     if (url.startsWith('/wapi/task/v1/projects/*/tasks?')) {
       if (dmode === 'unsorted') return J({ header: { isSuccessful: true }, result: [T2, T1], totalCount: 2, references: TREFS });
       if (dmode === 'many') return J({ header: { isSuccessful: true }, result: Array.from({ length: 100 }, (_, i) => Object.assign({}, T1, { id: String(4100000000000000100n + BigInt(i)), subject: '아주 긴 업무 제목 ○○○○ 과제 보고서 초안 검토 요청 ' + i })), totalCount: 250, references: TREFS });
@@ -319,7 +320,7 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
     if (url.startsWith('/v2/wapi/drives/D1/files/')) return J({ header: { isSuccessful: true }, result: { content: { parentFile: { id: '5100000000000000002', path: 'root/2026/2026-06' } } } });
     return { ok: false, status: 404, text: async () => '{}' };
   };
-  ok('dooray inject 1.2', load('kk-dooray/scripts/kk_dooray_ops.min.js') === 'kk-dooray-ops/1.2 =^.^=');
+  ok('dooray inject 1.3', load('kk-dooray/scripts/kk_dooray_ops.min.js') === 'kk-dooray-ops/1.3 =^.^=');
   const DR = window.kkDooray;
   const noQ = (s) => !/=/.test(s) && !/\w=\w*&/.test(s);
   window.__d = null; DR.find([['가나다'], ['가나다', '보고서']], { since: '2026-04-01' }).then(r => window.__d = r, e => window.__d = { error: String(e) });
@@ -349,7 +350,17 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
   // 한 프로젝트 전체 목록: 주소 번호 앞 '!' + 검색어·projectScope 없이 (2026-09-29 실사용 시험에서 '!' 빠진 결함 발견)
   dmode = 'ok'; dcalls.length = 0;
   const pt = await DR.projectTasks('3300000000000000001'), ptu = dcalls.map(c => c.url).find(u => u.includes('/projects/!')) || '';
-  ok('dooray projectTasks → /projects/!{id}/tasks, 검색어·projectScope 없음', pt.items.length === 1 && pt.end === 'all' && ptu.startsWith('/wapi/task/v1/projects/!3300000000000000001/tasks?') && !/all=|projectScope/.test(ptu), ptu);
+  ok('dooray projectTasks → /projects/!{id}/tasks, 검색어·projectScope 없음', pt.items.length === 2 && pt.end === 'all' && ptu.startsWith('/wapi/task/v1/projects/!3300000000000000001/tasks?') && !/all=|projectScope/.test(ptu), ptu);
+  // 빠른 길 report(): 작업 탭(robots.txt)에만 글로 펼침 — 찾기 + 프로젝트 전체(expand) + 본문·댓글(오래된 순)·첨부·드라이브 경로를 한 번에
+  let shownText = ''; document.body.appendChild = (el) => { shownText = el.textContent; };
+  global.location = { pathname: '/task/to' };
+  ok('dooray show: 작업 탭이 아니면 거부(쓰던 화면 보호)', DR.show('x').startsWith('ERR 작업 탭') && shownText === '', DR.show('x'));
+  global.location = { pathname: '/robots.txt' };
+  const rp = await DR.report([['가나다'], ['가나다', '보고서']], { expand: true });
+  const iOld = shownText.indexOf('2026-09-10 09:00 김키키'), iNew = shownText.indexOf('2026-09-19 09:00 이키키');
+  ok('dooray report: 업무 3건(프로젝트 전체로 1건 더함)·드라이브·링크·댓글 오래된 순·요약 반환', /업무 3건 · 드라이브 2건/.test(rp.summary) && shownText.includes("+ 프로젝트 '○○-공동연구' 업무 2건 중 검색에 안 걸린 1건을 더함") && shownText.includes('| 같은 프로젝트') && shownText.includes('https://kist.gov-dooray.com/task/3300000000000000001/4100000000000000003') && shownText.includes('[F0]') && iOld > 0 && iNew > iOld && rp.chars === shownText.length, rp.summary + ' // ' + shownText.slice(0, 300));
+  ok('dooray last(): 후속 질문용 결과 보관', DR.last().tasks.items.length === 3 && DR.last().drive.items.length === 2);
+  ok('dooray showItems(only 결과) 줄 제한 없이', DR.showItems(DR.only(DR.last().tasks, { who: '이키키' })).startsWith('shown') && shownText.startsWith('■ 목록 3건'), shownText.slice(0, 80));
   // 잘림: 전체 250 중 maxPages 1 → ⚠ 잘림
   dmode = 'many'; const mt = await DR.searchTasks(['보고서'], { maxPages: 1 });
   ok('dooray 상한 도달 → truncated + ⚠ 잘림', mt.truncated === true && DR.fmtTasks(mt).includes('⚠ 잘림(전체 250 중 100'), DR.fmtTasks(mt).split('\n')[0]);
