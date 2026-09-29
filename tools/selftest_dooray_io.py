@@ -201,7 +201,7 @@ def main():
     rc, out = run("task-create", "--project", "○○-공동연구", "--subject", "S", "--to", "최키키")
     ok("프로젝트 멤버 아님 → 코드 2", rc == 2 and "멤버가 아닙니다" in out, out)
     rc, out = run("task-create", "--project", "○○-공동연구", "--subject", "S", "--text-file", body_md, "--to", "이키키", "--cc", "나", "--attach", att)
-    ok("task-create 미리보기 → 담당·참조·첨부 보여주고 POST 없음", rc == 0 and "담당: 이키키" in out and "참조: 김키키(나)" in out and "a.txt" in out and not calls(lambda c: c["m"] == "POST"), out)
+    ok("task-create 미리보기 → 담당·참조·첨부 보여주고 POST 없음", rc == 0 and "담당: 이키키" in out and "참조: 나" in out and "a.txt" in out and not calls(lambda c: c["m"] == "POST"), out)
     rc, out = run("task-create", "--project", "○○-공동연구", "--subject", "S", "--text-file", body_md, "--to", "이키키", "--cc", "나", "--attach", att, "--yes")
     cp = calls(lambda c: c["m"] == "POST" and c["p"] == "/project/v1/projects/P1/posts")
     j = json.loads(cp[0]["body"]) if cp else {}
@@ -229,7 +229,8 @@ def main():
     rc, out = run("drive-download", FILE_XE, "--to", os.path.join(tmp, "dl3"), "--yes")
     ok("파일 대신 오류 응답 → 저장 안 함(.part 도 없음)", rc == 1 and "오류 응답" in out and not [x for x in os.listdir(os.path.join(tmp, "dl3"))], out)
     cache = os.path.join(home, "kk-dooray.cache.json")
-    ok("캐시는 설정 폴더에, 토큰 없음", os.path.exists(cache) and TOKEN not in open(cache, encoding="utf-8").read())
+    ctext = open(cache, encoding="utf-8").read() if os.path.exists(cache) else ""
+    ok("캐시는 설정 폴더에 번호만 — 토큰·본인 이름·개인 프로젝트 코드 없음", ctext and TOKEN not in ctext and "김키키" not in ctext and "private-project" not in ctext and '"(개인)"' in ctext, ctext[:300])
     S["mode"] = "401"
     rc, out = run("task-files", TASK)
     ok("토큰 만료(401) → 한 줄 안내(코드 1)", rc == 1 and "만료됐거나" in out and "Traceback" not in out, out)

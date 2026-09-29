@@ -45,6 +45,7 @@ if not VERIFY_TLS:
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     print("[kiki] 경고: KIKI_INSECURE_TLS 가 켜져 있어 TLS 인증서를 검증하지 않습니다(토큰 노출 위험) — 사내 프록시 문제일 때만 임시로 쓰세요.", file=sys.stderr)
 CACHE_DAYS = 7
+CACHE_VER = 2
 
 
 class Stop(Exception):
@@ -286,12 +287,16 @@ class Dooray:
         return self._req(method if r0.status_code in (307, 308) else "GET", loc, files=files, stream=stream, timeout=timeout)
 
     # ----- 캐시(내 프로젝트·드라이브 id) — 사람마다 다르므로 skill 이 아니라 설정 폴더에 -----
+    # 2026-09-29 사용자 지적: 캐시에 본인 이름·개인 프로젝트 코드(@아이디)가 남았다 → 번호만 저장한다(v2).
+    #   본인 = 멤버 id 만(이름은 필요할 때 조회하고 저장하지 않음), 개인 프로젝트 코드 = '(개인)'. v2 가 아닌 옛 캐시는 버리고 새로 받는다.
     def cache(self) -> dict:
         if self._cache is None:
             try:
                 self._cache = json.load(open(self.cache_path, encoding="utf-8"))
             except Exception:
                 self._cache = {}
+            if self._cache.get("v") != CACHE_VER:
+                self._cache = {"v": CACHE_VER}
         return self._cache
 
     def save_cache(self):
@@ -303,13 +308,14 @@ class Dooray:
         except Exception as e:
             print(f"[kk-dooray] 캐시 저장 실패(작업엔 지장 없음): {type(e).__name__}", file=sys.stderr)
 
-    def me(self) -> dict:
+    def me(self, with_name: bool = False) -> dict:
+        """{'id'} (with_name 이면 이번 실행에서만 'name' 도 — 이름은 캐시에 저장하지 않는다)."""
         c = self.cache()
-        if not c.get("me"):
+        if not c.get("me_id") or (with_name and not getattr(self, "_me_name", "")):
             r = self.call("GET", "/common/v1/members/me", "내 정보 조회").get("result") or {}
-            c["me"] = {"id": str(r.get("id") or ""), "name": r.get("name") or ""}
+            c["me_id"], self._me_name = str(r.get("id") or ""), r.get("name") or ""
             self.save_cache()
-        return c["me"]
+        return {"id": c["me_id"], "name": getattr(self, "_me_name", "")}
 
     def projects(self, refresh: bool = False) -> dict:
         """{pid: {code, drive, state, type}} — 내 프로젝트(진행+보관) + 개인 프로젝트. 7일 캐시."""
@@ -324,8 +330,10 @@ class Dooray:
                 d = self.call("GET", "/project/v1/projects", "프로젝트 목록", params=dict(q, page=page, size=100))
                 batch = d.get("result") or []
                 for p in batch:
-                    out[str(p.get("id"))] = {"code": p.get("code") or "", "drive": str((p.get("drive") or {}).get("id") or ""),
-                                             "state": p.get("state") or q.get("state", ""), "type": p.get("type") or ""}
+                    typ = p.get("type") or ("private" if q.get("type") == "private" else "")
+                    out[str(p.get("id"))] = {"code": "(개인)" if typ == "private" else (p.get("code") or ""),   # 개인 프로젝트 코드 = @아이디 → 저장 안 함
+                                             "drive": str((p.get("drive") or {}).get("id") or ""),
+                                             "state": p.get("state") or q.get("state", ""), "type": typ}
                 if len(batch) < 100:
                     break
                 page += 1
@@ -369,9 +377,8 @@ class Dooray:
         return found
 
     def member_ref(self, name: str, pid: str) -> dict:
-        me = self.me()
-        if name in ("나", "me", me["name"]):
-            return {"id": me["id"], "name": me["name"] + "(나)"}
+        if name in ("나", "me"):
+            return {"id": self.me()["id"], "name": "나"}
         found = self.members(name, pid)
         inp = [f for f in found if f.get("inProject")]
         if len(inp) == 1:
@@ -481,7 +488,7 @@ def cmd_check(a):
     tok, src = _find_token()
     if not tok:
         raise Stop(_token_hint())
-    me = Dooray().me()
+    me = Dooray().me(with_name=True)   # 이름은 이번 실행에서만(저장 안 함)
     print(f"[요약] 인증 OK — {me['name']} (토큰 길이 {len(tok)}, 출처 {src})")
 
 
