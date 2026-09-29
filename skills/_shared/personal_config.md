@@ -30,16 +30,17 @@
 - 토큰은 **repo·코드·로그 0건**(gitignore `*token*`). 조회 전용 skill·세션쿠키 skill·세금계산서 직접작성은 토큰이 아예 필요 없다.
 
 ## 공통 필드 ↔ 사용하는 skill
-| kiki.config.json 필드 | kk-mail | kk-pay | kk-meeting | kk-budget | kk-inspect | kk-wiki |
-|----------------------|:---:|:---:|:---:|:---:|:---:|:---:|
-| kiki_root | | ○ | ○ | ○ | ○ | ○ |
-| user.name | | ○ | ○ | ○ | ○ | |
-| user.emp_no | | ○ | ○ | | ○ | |
-| user.phone | | | | | ○ | |
-| card_holder | | ○ | ○ | | ○ | |
-| payment_admin | | ○ | ○ | | ○ | |
-| location | | | | | ○ | |
-| projects | | ○ | ○ | ○ | ○ | |
-| token.txt (토큰) | (옵션) | ○ | (옵션) | | | (옵션) |
+| kiki.config.json 필드 | kk-mail | kk-dooray | kk-pay | kk-meeting | kk-budget | kk-inspect | kk-wiki |
+|----------------------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| kiki_root | | | ○ | ○ | ○ | ○ | ○ |
+| user.name | | | ○ | ○ | ○ | ○ | |
+| user.emp_no | | | ○ | ○ | | ○ | |
+| user.phone | | | | | | ○ | |
+| card_holder | | | ○ | ○ | | ○ | |
+| payment_admin | | | ○ | ○ | | ○ | |
+| location | | | | | | ○ | |
+| projects | | | ○ | ○ | ○ | ○ | |
+| token.txt (토큰) | (옵션) | | ○ | (옵션) | | | (옵션) |
 
 > kk-mail 은 개인 식별정보가 필요 없다(메일은 브라우저 세션 쿠키로 동작). 분류 선호만 `kk-mail.config.json` 에.
+> kk-dooray 는 개인 식별정보도 설정 파일도 없다(업무·드라이브 검색은 브라우저 세션 쿠키로 동작).

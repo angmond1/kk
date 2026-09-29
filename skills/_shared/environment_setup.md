@@ -3,7 +3,7 @@
 > **모든 kk-* skill 은 첫 실행(부트스트랩)과 매 작업 시작 때 아래를 동일하게 확인/안내한 뒤 진행한다.**
 > **먼저 `python <skills>/_shared/kiki_doctor.py` 한 번** — Python·패키지·Node·설치된 skill 과 코어 버전·개인 설정 유무(값은 안 보임)·토큰 유무·kiki_root·다운로드 폴더·변환 엔진·kk-wiki 상태를 한 번에 출력한다(`--json` 도 됨). 아래 개별 점검은 doctor 가 문제를 보일 때만.
 > 무자격 환경(미연결·미로그인)이면 **크래시 대신 친절한 안내로 멈춘다**. 설치 자체(패키지·Python·Node.js·MCP 등록)는 `CLAUDE.md`/`INSTALL.md` 가 담당 — 여기는 *실행 직전* 점검.
-> 권장 모델: 첫 설정·첫 1~2회 = Opus 5(high), 이후 kk-budget 은 Sonnet 5, kk-mail 은 Opus 5(분류, 스팸처리 Sonnet 5), kk-meeting·세금계산서 직접작성은 Opus 5 유지(README 표).
+> 권장 모델: 첫 설정·첫 1~2회 = Opus 5(high), 이후 kk-budget 은 Sonnet 5, kk-mail 은 Opus 5(분류, 스팸처리 Sonnet 5), kk-dooray 는 Opus 5, kk-meeting·세금계산서 직접작성은 Opus 5 유지(README 표).
 
 ## 0단계 — 환경 점검 (모든 skill 공통, 부트스트랩 맨 앞)
 
@@ -13,6 +13,7 @@ kiki 는 Chrome 창 두 종류를 쓴다. **skill 마다 쓰는 창이 정해져
 | skill / 작업 | 창 | 도구 | 로그인 |
 |--------------|----|------|--------|
 | kk-mail | **평소 쓰는 Chrome** | Claude in Chrome 확장 (`javascript_tool` 등) | Dooray `kist.gov-dooray.com` 로그인 상태면 끝 |
+| kk-dooray | **평소 쓰는 Chrome** | Claude in Chrome 확장 (`javascript_tool` 등) | Dooray `kist.gov-dooray.com` 로그인 상태면 끝 (토큰·설정 없음) |
 | kk-budget | 평소 쓰는 Chrome | Claude in Chrome 확장 | 포탈 `e.kist.re.kr` 로그인 상태면 끝 |
 | kk-pay — 카드결제건 RPA 업로드 | 평소 쓰는 Chrome + `token.txt` | Claude in Chrome 확장 + `dooray_drive.py` | 포탈 + Dooray(업로드 확인 페이지). **새 창 없음** |
 | kk-pay — 세금계산서 직접작성 | **Claude 전용 새 Chrome 창** | chrome-devtools-mcp (`evaluate_script`·`upload_file` …) | 그 창에서 포탈 로그인 **한 번 더** |
@@ -39,7 +40,7 @@ kiki 는 Chrome 창 두 종류를 쓴다. **skill 마다 쓰는 창이 정해져
 - 위치: **`<kiki_root>/token.txt`**(설치 스크립트가 생성, 예 `C:\kiki\token.txt`). `kiki_root` 는 `~/.claude/kiki/kiki.config.json` 에 기록돼 있다. (구형 `~/.claude/kiki/kiki.env` 도 계속 읽힌다.)
 - 토큰이 비어 있으면 **절대경로를 보여주며** 안내: *"https://kist.gov-dooray.com/setting/api/token 에서 개인 인증 토큰을 만들어 `<kiki_root>\token.txt`(예 `C:\kiki\token.txt`) 의 `Dooray token:` 다음 줄에 붙여넣고 저장한 뒤 '두레이 토큰 저장했다' 라고 알려주세요. ⚠️ 채팅창에 토큰을 붙여넣지 마세요(대화 기록 노출)."* 원하면 파일을 열어준다(`notepad`/`open -e`).
 - 사용자가 넣었다고 하면 `python <skill>/scripts/dooray_drive.py check --live`(kk-pay·kk-meeting 에 있음) 로 **값은 출력하지 않고** 길이·파일 위치 + 실제 인증(읽기 1회)만 확인(파일을 Read 하면 값이 대화에 남는다). 토큰이 없으면 종료 코드 1, 만료·오타면 `ERR … 401`. 안내 줄 위나 머리글 없이 붙여넣어도 읽힌다. 채팅에 값이 붙여넣어졌으면 즉시 파일로 옮기고 노출 위험을 알린다. 상세 `personal_config.md`.
-- 조회 전용(kk-budget·kk-inspect)·세션쿠키(kk-mail)·세금계산서 직접작성은 토큰 불요.
+- 조회 전용(kk-budget·kk-inspect)·세션쿠키(kk-mail·kk-dooray)·세금계산서 직접작성은 토큰 불요.
 
 ### 4. Python 패키지 — **필요한 시점에, 그때그때** (부트스트랩에서 일괄 설치 X)
 - 선택: `faster-whisper`(kk-meeting 회의 녹음 → 글, 로컬 음성 인식). 기본은 휴대폰 녹음 앱·클로바노트로 바꾼 글을 받는다. 사용자가 녹음 파일을 그대로 주고 이 PC 에서 바꾸길 원할 때만 `kk-meeting/scripts/transcribe.py check <녹음>` 의 `[사용자 안내]` 한 줄로 묻고 동의받아 설치(그래픽카드가 없으면 오래 걸린다) → `kk-meeting/references/meeting_transcribe.md`.
@@ -55,6 +56,7 @@ kiki 는 Chrome 창 두 종류를 쓴다. **skill 마다 쓰는 창이 정해져
 | kk-pay | `Pillow`(이미지→jpg) · `requests`(Dooray 업로드) · Windows 문서 변환 시 `pywin32` | 증빙 변환 직전 / 업로드 직전 |
 | kk-inspect | `Pillow` (+ pdf→jpg 시 `PyMuPDF`) | 증빙 변환 직전 |
 | kk-mail | — | — |
+| kk-dooray | — (파일 내용 읽기도 브라우저 안에서) | — |
 | kk-wiki | `requests` (토큰 경로) | 스냅샷 수집·최신 확인 직전 |
 
 ### 5. 아래아한글 · MS Office — 있으면 자동, 없으면 **물어본다**

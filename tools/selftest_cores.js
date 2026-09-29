@@ -1,4 +1,4 @@
-// kiki 브라우저 코어 5종 오프라인 결함 주입 시험 (tools/selftest.sh 가 부른다) — 주입본(.min.js)을 그대로 불러 시험. 자리표시 데이터만, 네트워크·실데이터 없음.
+// kiki 브라우저 코어 6종 오프라인 결함 주입 시험 (tools/selftest.sh 가 부른다) — 주입본(.min.js)을 그대로 불러 시험. 자리표시 데이터만, 네트워크·실데이터 없음.
 // 2026-09-27 전체 흐름 검수에서 만듦: 세션 만료·API 거절·진행 중·빈 결과가 '0건'·'없음'으로 보이지 않고 ERR/진행 중으로 보이는가.
 //   실패 경로: 세션 만료(HTML)·API 거절·진행 중·빈 결과가 '0건'·'없음'으로 보이지 않고 ERR/진행 중으로 보이는가
 const fs = require('fs');
@@ -230,6 +230,160 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
   for (let i = 0; i < 50 && !/phase (done|error)/.test(W.status()); i++) await tick(20);
   ok('wiki 가지 목록 실패 → 기록·계속(수집은 끝남)', /phase done .*errors 1 \(하위 목록 실패 1\)/.test(W.status()) && W.pages.length === 3, W.status());
   W.exportSnapshot(); ok('wiki export 에 walk_errors', clicked.length > 0);
+
+  // ================= kk-dooray (2026-09-29 신설) — 업무·드라이브 서버 검색 + 파일 내용 읽기 =================
+  dom();
+  global.Blob = require('buffer').Blob;   // dom() 의 가짜 Blob 대신 진짜(압축 해제에 stream() 필요)
+  const zlib = require('zlib');
+  // 합성 ZIP(docx·pptx·xlsx·hwpx) — deflate 압축, CRC 는 파서가 보지 않아 0
+  const makeZip = (files) => {
+    const parts = [], cen = []; let off = 0;
+    for (const [name, content] of Object.entries(files)) {
+      const nb = Buffer.from(name, 'utf8'), raw = Buffer.from(content, 'utf8'), comp = zlib.deflateRawSync(raw);
+      const lh = Buffer.alloc(30); lh.writeUInt32LE(0x04034b50, 0); lh.writeUInt16LE(20, 4); lh.writeUInt16LE(8, 8); lh.writeUInt32LE(comp.length, 18); lh.writeUInt32LE(raw.length, 22); lh.writeUInt16LE(nb.length, 26);
+      const ch = Buffer.alloc(46); ch.writeUInt32LE(0x02014b50, 0); ch.writeUInt16LE(20, 4); ch.writeUInt16LE(20, 6); ch.writeUInt16LE(8, 10); ch.writeUInt32LE(comp.length, 20); ch.writeUInt32LE(raw.length, 24); ch.writeUInt16LE(nb.length, 28); ch.writeUInt32LE(off, 42);
+      parts.push(lh, nb, comp); cen.push(ch, nb); off += 30 + nb.length + comp.length;
+    }
+    const cd = Buffer.concat(cen), eo = Buffer.alloc(22), k = Object.keys(files).length;
+    eo.writeUInt32LE(0x06054b50, 0); eo.writeUInt16LE(k, 8); eo.writeUInt16LE(k, 10); eo.writeUInt32LE(cd.length, 12); eo.writeUInt32LE(off, 16);
+    return new Uint8Array(Buffer.concat([...parts, cd, eo]));
+  };
+  // 합성 OLE(CFB v3, 512바이트 섹터, 작은 스트림은 미니 스트림) — 한글 5.0 hwp 구조(FileHeader·BodyText/Section0·PrvText)
+  const makeCfb = (streams) => {
+    const SS = 512, MS = 64, ents = [{ name: 'Root Entry', type: 5, left: -1, right: -1, child: -1, start: 0, size: 0 }], kids = { 0: [] }, stor = {};
+    for (const p of Object.keys(streams)) {
+      const segs = p.split('/'); let parent = 0;
+      segs.forEach((s, i) => {
+        const key = segs.slice(0, i + 1).join('/');
+        if (i < segs.length - 1) { if (stor[key] == null) { ents.push({ name: s, type: 1, left: -1, right: -1, child: -1, start: 0, size: 0 }); stor[key] = ents.length - 1; (kids[parent] = kids[parent] || []).push(stor[key]); } parent = stor[key]; }
+        else { ents.push({ name: s, type: 2, left: -1, right: -1, child: -1, start: 0, size: 0, data: Buffer.from(streams[p]) }); (kids[parent] = kids[parent] || []).push(ents.length - 1); }
+      });
+    }
+    for (const [p, ks] of Object.entries(kids)) { if (!ks.length) continue; ents[+p].child = ks[0]; for (let i = 0; i < ks.length - 1; i++) ents[ks[i]].right = ks[i + 1]; }
+    let mini = Buffer.alloc(0); const mf = [];
+    for (const e of ents) if (e.data && e.data.length < 4096) { const ns = Math.ceil(e.data.length / MS) || 1; e.start = mini.length / MS; e.size = e.data.length; for (let i = 0; i < ns; i++) mf.push(i === ns - 1 ? 0xFFFFFFFE : e.start + i + 1); const pad = Buffer.alloc(ns * MS); e.data.copy(pad); mini = Buffer.concat([mini, pad]); }
+    const dS = Math.ceil(ents.length * 128 / SS), mfS = Math.ceil(mf.length * 4 / SS) || 1, msS = Math.ceil(mini.length / SS) || 1;
+    const fat = new Array(SS / 4).fill(0xFFFFFFFF); fat[0] = 0xFFFFFFFD;
+    const setChain = (st, n) => { for (let i = 0; i < n; i++) fat[st + i] = i === n - 1 ? 0xFFFFFFFE : st + i + 1; };
+    const dSt = 1, mfSt = 1 + dS, msSt = mfSt + mfS; setChain(dSt, dS); setChain(mfSt, mfS); setChain(msSt, msS);
+    ents[0].start = msSt; ents[0].size = mini.length;
+    let nxt = msSt + msS; const bigs = [];   // 4KB 이상 스트림은 일반 섹터(FAT 체인) — 파서의 두 경로 모두 시험
+    for (const e of ents) if (e.data && e.data.length >= 4096) { const ns = Math.ceil(e.data.length / SS); e.start = nxt; e.size = e.data.length; setChain(nxt, ns); nxt += ns; const pad = Buffer.alloc(ns * SS); e.data.copy(pad); bigs.push(pad); }
+    const hdr = Buffer.alloc(512); Buffer.from([0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]).copy(hdr, 0);
+    hdr.writeUInt16LE(0x3E, 0x18); hdr.writeUInt16LE(3, 0x1A); hdr.writeUInt16LE(0xFFFE, 0x1C); hdr.writeUInt16LE(9, 0x1E); hdr.writeUInt16LE(6, 0x20);
+    hdr.writeUInt32LE(1, 0x2C); hdr.writeUInt32LE(dSt, 0x30); hdr.writeUInt32LE(4096, 0x38); hdr.writeUInt32LE(mfSt, 0x3C); hdr.writeUInt32LE(mfS, 0x40); hdr.writeUInt32LE(0xFFFFFFFE, 0x44);
+    for (let i = 0; i < 109; i++) hdr.writeUInt32LE(i === 0 ? 0 : 0xFFFFFFFF, 0x4C + i * 4);
+    const fb = Buffer.alloc(SS); fat.forEach((v, i) => fb.writeUInt32LE(v >>> 0, i * 4));
+    const db = Buffer.alloc(dS * SS);
+    ents.forEach((e, i) => { const o = i * 128, nb = Buffer.from(e.name + '\u0000', 'utf16le'); nb.copy(db, o); db.writeUInt16LE(nb.length, o + 0x40); db[o + 0x42] = e.type; db[o + 0x43] = 1; db.writeUInt32LE(e.left >>> 0, o + 0x44); db.writeUInt32LE(e.right >>> 0, o + 0x48); db.writeUInt32LE(e.child >>> 0, o + 0x4C); db.writeUInt32LE(e.start >>> 0, o + 0x74); db.writeUInt32LE(e.size >>> 0, o + 0x78); });
+    const mfb = Buffer.alloc(mfS * SS, 0xFF); mf.forEach((v, i) => mfb.writeUInt32LE(v >>> 0, i * 4));
+    const msb = Buffer.alloc(msS * SS); mini.copy(msb);
+    return new Uint8Array(Buffer.concat([hdr, fb, db, mfb, msb, ...bigs]));
+  };
+  const rec = (tag, data) => { const n = data.length; if (n < 0xFFF) { const h = Buffer.alloc(4); h.writeUInt32LE((tag | (n << 20)) >>> 0, 0); return Buffer.concat([h, data]); } const h = Buffer.alloc(8); h.writeUInt32LE((tag | (0xFFF << 20)) >>> 0, 0); h.writeUInt32LE(n, 4); return Buffer.concat([h, data]); };
+  const w16 = (codes) => { const b = Buffer.alloc(codes.length * 2); codes.forEach((c, i) => b.writeUInt16LE(c, i * 2)); return b; };
+  const cc = (s) => Array.from(s).map(ch => ch.charCodeAt(0));
+  const ctl = (c) => [c, 0, 0, 0, 0, 0, 0, c];   // 8칸 제어 문자(코드 + 6칸 + 코드)
+  const hwpOf = (flags, body = true) => {
+    const fh = Buffer.alloc(256); fh.write('HWP Document File', 0, 'latin1'); fh.writeUInt32LE(0x05000300, 32); fh.writeUInt32LE(flags, 36);
+    const sec = Buffer.concat([rec(66, Buffer.alloc(22)), rec(67, w16([...cc('시험 문단 R&D 가나다'), 13])), rec(67, w16([...cc('A'), ...ctl(9), ...cc('B'), ...ctl(11), ...cc('표안글'), 13])), rec(67, w16([...cc('긴'.repeat(2100)), 13]))]);
+    const st = { FileHeader: fh, PrvText: w16(cc('미리보기 글')) };
+    if (body) st['BodyText/Section0'] = (flags & 1) ? zlib.deflateRawSync(sec) : sec;
+    return makeCfb(st);
+  };
+  let dmode = 'ok'; const dcalls = [];
+  const T1 = { id: '4100000000000000001', projectId: '3300000000000000001', number: 7, subject: '가나다 과제 보고서 작성', workflowId: 'W1', workflowClass: 'working', users: { from: { type: 'member', member: { name: '김키키' } }, to: [{ type: 'member', member: { name: '이키키' } }], cc: [] }, createdAt: '2026-09-01T10:00:00+09:00', updatedAt: '2026-09-20T10:00:00+09:00', fileIdList: ['F1'], subPostCount: 1 };
+  const T2 = Object.assign({}, T1, { id: '4100000000000000002', number: 3, subject: '옛 보고서', updatedAt: '2026-03-01T10:00:00+09:00', fileIdList: [] });
+  const TREFS = { projectMap: { '3300000000000000001': { code: '○○-공동연구' } }, workflowMap: { W1: { name: '진행' } } };
+  const DC = (id, name, type, upd, extra) => Object.assign({ id, driveId: 'D1', projectId: '3300000000000000009', name, type, createdAt: upd, updatedAt: upd, size: 2048, createOrganizationMemberId: 'M1', lastUpdateOrganizationMemberId: 'M1', isTrashed: false, downloadUrl: '/drive/v1/downloads/D1/' + id }, extra || {});
+  const DREFS = { driveMap: { D1: { name: '연구실-공지', projectId: '3300000000000000009', type: 'project' } }, organizationMemberMap: { M1: { name: '박키키' } } };
+  const J = (o) => ({ ok: true, status: 200, text: async () => JSON.stringify(o) });
+  global.fetch = async (url, opts) => {
+    dcalls.push({ url, body: opts && opts.body });
+    if (dmode === 'html') return { ok: true, status: 200, text: async () => HTML };
+    if (dmode === '401') return { ok: false, status: 401, text: async () => '' };
+    if (dmode === 'reject') return J({ header: { isSuccessful: false, resultCode: -1, resultMessage: 'not allowed' } });
+    if (url.startsWith('/wapi/task/v1/projects/*/tasks?')) {
+      if (dmode === 'unsorted') return J({ header: { isSuccessful: true }, result: [T2, T1], totalCount: 2, references: TREFS });
+      if (dmode === 'many') return J({ header: { isSuccessful: true }, result: Array.from({ length: 100 }, (_, i) => Object.assign({}, T1, { id: String(4100000000000000100n + BigInt(i)), subject: '아주 긴 업무 제목 ○○○○ 과제 보고서 초안 검토 요청 ' + i })), totalCount: 250, references: TREFS });
+      return J({ header: { isSuccessful: true }, result: [T1, T2], totalCount: 2, references: TREFS });
+    }
+    if (url.startsWith('/wapi/task/v1/tasks/')) return J({ header: { isSuccessful: true }, result: Object.assign({}, T1, { fileIdList: ['F1', 'F2'], body: { mimeType: 'text/x-markdown', content: '## 할 일\n**초안** 작성 [양식](https://example.org/x?a=1&b=2) ![그림](/files/9)\n마감 9/30' } }), references: { fileMap: { F1: { id: 'F1', name: '보고서_초안.hwp', size: 4096, createdAt: '2026-09-02T10:00:00+09:00', downloadUrl: '/files/F1', creator: { type: 'member', member: { name: '김키키' } } }, F2: { id: 'F2', name: '보고서_수정.docx', size: 9000, createdAt: '2026-09-19T09:00:00+09:00', downloadUrl: '/files/F2' } } } });   // 댓글 첨부(F2)도 업무 첨부 목록에 함께 온다(실측)
+    if (url.includes('/events?')) return J({ header: { isSuccessful: true }, totalCount: 2, result: [{ createdAt: '2026-09-19T09:00:00+09:00', creator: { type: 'member', member: { name: '이키키' } }, body: { mimeType: 'text/x-markdown', content: '수정본 올렸습니다' }, fileIdList: ['F2'] }, { createdAt: '2026-09-10T09:00:00+09:00', creator: { type: 'member', member: { name: '김키키' } }, body: { mimeType: 'text/html', content: '<p>검토 부탁</p>' } }], references: { fileMap: { F2: { id: 'F2', name: '보고서_수정.docx', size: 9000, createdAt: '2026-09-19T09:00:00+09:00', downloadUrl: '/files/F2' } } } });
+    if (url.startsWith('/v2/wapi/drives/search')) {
+      if (dmode === 'driveReject') return J({ header: { isSuccessful: false, resultMessage: 'search failed' } });
+      if (dmode === 'unsorted') return J({ header: { isSuccessful: true }, result: { totalCount: 2, contents: [DC('5100000000000000008', '2025', 'folder', '2025-01-01T12:00:00+09:00'), DC('5100000000000000009', '260610_○○_발표.pptx', 'file', '2026-06-10T12:00:00+09:00')], references: DREFS } });
+      return J({ header: { isSuccessful: true }, result: { totalCount: 3, contents: [DC('5100000000000000001', '260610_○○_발표.pptx', 'file', '2026-06-10T12:00:00+09:00'), DC('5100000000000000002', '2026-06', 'folder', '2026-06-01T12:00:00+09:00'), DC('5100000000000000003', '옛 보고서.hwp', 'file', '2026-05-01T12:00:00+09:00', { isTrashed: true })], references: DREFS } });
+    }
+    if (url.startsWith('/v2/wapi/drives/D1/files/')) return J({ header: { isSuccessful: true }, result: { content: { parentFile: { id: '5100000000000000002', path: 'root/2026/2026-06' } } } });
+    return { ok: false, status: 404, text: async () => '{}' };
+  };
+  ok('dooray inject 1.0', load('kk-dooray/scripts/kk_dooray_ops.min.js') === 'kk-dooray-ops/1.0 =^.^=');
+  const DR = window.kkDooray;
+  const noQ = (s) => !/=/.test(s) && !/\w=\w*&/.test(s);
+  window.__d = null; DR.find([['가나다'], ['가나다', '보고서']], { since: '2026-04-01' }).then(r => window.__d = r, e => window.__d = { error: String(e) });
+  ok('dooray find 진행 중 → 아직(0건 아님)', /^\(아직 — |^\(결과 없음/.test(DR.fmtFind(window.__d)), DR.fmtFind(window.__d));
+  await tick(200);
+  const fd = window.__d, ff2 = DR.fmtFind(fd);
+  ok('dooray find: 업무 기간 필터(T1만)·드라이브 휴지통 제외(2건)', fd.tasks.items.length === 1 && fd.tasks.items[0].id === T1.id && fd.drive.items.length === 2 && !fd.drive.items.some(x => x.trashed), JSON.stringify([fd.tasks.items.length, fd.drive.items.length]));
+  ok('dooray find: 두 묶음 hit 기록 + 상세·경로 채움', JSON.stringify(fd.tasks.items[0].hits) === JSON.stringify(['가나다', '가나다 보고서']) && fd.tasks.items[0].detail.commentTotal === 2 && fd.drive.items[0].path === '/2026/2026-06', JSON.stringify([fd.tasks.items[0].hits, fd.drive.items[0].path]));
+  const tq = dcalls.filter(c => c.url.startsWith('/wapi/task/v1/projects/*/tasks?')).map(c => c.url);
+  ok('dooray 업무 검색: 낱말은 all 한 칸에 띄어쓰기(두 번 주면 둘째 무시되므로)', tq.some(u => u.includes('all=' + encodeURIComponent('가나다 보고서') + '&')) && tq.every(u => (u.match(/all=/g) || []).length === 1), tq.join(' , '));
+  const db = dcalls.filter(c => c.url.startsWith('/v2/wapi/drives/search')).map(c => JSON.parse(c.body)).find(b => b.all.length === 2);
+  ok('dooray 드라이브 검색: all 배열 AND + query all=…&all=… + searchType', db && db.all.join() === '가나다,보고서' && db.query === 'all=' + encodeURIComponent('가나다') + '&all=' + encodeURIComponent('보고서') && db.searchType === 'drive', JSON.stringify(db));
+  ok('dooray fmtFind 머리줄·1,000자·= 없음', ff2.startsWith('[찾기 ') && ff2.includes('업무 1건 · 드라이브 2건') && ff2.includes('기간 2026-04-01') && ff2.length <= 1000 && noQ(ff2), ff2);
+  const t1 = fd.tasks.items[0], ft = DR.fmtTask(t1), fc = DR.fmtComments(t1), fl = DR.fmtFiles(t1);
+  ok('dooray fmtTask: 마크다운 정리(링크 글자만·그림 표시)·첨부(중복 없이)·댓글 수', ft.includes('초안 작성 양식 [이미지]') && ft.includes('첨부 2 (보고서_초안.hwp, 보고서_수정.docx)') && ft.includes('댓글 2') && !ft.includes('https') && noQ(ft), ft);
+  ok('dooray fmtComments 최신순 + 댓글 첨부 + html 본문', /\n0 \| 26-09-19 09:00 \| 이키키 \| 수정본 올렸습니다 \| 첨부 보고서_수정\.docx/.test(fc) && fc.includes('검토 부탁'), fc);
+  ok('dooray fmtFiles 본문·댓글 첨부 — 댓글 파일은 한 번만(댓글 날짜로)', fl.startsWith('[첨부 0-2 of 2]') && /보고서_초안\.hwp .*\| 본문/.test(fl) && /보고서_수정\.docx .*\| 댓글 26-09-19/.test(fl), fl);
+  const lk = DR.fmtLinks(fd.tasks), lkd = DR.fmtLinks(fd.drive), lkh = DR.fmtLinks(fd.drive, 0, 12, { hy: true });
+  ok('dooray fmtLinks: 주소 그대로 / {hy:true} 하이픈 번호', lk.includes('0 | https://kist.gov-dooray.com/task/3300000000000000001/4100000000000000001') && lkd.includes('https://kist.gov-dooray.com/drive/3300000000000000009/views/5100000000000000001') && lkh.includes('P 3300-0000-0000-0000-009 | F 5100-0000-0000-0000-001'), lk + ' // ' + lkh);
+  ok('dooray fmtLinks 항목 1건', DR.fmtLinks(t1).includes('/task/3300000000000000001/4100000000000000001'), DR.fmtLinks(t1));
+  const on = DR.only(fd.drive, { ext: 'pptx' }), ow = DR.only(fd.tasks, { who: '이키키' }), ox = DR.only(fd.tasks, { text: '수정본' });
+  ok('dooray only: 확장자·사람·본문/댓글 글', on.items.length === 1 && on.items[0].ext === 'pptx' && ow.items.length === 1 && ox.items.length === 1 && DR.only(fd.tasks, { text: '없는말' }).items.length === 0);
+  // 서버 순서가 수정일 순이 아니어도(드라이브는 폴더 먼저, 업무는 postUpdatedAt 순) 기간 안 항목을 놓치지 않는다 — 2026-09-29 실사용에서 6월 파일을 놓친 초판 결함
+  dmode = 'unsorted';
+  const us = await DR.searchTasks('x', { since: '2026-04-01' }), ud = await DR.searchDrive('x', { since: '2026-04-01' });
+  ok('dooray 뒤섞인 순서 + since → 기간 안 항목 모두(멈추지 않음)', us.items.length === 1 && us.items[0].id === T1.id && us.end === 'all' && ud.items.length === 1 && ud.items[0].ext === 'pptx', JSON.stringify([us.items.map(x => x.id), us.end, ud.items.map(x => x.name)]));
+  // 잘림: 전체 250 중 maxPages 1 → ⚠ 잘림
+  dmode = 'many'; const mt = await DR.searchTasks(['보고서'], { maxPages: 1 });
+  ok('dooray 상한 도달 → truncated + ⚠ 잘림', mt.truncated === true && DR.fmtTasks(mt).includes('⚠ 잘림(전체 250 중 100'), DR.fmtTasks(mt).split('\n')[0]);
+  const ft60 = DR.fmtTasks(mt, 0, 60), lk60 = DR.fmtLinks(mt, 0, 60);
+  ok('dooray 100건 목록·링크 → 1,000자 안 + 다음 조각', ft60.length <= 1000 && /▶ 다음 조각 \d+/.test(ft60) && lk60.length <= 1000 && /▶ 다음 조각 \d+/.test(lk60), ft60.length + ' ' + lk60.length);
+  // 실패 경로: 로그인 풀림·권한·API 거절이 '0건'으로 보이지 않는다
+  dmode = 'html'; window.__d = null; DR.find('보고서').then(r => window.__d = r, e => window.__d = { error: String(e) }); await tick(100);
+  const fh = DR.fmtFind(window.__d);
+  ok('dooray HTML → 업무·드라이브 모두 ERR DOORAY 로그인', fh.includes('업무 ERR · 드라이브 ERR') && fh.includes('⚠ 업무: 보고서: DOORAY: 응답이 JSON 이 아닙니다') && fh.includes('⚠ 드라이브: 보고서: DOORAY:'), fh);
+  dmode = '401'; const t401 = await DR.searchTasksMany([['x']]);
+  ok('dooray 401 → ERR 권한 없음', DR.fmtTasks(t401).startsWith('ERR x: DOORAY: 권한 없음(HTTP 401)'), DR.fmtTasks(t401));
+  dmode = 'reject'; const trj = await DR.searchTasks('x'), drj = await DR.searchDrive('x');
+  ok('dooray API 거절 → ERR(0건 아님)', DR.fmtTasks(trj).startsWith('ERR DOORAY 업무 검색 실패: not allowed') && DR.fmtDrive(drj).startsWith('ERR DOORAY 드라이브 검색 실패: not allowed'), DR.fmtTasks(trj) + ' / ' + DR.fmtDrive(drj));
+  dmode = 'driveReject'; window.__d = null; await DR.find('보고서').then(r => window.__d = r);
+  const fpart = DR.fmtFind(window.__d);
+  ok('dooray 드라이브만 실패 → 업무는 보이고 ⚠ 드라이브', fpart.includes('업무 2건 · 드라이브 ERR') && fpart.includes('⚠ 드라이브: 보고서: DOORAY 드라이브 검색 실패'), fpart);
+  ok('dooray null·{error} → 결과 없음 / ERR', DR.fmtFind(null).startsWith('(결과 없음') && DR.fmtTasks({ error: 'x' }) === 'ERR x' && DR.fmtText({ error: 'y', name: 'a.hwp' }) === 'ERR a.hwp: y' && DR.find([]).then && true);
+  // 파일 내용 읽기 — 합성 파일
+  const hw = await DR.readBytes('보고서.hwp', hwpOf(1));
+  ok('dooray hwp(압축): 문단·탭·확장 제어 건너뜀·긴 레코드', hw.fmt === 'hwp' && hw.text.split('\n')[0] === '시험 문단 R&D 가나다' && hw.text.split('\n')[1] === 'A B표안글' && hw.text.split('\n')[2].length === 2100 && !/[\u0000-\u0008]/.test(hw.text), JSON.stringify(hw.text.slice(0, 40)));
+  const hu = await DR.readBytes('a.hwp', hwpOf(0)), hd = await DR.readBytes('b.hwp', hwpOf(5, false)), he = await DR.readBytes('c.hwp', hwpOf(3));
+  ok('dooray hwp: 비압축 / 배포용 → 미리보기 글 / 암호 → 미지원', hu.text.startsWith('시험 문단') && hd.text === '미리보기 글' && /배포용/.test(hd.note) && he.unsupported && /암호/.test(he.reason), JSON.stringify([hu.text.slice(0, 5), hd.text, hd.note, he.reason]));
+  const W_ = (b) => '<w:document><w:body>' + b + '</w:body></w:document>';
+  const dx = await DR.readBytes('계획.docx', makeZip({ 'word/document.xml': W_('<w:p><w:r><w:t>R&amp;D 계획</w:t></w:r></w:p><w:tbl><w:tr><w:tc><w:p><w:r><w:t xml:space="preserve">표 </w:t></w:r><w:r><w:tab/><w:t>칸</w:t></w:r></w:p></w:tc></w:tr></w:tbl>') }));
+  ok('dooray docx: 문단·표·XML 문자 참조', dx.text === 'R&D 계획\n표 칸', JSON.stringify(dx.text));
+  const px = await DR.readBytes('발표.pptx', makeZip({ 'ppt/presentation.xml': '<p:presentation><p:sldIdLst><p:sldId id="256" r:id="rId3"/><p:sldId id="257" r:id="rId2"/></p:sldIdLst></p:presentation>', 'ppt/_rels/presentation.xml.rels': '<Relationships><Relationship Id="rId2" Target="slides/slide1.xml"/><Relationship Id="rId3" Target="slides/slide2.xml"/></Relationships>', 'ppt/slides/slide1.xml': '<p:sld><a:p><a:r><a:t>첫파일</a:t></a:r></a:p></p:sld>', 'ppt/slides/slide2.xml': '<p:sld><a:p><a:r><a:t>둘째파일</a:t></a:r></a:p><a:p><a:r><a:t>Cu</a:t></a:r></a:p></p:sld>', 'ppt/slides/_rels/slide2.xml.rels': '<Relationships><Relationship Id="rId1" Target="../notesSlides/notesSlide1.xml"/></Relationships>', 'ppt/notesSlides/notesSlide1.xml': '<p:notes><a:p><a:r><a:t>메모 내용</a:t></a:r></a:p><a:p><a:r><a:t>2</a:t></a:r></a:p></p:notes>' }), { notes: true });
+  ok('dooray pptx: 발표 순서(presentation.xml)·메모', px.text === '[슬라이드 1] 둘째파일 / Cu (메모: 메모 내용)\n[슬라이드 2] 첫파일' && px.parts === '슬라이드 2', JSON.stringify(px.text));
+  const xx = await DR.readBytes('표.xlsx', makeZip({ 'xl/workbook.xml': '<workbook><sheets><sheet name="예산" sheetId="1" r:id="rId1"/></sheets></workbook>', 'xl/_rels/workbook.xml.rels': '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>', 'xl/sharedStrings.xml': '<sst><si><t>재료비</t></si><si><r><t>여</t></r><r><t>비</t></r></si></sst>', 'xl/worksheets/sheet1.xml': '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1"><v>1500</v></c></row><row r="2"><c r="A2" t="s"><v>1</v></c><c r="B2" t="inlineStr"><is><t>없음</t></is></c><c r="C2" s="1"/></row></sheetData></worksheet>' }));
+  ok('dooray xlsx: 시트·공유 문자열·인라인 글자·숫자', xx.text === '[시트 예산]\n재료비 | 1500\n여비 | 없음', JSON.stringify(xx.text));
+  const hx = await DR.readBytes('회의.hwpx', makeZip({ 'Contents/section0.xml': '<hs:sec><hp:p><hp:run><hp:t>회의 목적</hp:t></hp:run></hp:p><hp:p><hp:run><hp:t>첫 줄<hp:lineBreak/>둘째 줄</hp:t></hp:run></hp:p></hs:sec>' }));
+  ok('dooray hwpx: 문단·글 안 줄바꿈 요소', hx.text === '회의 목적\n첫 줄 둘째 줄', JSON.stringify(hx.text));
+  const pd = await DR.readBytes('논문.pdf', new Uint8Array(Buffer.from('%PDF-1.7')));
+  ok('dooray pdf → 미지원 안내(오류 아님)', pd.unsupported && /PDF/.test(pd.reason) && DR.fmtText(Object.assign({ name: '논문.pdf' }, pd)).startsWith('읽기 미지원 논문.pdf'), JSON.stringify(pd));
+  // readFile: 크기 한도·로그인 화면·정상 받기
+  global.fetch = async (url) => url === '/files/HTML' ? { ok: true, status: 200, arrayBuffer: async () => Buffer.from('<!DOCTYPE html><html>login</html>') } : { ok: true, status: 200, arrayBuffer: async () => Buffer.from(hwpOf(1)) };
+  const big1 = await DR.readFile({ name: '큰.hwp', size: 90 * 1048576, dl: '/files/X' }), lg = await DR.readFile({ name: 'a.hwp', size: 10, dl: '/files/HTML' }), okf = await DR.readFile({ name: '보고서_초안.hwp', size: 4096, dl: '/files/F1' });
+  ok('dooray readFile: 한도 초과 거부·로그인 화면 감지·정상', /기본 한도 30MB 초과/.test(big1.error) && /웹 화면이 왔습니다/.test(lg.error) && okf.fmt === 'hwp' && okf.textLen > 2000, JSON.stringify([big1.error, lg.error, okf.fmt]));
+  const tx = DR.fmtText(okf, 60);
+  ok('dooray fmtText 머리줄·조각·= 없음', tx.startsWith('보고서_초안.hwp | hwp | ') && tx.includes('시험 문단 R&D 가나다') && tx.length < 200 && noQ(DR.fmtText({ name: 'q.txt', fmt: 'txt', size: 9, textLen: 20, text: 'size=100&page=0 끝', parts: '' })), tx);
 
   console.log(`\n${n - fail}/${n} PASS` + (fail ? ` — ${fail} FAIL` : ''));
   process.exit(fail ? 1 : 0);
