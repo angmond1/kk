@@ -303,6 +303,7 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
     if (dmode === 'html') return { ok: true, status: 200, text: async () => HTML };
     if (dmode === '401') return { ok: false, status: 401, text: async () => '' };
     if (dmode === 'reject') return J({ header: { isSuccessful: false, resultCode: -1, resultMessage: 'not allowed' } });
+    if (/^\/wapi\/task\/v1\/projects\/!\d+\/tasks\?/.test(url)) return J({ header: { isSuccessful: true }, result: [T1], totalCount: 1, references: TREFS });   // 한 프로젝트 목록('!' 필수)
     if (url.startsWith('/wapi/task/v1/projects/*/tasks?')) {
       if (dmode === 'unsorted') return J({ header: { isSuccessful: true }, result: [T2, T1], totalCount: 2, references: TREFS });
       if (dmode === 'many') return J({ header: { isSuccessful: true }, result: Array.from({ length: 100 }, (_, i) => Object.assign({}, T1, { id: String(4100000000000000100n + BigInt(i)), subject: '아주 긴 업무 제목 ○○○○ 과제 보고서 초안 검토 요청 ' + i })), totalCount: 250, references: TREFS });
@@ -318,7 +319,7 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
     if (url.startsWith('/v2/wapi/drives/D1/files/')) return J({ header: { isSuccessful: true }, result: { content: { parentFile: { id: '5100000000000000002', path: 'root/2026/2026-06' } } } });
     return { ok: false, status: 404, text: async () => '{}' };
   };
-  ok('dooray inject 1.1', load('kk-dooray/scripts/kk_dooray_ops.min.js') === 'kk-dooray-ops/1.1 =^.^=');
+  ok('dooray inject 1.2', load('kk-dooray/scripts/kk_dooray_ops.min.js') === 'kk-dooray-ops/1.2 =^.^=');
   const DR = window.kkDooray;
   const noQ = (s) => !/=/.test(s) && !/\w=\w*&/.test(s);
   window.__d = null; DR.find([['가나다'], ['가나다', '보고서']], { since: '2026-04-01' }).then(r => window.__d = r, e => window.__d = { error: String(e) });
@@ -345,6 +346,10 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
   dmode = 'unsorted';
   const us = await DR.searchTasks('x', { since: '2026-04-01' }), ud = await DR.searchDrive('x', { since: '2026-04-01' });
   ok('dooray 뒤섞인 순서 + since → 기간 안 항목 모두(멈추지 않음)', us.items.length === 1 && us.items[0].id === T1.id && us.end === 'all' && ud.items.length === 1 && ud.items[0].ext === 'pptx', JSON.stringify([us.items.map(x => x.id), us.end, ud.items.map(x => x.name)]));
+  // 한 프로젝트 전체 목록: 주소 번호 앞 '!' + 검색어·projectScope 없이 (2026-09-29 실사용 시험에서 '!' 빠진 결함 발견)
+  dmode = 'ok'; dcalls.length = 0;
+  const pt = await DR.projectTasks('3300000000000000001'), ptu = dcalls.map(c => c.url).find(u => u.includes('/projects/!')) || '';
+  ok('dooray projectTasks → /projects/!{id}/tasks, 검색어·projectScope 없음', pt.items.length === 1 && pt.end === 'all' && ptu.startsWith('/wapi/task/v1/projects/!3300000000000000001/tasks?') && !/all=|projectScope/.test(ptu), ptu);
   // 잘림: 전체 250 중 maxPages 1 → ⚠ 잘림
   dmode = 'many'; const mt = await DR.searchTasks(['보고서'], { maxPages: 1 });
   ok('dooray 상한 도달 → truncated + ⚠ 잘림', mt.truncated === true && DR.fmtTasks(mt).includes('⚠ 잘림(전체 250 중 100'), DR.fmtTasks(mt).split('\n')[0]);

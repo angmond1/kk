@@ -86,15 +86,18 @@
       url: `${BASE}/task/${t.projectId}/${t.id}`,
     };
   }
+  // 한 프로젝트만: opt.projectId → /projects/!{id}/tasks (번호 앞 '!' 필수 — 없으면 SERVICE_RESOURCE_PROJECT_NOT_FOUND, 2026-09-29 실측).
+  //   이때는 검색어 없이도 된다 → 그 프로젝트 업무 전체 목록(이름 검색은 글 속 이름만 찾으므로, 찾은 업무의 프로젝트를 통째로 볼 때).
   async function searchTasks(terms, opt = {}) {
     const words = groupsOf(terms)[0] || [];
     const out = { q: label(words), total: null, fetched: 0, pages: 0, items: [], end: 'cap' };
-    if (!words.length) { out.error = '검색어가 없습니다'; out.end = 'error'; return out; }
+    if (!words.length && !opt.projectId) { out.error = '검색어가 없습니다'; out.end = 'error'; return out; }
     const size = opt.size || 100, maxPages = opt.maxPages || 3, P = period(opt);
     const created = opt.dateField === 'created';
-    const path = opt.projectId ? `/wapi/task/v1/projects/${opt.projectId}/tasks` : '/wapi/task/v1/projects/*/tasks';
+    const path = opt.projectId ? `/wapi/task/v1/projects/!${String(opt.projectId).replace(/^!/, '')}/tasks` : '/wapi/task/v1/projects/*/tasks';
+    const q = (words.length ? `&all=${E(words.join(' '))}` : '') + (opt.projectId ? '' : `&projectScope=${opt.scope || 'in_project_member'}`);
     for (let p = 0; p < maxPages; p++) {
-      const d = await dfetch(`${path}?size=${size}&page=${p}&order=${opt.order || '-postUpdatedAt'}&all=${E(words.join(' '))}&projectScope=${opt.scope || 'in_project_member'}`);
+      const d = await dfetch(`${path}?size=${size}&page=${p}&order=${opt.order || '-postUpdatedAt'}${q}`);
       if (!Array.isArray(d.result)) { out.error = 'DOORAY 업무 검색 실패: ' + (apiErr(d) || 'no result'); out.end = 'error'; break; }
       const refs = d.references || {};
       if (out.total == null) out.total = d.totalCount;
@@ -198,6 +201,8 @@
     return out;
   }
   const searchTasksMany = (groups, opt) => searchMany('task', groups, opt);
+  // 한 프로젝트의 업무 전체(검색어 없이) — 목록 컨테이너. 이어서 getTasks(결과, {n}) 로 본문·댓글.
+  const projectTasks = (projectId, opt = {}) => searchTasks([], Object.assign({}, opt, { projectId }));
   const searchDriveMany = (groups, opt) => searchMany('drive', groups, opt);
 
   // ---------- 3. 업무 자세히 — 본문·첨부·댓글 ----------
@@ -669,11 +674,11 @@
 
   window.kkDooray = {
     dfetch, apiErr,
-    searchTasks, searchTasksMany, getTask, getTasks,
+    searchTasks, searchTasksMany, projectTasks, getTask, getTasks,
     searchDrive, searchDriveMany, drivePath, drivePaths,
     find, only, filesOf, readFile, readBytes, saveFile,
     fmtFind, fmtTasks, fmtDrive, fmtTask, fmtComments, fmtFiles, fmtLinks, fmtText, fmtSaved, sanitize, hyId,
-    _version: 'kk-dooray-ops/1.1',
+    _version: 'kk-dooray-ops/1.2',
   };
   return window.kkDooray._version + ' =^.^=';
 })();

@@ -8,7 +8,7 @@
 ```
 GET /wapi/task/v1/projects/*/tasks?size=100&page=0&order=-postUpdatedAt&all=<낱말 낱말>&projectScope=in_project_member
 ```
-- `*` = 내가 속한 모든 프로젝트. 한 프로젝트만이면 `*` 자리에 `{projectId}`(미실측 — 필요하면 결과의 projectId 로 거르는 쪽이 확실).
+- `*` = 내가 속한 모든 프로젝트. 한 프로젝트만이면 **`!{projectId}`**(번호 앞 `!` 필수 — 없으면 `SERVICE_RESOURCE_PROJECT_NOT_FOUND`, 2026-09-29 실측)이고 `projectScope` 는 빼며, **`all` 없이 부르면 그 프로젝트 업무 전체 목록**(코어 `projectTasks`). 서버 검색은 글 속 낱말만 보므로 사람 이름으로 찾은 뒤 그 프로젝트 전체를 보는 게 빠짐이 없다.
 - **`all` 은 한 칸에 띄어쓰기로** — 서버가 낱말 AND(순서 무관): `A B` 2건 = `B A` 2건 ⊂ `A` 3건(A·B = 실제 검색 낱말 자리).
   `all=A&all=B` 처럼 두 번 주면 **둘째는 무시**(A 만 준 것과 같은 3건), 쉼표는 0건. → 동의어는 요청을 따로(코어 `searchTasksMany`).
 - 대상 = **제목·본문·댓글**. 실측: 본문에만 있는 낱말로 그 업무 5/5 hit, 댓글에만 있는 낱말 4/4 hit. 첨부 파일 속 글은 대상 아님.
