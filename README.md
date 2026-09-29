@@ -12,7 +12,7 @@
 ## 구성
 | skill | 용도 | 기능 | 권장모델 |
 |-------|------|------|:--------:|
-| **kk-pay** | 지급신청 | 세금계산서 지급신청서 자동작성,<br>카드결제건 RPA 지급신청 자동신청 | Opus / Sol<br>(RPA는 Sonnet / Luna) |
+| **kk-pay** | 지급신청 | 세금계산서 지급신청서 자동작성,<br>카드결제건 RPA 지급신청 | Opus / Sol<br>(RPA는 Sonnet / Luna) |
 | **kk-meet** | 회의비처리 | 회의록, 회의비 지급신청서 자동 작성  | Opus / Sol |
 | **kk-inspect** | 물품검수 | 소액 검수 신청서 자동 작성 | Sonnet / Sol |
 | **kk-budget** | 예산조회 | 과제 예실대비표 예산현황 자동조회  | Sonnet / Luna |
