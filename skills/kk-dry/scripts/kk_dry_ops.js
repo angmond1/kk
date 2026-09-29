@@ -1108,8 +1108,7 @@
     let used = H.join('\n').length;
     for (let i = 0; i < hitF.length; i++) {
       const v = hitF[i];
-      const B = [`== [F${v.k}] ${ymd(v.f.updated || v.f.created)} | ${v.f.name} | ${kb(v.f.size)}${v.f.via ? ' | 업무 ' + v.f.via : ''} | ${v.unit} ${v.n}(그림·차트·표 있는 곳 ${v.figs}) | 걸림 ${v.hits.length} | ${(v.ms / 1000).toFixed(1)}초` + partNote(v)];
-      if (v.f.url) B.push('     ' + v.f.url);
+      const B = [`== [F${v.k}] ${ymd(v.f.updated || v.f.created)} | ${v.f.name} | ${kb(v.f.size)}${v.f.via ? ' | 업무 ' + v.f.via : ''} | ${v.unit} ${v.n}(그림·차트·표 있는 곳 ${v.figs}) | 걸림 ${v.hits.length} | ${(v.ms / 1000).toFixed(1)}초` + partNote(v) + (v.f.url ? ' → ' + v.f.url : '')];
       v.hits.slice(0, perFile).forEach(u => B.push('  ' + [labOf(v, u), figTag(u), clip(u.text.replace(/\s+/g, ' '), chars)].filter(Boolean).join(' ')
         + (u.chart.length ? ' {' + u.chart.map(chartStr).join(' | ').slice(0, 300) + '}' : '') + (u.alt.length ? ' {그림 설명 ' + u.alt.slice(0, 3).join(' | ').slice(0, 120) + '}' : '')
         + (u.ctx ? ' {다음 문단 ' + clip(u.ctx, 120) + '}' : '') + (u.note ? ' {메모 ' + clip(u.note, 120) + '}' : '')));
@@ -1129,12 +1128,13 @@
   const chartHtml = (c) => `<table class="ch"><caption>${esc(chartStr(c).slice(0, 240))}</caption>`
     + (c.series.length ? `<tr><th></th>${(c.series[0].cats || []).slice(0, 14).map(x => `<th>${esc(x)}</th>`).join('')}</tr>` + c.series.slice(0, 8).map(s => `<tr><th>${esc(s.name)}</th>${s.vals.slice(0, 14).map(v => `<td>${esc(v)}</td>`).join('')}</tr>`).join('') : '') + '</table>';
   const NUM = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳';
-  const FIG_CSS = '<style>body{font:14px/1.5 "Malgun Gothic",-apple-system,sans-serif;margin:12px 16px;color:#111;background:#fff}h2{font-size:18px;margin:4px 0}'
-    + '.meta{color:#555;font-size:12px;font-weight:normal}section{border-top:1px solid #ddd;padding:10px 0}h3{font-size:15px;margin:0 0 2px}h4{font-size:13px;margin:10px 0 2px;color:#333}.memo{background:#fff4c2;padding:1px 6px;margin:2px 0;display:inline-block}'
-    + '.txt{color:#333;font-size:12px;margin:4px 0;white-space:pre-wrap}.imgs{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}.imgs img{max-width:560px;max-height:460px;border:1px solid #bbb}'
-    + '.ph{border:1px dashed #999;padding:8px;color:#666;font-size:12px}table.ch{border-collapse:collapse;margin:6px 0;font-size:12px}.ch td,.ch th{border:1px solid #ccc;padding:1px 6px}.ch caption{text-align:left;color:#555}.err{color:#b00}a{color:#0b57d0}'
-    + '.imgs a.pg img{max-width:100%;width:1000px;max-height:none}.lead{font-size:14px;margin:6px 0;padding:6px 10px;background:#eef4ff;border-left:4px solid #0b57d0}'
-    + '.wait{font-size:14px;color:#7a4b00;background:#fff4c2;padding:6px 10px;margin:8px 0}.sum pre{white-space:pre-wrap;font-size:12px;color:#333;background:#f6f6f6;padding:8px;margin:4px 0}</style>';
+  // 글자 크기는 크게(사용자 지시 2026-09-30 "너무 작아 잘 안 보인다") — 본문 18px, 슬라이드 글·목록 16px, 제목 26px
+  const FIG_CSS = '<style>body{font:18px/1.6 "Malgun Gothic",-apple-system,sans-serif;margin:14px 20px;color:#111;background:#fff}h2{font-size:26px;margin:6px 0}'
+    + '.meta{color:#444;font-size:16px;font-weight:normal}section{border-top:1px solid #ddd;padding:12px 0}h3{font-size:21px;margin:0 0 4px}h4{font-size:18px;margin:12px 0 4px;color:#222}.memo{background:#fff4c2;padding:2px 8px;margin:2px 0;display:inline-block}'
+    + '.txt{color:#222;font-size:16px;margin:6px 0;white-space:pre-wrap}.imgs{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}.imgs img{max-width:640px;max-height:520px;border:1px solid #bbb}'
+    + '.ph{border:1px dashed #999;padding:10px;color:#555;font-size:16px}table.ch{border-collapse:collapse;margin:8px 0;font-size:15px}.ch td,.ch th{border:1px solid #ccc;padding:2px 8px}.ch caption{text-align:left;color:#444}.err{color:#b00}a{color:#0b57d0}'
+    + '.imgs a.pg img{max-width:100%;width:1100px;max-height:none}.lead{font-size:18px;margin:8px 0;padding:8px 12px;background:#eef4ff;border-left:5px solid #0b57d0}'
+    + '.wait{font-size:18px;color:#7a4b00;background:#fff4c2;padding:8px 12px;margin:10px 0}.sum pre{white-space:pre-wrap;overflow-wrap:anywhere;font:16px/1.6 "Malgun Gothic",-apple-system,sans-serif;color:#222;background:#f6f6f6;padding:10px 12px;margin:6px 0}</style>';
   // 탭 제목 — 결과 탭이 뒤에 있으면(사용자가 다른 탭을 보는 중) 그 탭을 볼 때까지 제목을 깜박여 알린다(최대 2분). quiet = 깜박이지 않음.
   let blinkT = null;
   function titleAlert(t, quiet) {
@@ -1273,24 +1273,25 @@
         const transient = (pvTried && !usePv) || (pg && !pgImg[pg]) || !!(g && g.error);
         if ((u.pics || 0) > 0 && ni === ni0 && transient) imgs += '<div class="ph">[그림을 받지 못함 — 일시 오류일 수 있음. 대화창에서 "더 보여줘"라고 하면 다시]</div>';
         else okNs.push(n);
-        const s = { labs: [lab], texts: [txt], imgs, charts: u.chart.slice() };
+        const s = { n, labs: [lab], texts: [txt], imgs, charts: u.chart.slice() };
         if (byPage && pg && pgImg[pg]) atPg[pg] = s;
         secs.push(s);
       }
       await waitOnce();
       ns += secs.filter(s => !s.err).length;
       const meta = [ymd(it.updated || it.created), it.by, it.via ? '업무 ' + it.via : '', (it.drive || '') + (it.path ? ' ' + it.path : ''), kb(it.size)].filter(Boolean).join(' · ');
-      emit(`<section class="file"><h3>${NUM[pi] || '(' + (pi + 1) + ')'} ${esc(it.name)}${p.note ? ` <span class="meta">— ${esc(p.note)}</span>` : ''}</h3>`
+      emit(`<section class="file" data-id="${esc(String(it.id || ''))}"><h3>${NUM[pi] || '(' + (pi + 1) + ')'} ${esc(it.name)}${p.note ? ` <span class="meta">— ${esc(p.note)}</span>` : ''}</h3>`
         + (p.memo ? `<div class="memo">${esc(p.memo)}</div>` : '')
         + `<div class="meta">${esc(meta)}` + (it.url ? ` · <a href="${esc(it.url)}" target="_blank">Dooray 에서 열기 ↗</a>` : '') + '</div>'
         + secs.map(s => s.err ? `<p class="err">${esc(s.err)}</p>`
-          : `<div class="unit"><h4>${esc(s.labs.join(' · '))}</h4>` + [...new Set(s.texts.filter(Boolean))].map(t => `<div class="txt">${esc(clip(t, opt.text || 500))}</div>`).join('')
+          : `<div class="unit" data-n="${s.n != null ? s.n : ''}"><h4>${esc(s.labs.join(' · '))}</h4>` + [...new Set(s.texts.filter(Boolean))].map(t => `<div class="txt">${esc(clip(t, opt.text || 500))}</div>`).join('')
             + (s.imgs ? `<div class="imgs">${s.imgs}</div>` : '') + s.charts.map(chartHtml).join('') + '</div>').join('')
         + '</section>', pi + 1);
       if (opt.onFile) { try { opt.onFile(pi, okNs); } catch (e) { /* 표시 기록 실패는 무시 */ } }   // 실제로 보인 곳(quick·more 가 '보인 곳'으로 기록)
       } catch (e) { fail(`ERR ${it.name} — ${errText(e)}`); }
     }
     await waitOnce();
+    if (opt.waitTail) { try { await opt.waitTail; } catch (e) { /* 폴더 경로를 못 채우면 대안 링크 */ } }
     const tail = typeof opt.tail === 'function' ? opt.tail() : (opt.tail || '');
     const b = box();
     if (b && typeof b.insertAdjacentHTML === 'function') { const w = document.getElementById('kkwait'); if (w) w.remove(); if (tail) b.insertAdjacentHTML('afterend', tail); }
@@ -1338,9 +1339,40 @@
     try { M0 = matcher(spec.q); } catch (e) { M0 = null; }
     if (!M0) { stage('ERR 파일 속 찾을 말(q)이 없거나 잘못됐습니다 — 정규식·글·글 배열·{all:[…], any:…} 중 하나로', true, 'kk-dry 오류'); return { summary: 'ERR 파일 속 찾을 말(q)이 없거나 잘못됐습니다 — quick({find:[…], q:/낱말|낱말/i})' }; }
     qBusy = true;
-    try { return await quickRun(spec); }
-    catch (e) { progress = ''; stage('ERR kk-dry 실패: ' + errText(e), true, 'kk-dry 오류'); return { summary: 'ERR ' + errText(e) }; }
-    finally { qBusy = false; }
+    const run = (async () => {
+      try { return await quickRun(spec); }
+      catch (e) { progress = ''; stage('ERR kk-dry 실패: ' + errText(e), true, 'kk-dry 오류'); return { summary: 'ERR ' + errText(e) }; }
+      finally { qBusy = false; }
+    })();
+    lastRun = run;
+    return run;
+  }
+  // done(초) — 도는 quick·more 가 끝나는 즉시 요약 한 줄을 돌려준다(고정 wait 없이 — 일찍 끝나면 일찍). 한도(기본 35초 — javascript_tool 은 34초 await 도 돌려줌, 2026-09-30 실측) 안에 안 끝나면 '⏳ 아직 — 진행'.
+  //   부를 때: 같은 browser_batch 에서 quick 시작 → await kkDry.done(35) → get_page_text. '⏳ 아직' 이면 await kkDry.done(35) → get_page_text 를 한 번 더.
+  let lastRun = null;
+  async function done(sec = 35) {
+    if (!lastRun) return 'ERR 도는 찾기가 없습니다 — quick(…)·more(…) 로 시작';
+    let tm = null;
+    const t = new Promise(r => { tm = setTimeout(() => r(null), Math.max(0.05, +sec || 35) * 1000); });
+    const r = await Promise.race([lastRun, t]);
+    clearTimeout(tm);
+    if (!r) { const w = typeof document.getElementById === 'function' && document.getElementById('kkwait'); return '⏳ 아직 — ' + ((w && w.textContent) || progress || '준비 중') + ' (다시 await kkDry.done(35))'; }
+    return r.summary || 'ERR 결과 없음';
+  }
+  // goto(F번호 | '이름 조각', 슬라이드·쪽 번호?) — 결과 화면에서 그 곳으로 스크롤한다(그림 확인은 이어서 screenshot 한 번). 반환 'ok …' 또는 ERR.
+  function goto(x, n) {
+    const S = (lastQuick && lastQuick.S) || lastScan;
+    let f = null;
+    if (typeof x === 'number') { const v = S && S.files.find(v => v.k === x); f = v && v.f; }
+    else if (S && x != null) { const key = NF(x).toLowerCase(); const v = S.files.find(v => NF(v.f.name).toLowerCase().includes(key)); f = v && v.f; }
+    if (!f) return 'ERR 결과에 그 파일이 없습니다 — ■ 파일 목록의 [F번호]로';
+    if (typeof document.querySelectorAll !== 'function') return 'ERR 결과 화면이 없습니다';
+    const sec = [...document.querySelectorAll('section.file')].find(e => e.getAttribute('data-id') === String(f.id));
+    if (!sec) return 'ERR 그 파일은 지금 화면에 없습니다 — more(F번호) 로 먼저 띄우기';
+    const u = n == null ? sec : [...sec.querySelectorAll('.unit')].find(e => e.getAttribute('data-n') === String(n));
+    if (!u) return `ERR 그 곳(${n})은 지금 화면에 없습니다 — more(F번호) 로`;
+    u.scrollIntoView(); if (typeof window.scrollBy === 'function') window.scrollBy(0, -8);
+    return 'ok ' + sanitize(String(f.name).slice(0, 40)) + (n != null ? ' · ' + n : '');
   }
   let qBusy = false;
   async function quickRun(spec) {
@@ -1503,8 +1535,7 @@
     const Q = lastQuick, M = Q.M, L = ['■ 글 결과 — 대화창에 그대로 옮겨 보인다(문단은 인용, 표는 | 칸 | 그대로)'];
     tP.forEach((p, i) => {
       const v = p.v, f = v.f;
-      L.push('', `${NUM[from + i] || '(' + (from + i + 1) + ')'} [F${v.k}] ${f.name} | ${ymd(f.updated || f.created)} | 걸린 곳 ${v.hits.length} · ${first ? '보인 곳' : '이번'} ${shownLab(p)} · 남은 ${v.hits.length - v.shown.size} | ${whereOf(f)} | ${f.by || '?'}`);
-      if (f.url) L.push('   ' + f.url);
+      L.push('', `${NUM[from + i] || '(' + (from + i + 1) + ')'} [F${v.k}] ${f.name} | ${ymd(f.updated || f.created)} | 걸린 곳 ${v.hits.length} · ${first ? '보인 곳' : '이번'} ${shownLab(p)} · 남은 ${v.hits.length - v.shown.size} | ${whereOf(f)} | ${f.by || '?'}` + (f.url ? ' → ' + f.url : ''));
       p.passages.forEach(ps => {
         if (ps.kind === 'table' && ps.T.name == null && Array.from(ps.T.rows || [], r => (r || []).length).reduce((a, b) => Math.max(a, b), 0) <= 1) {   // 한 칸짜리 표(글상자처럼 쓴 것)는 문단처럼
           L.push(`   ▸ 표 ${ps.u.tb + 1}(한 칸): ` + around([...new Set(ps.rows)].map(i => (ps.T.rows[i] || [])[0]).filter(Boolean).join(' / '), M, 300));
@@ -1535,9 +1566,13 @@
     const picks = pickFiles(order, top, maxF, ks);
     if (!picks.length) return { summary: '더 보일 곳이 없습니다 — 걸린 곳을 모두 보였습니다(다른 말로 좁히려면 quick({q:…}))' };
     qBusy = true;
-    try { return await quickShow(picks, false, opt.title); }
-    catch (e) { progress = ''; stage('ERR kk-dry 실패: ' + errText(e), true, 'kk-dry 오류'); return { summary: 'ERR ' + errText(e) }; }
-    finally { qBusy = false; }
+    const run = (async () => {
+      try { return await quickShow(picks, false, opt.title); }
+      catch (e) { progress = ''; stage('ERR kk-dry 실패: ' + errText(e), true, 'kk-dry 오류'); return { summary: 'ERR ' + errText(e) }; }
+      finally { qBusy = false; }
+    })();
+    lastRun = run;
+    return run;
   }
   async function quickShow(picks, first, title) {
     const Q = lastQuick, S = Q.S, RP = Q.R || lastReport || {}, t2 = Date.now();
@@ -1551,9 +1586,13 @@
     catch (e) { added.forEach(([v, n]) => v.shown.delete(n)); throw e; }
   }
   async function quickPaint(picks, cP, tP, first, title, Q, S, RP, t2, mark) {
-    // 링크용 부모 폴더는 보일 드라이브 파일만(찾기 때 전부 채우지 않음) — 첫 파일 그림을 받는 동안 함께
-    const needPath = picks.map(p => p.v.f).filter(f => f && f.kind === 'file' && f.driveId && !f.folderId);
+    // 링크용 부모 폴더 — 보일 파일은 첫 그림을 받는 동안, 목록에만 오를 걸린 파일(20개까지)은 끝 목록을 쓰기 전까지 함께 채운다
+    //   (목록의 링크도 '파일이 선택된 폴더'로 열리게 — 답에서 linkOf 를 따로 부르지 않아도 되게, 2026-09-30)
+    const noPath = (f) => f && f.kind === 'file' && f.driveId && !f.folderId;
+    const needPath = picks.map(p => p.v.f).filter(noPath);
     const wait = needPath.length ? pool(needPath, 3, drivePath) : null;
+    const needRest = Q.hitF.filter(v => !picks.some(p => p.v === v)).slice(0, 20).map(v => v.f).filter(f => noPath(f) && !needPath.includes(f));
+    const waitRest = needRest.length ? pool(needRest, 3, drivePath) : null;
     const places = cP.reduce((s, p) => s + p.units.length, 0), tPlaces = tP.reduce((s, p) => s + p.passages.length, 0), badN = S.files.filter(v => !v.hits).length, readN = S.files.length - badN;   // 읽은 파일 = 읽기에 성공한 것만(못 읽은 파일은 따로 — Codex 실계정 검토)
     const ttl = title || Q.spec.title || `kk-dry 결과 — '${friendly(Q.spec.q)}' 파일 속 찾기`;
     const moreTxt = `더 보려면 대화창에서 <b>"더 보여줘"</b>${first ? ' (또는 "①번 더", "그중 ○○만")' : ''}.`;
@@ -1572,9 +1611,10 @@
     let res;
     const okF = new Set(); let okPlaces = 0;
     const onFile = (pi, ns) => { const p = cP[pi]; if (!p) return; ns.forEach(n => mark(p.v, n)); if (ns.length) { okF.add(pi); okPlaces += ns.length; } };
-    if (cP.length) res = await showFigures(cP.map(p => ({ f: p.v.f, units: p.units.map(u => u.n), note: `걸린 곳 ${p.v.hits.length} · ${first ? '보인 곳' : '이번'} ${shownLab(p)}` })), { title: ttl, intro, tail, wait, onFile });
+    if (cP.length) res = await showFigures(cP.map(p => ({ f: p.v.f, units: p.units.map(u => u.n), note: `걸린 곳 ${p.v.hits.length} · ${first ? '보인 곳' : '이번'} ${shownLab(p)}` })), { title: ttl, intro, tail, wait, waitTail: waitRest, onFile });
     else {   // 채팅 글뿐이면(또는 걸린 곳 없음) Chrome 결과 화면이 아니라 Claude 작업 글 — 탭 제목도 조용히
       if (wait) await wait;
+      if (waitRest) await waitRest;
       dropBlobs();
       document.body.innerHTML = FIG_CSS + `<h2>${esc(ttl)}</h2>` + intro + tail();
       titleAlert(`kk-dry 작업 — ${tP.length ? '글 결과 ' + tPlaces + '곳(채팅에)' : warn.length ? '⚠ 확인 필요' : '0곳'}`, true);
@@ -1605,14 +1645,13 @@
     L.push('');
     picks.forEach((p, i) => {
       const f = p.v.f;
-      L.push(`${NUM[i] || '(' + (i + 1) + ')'} [F${p.v.k}] ${ymd(f.updated || f.created)} | ${f.name} | 걸린 곳 ${p.v.hits.length} · ${first ? '보인 곳' : '이번'} ${shownLab(p)}${p.units ? ' (Chrome 화면)' : ' (채팅 글)'} · 남은 ${p.v.hits.length - p.v.shown.size} | ${where(f)} | ${f.by || '?'}${partNote(p.v)}`);
-      if (f.url) L.push('   ' + f.url);
+      L.push(`${NUM[i] || '(' + (i + 1) + ')'} [F${p.v.k}] ${ymd(f.updated || f.created)} | ${f.name} | 걸린 곳 ${p.v.hits.length} · ${first ? '보인 곳' : '이번'} ${shownLab(p)}${p.units ? ' (Chrome 화면)' : ' (채팅 글)'} · 남은 ${p.v.hits.length - p.v.shown.size} | ${where(f)} | ${f.by || '?'}${partNote(p.v)}` + (f.url ? ' → ' + f.url : ''));   // 이름과 주소를 한 줄에(2026-09-30)
     });
     const rest = Q.hitF.filter(v => !picks.some(p => p.v === v) && v.hits.length > v.shown.size), dup = rest.filter(v => v.dupOf != null), other = rest.filter(v => v.dupOf == null);
     if (dup.length) L.push('', `— 앞 파일과 같은 글(다른 판·사본) ${dup.length}개 — 접음: ` + dup.slice(0, 20).map(v => `[F${v.k}] ${v.f.name}(=F${v.dupOf})`).join(' · ') + (dup.length > 20 ? ' …' : ''));
     if (other.length) {
       L.push('', `— 걸린 파일 ${other.length}개 더(목록만 — "더 보여줘"):`);
-      other.slice(0, 20).forEach(v => { L.push(`[F${v.k}] ${ymd(v.f.updated || v.f.created)} | ${v.f.name} | 걸린 곳 ${v.hits.length}${v.shown.size ? ' · 보인 곳 ' + v.shown.size : ''} | ${where(v.f)}`); if (v.f.url) L.push('   ' + v.f.url); });
+      other.slice(0, 20).forEach(v => L.push(`[F${v.k}] ${ymd(v.f.updated || v.f.created)} | ${v.f.name} | 걸린 곳 ${v.hits.length}${v.shown.size ? ' · 보인 곳 ' + v.shown.size : ''} | ${where(v.f)}` + (v.f.url ? ' → ' + v.f.url : '')));
       if (other.length > 20) L.push(`… 외 ${other.length - 20}개`);
     }
     if (first && noneF.length) L.push('', `— 걸린 곳 없음 ${noneF.length}개: ` + noneF.slice(0, 40).map(v => v.f.name + partNote(v)).join(' · ') + (noneF.length > 40 ? ' …' : ''));
@@ -1657,6 +1696,7 @@
     document.body.innerHTML = '';
     const pre = document.createElement('pre');
     pre.style.whiteSpace = 'pre-wrap';
+    pre.style.cssText += ';overflow-wrap:anywhere;font:16px/1.6 "Malgun Gothic",-apple-system,sans-serif;margin:14px 20px';   // 글자 크게(2026-09-30)
     pre.textContent = String(text);
     document.body.appendChild(pre);
     return 'shown ' + String(text).length;
@@ -1744,10 +1784,12 @@
   //   expandProjects:2, limits:{detail:30(본문·댓글 읽을 업무 수), comments:100, body:3000, comment:1200, files:(첨부 이름 최대 수 — 기본 제한 없음), paths:60, expandMax:60}
   //   글이 4.5만 자를 넘으면 스스로 줄인다(get_page_text 한도 5만 자) — 머리줄 ※ 에 어떻게 줄였는지, 잘린 첨부는 '… 외 N개 (showFiles(번호))'.
   //   반환 { summary, shown, chars, reduced } — 본문은 작업 탭 화면(get_page_text). 결과 객체는 last() 로(후속 only·showFiles·readFile·링크).
-  async function report(groups, opt = {}) {
+  // report 도 done() 으로 끝을 기다릴 수 있게 — 부르는 쪽 약속(실패 시 reject)은 그대로
+  function report(groups, opt = {}) { const run = reportRun(groups, opt); lastRun = run.catch(e => ({ summary: 'ERR ' + errText(e) })); return run; }
+  async function reportRun(groups, opt = {}) {
     const t0 = Date.now();
     const lim = Object.assign({ detail: 30, comments: 100, body: 3000, comment: 1200, paths: 60, expandMax: 60 }, opt.limits || {});   // paths: 파일이 선택된 채 열리는 링크에 부모 폴더가 필요
-    show('(kk-dry 찾는 중 … 잠시 뒤 get_page_text 를 다시 부르세요)');
+    show('(kk-dry 찾는 중 … await kkDry.done(35) 뒤 get_page_text)');
     const r = await find(groups, Object.assign({}, opt, { detail: 0, paths: 0 }));
     progress = '정리 중';
     if (r.error && !r.tasks && !r.drive) { progress = ''; lastReport = { error: r.error }; show('ERR ' + r.error); return { summary: 'ERR ' + r.error }; }
@@ -1960,9 +2002,90 @@
     if (x == null) return notYet();
     const one = x && x.kind && x.id, items = one ? [x] : listOf(x), err = one ? '' : errOf(x);
     if (err && !items.length) return 'ERR ' + sanitize(err);
-    const rows = fitRows(items.slice(from, to).map((it, k) => `${from + k} | ` + (hy ? `P ${hyId(it.projectId)} | ${it.kind === 'task' ? 'T' : 'F'} ${hyId(it.id)}` : it.url)), 80);
+    // 주소 옆에 이름을 함께 — 링크를 답에 옮길 때 이름과 대조하게(2026-09-30 옆 파일 링크를 준 실수)
+    const rows = fitRows(items.slice(from, to).map((it, k) => `${from + k} | ` + (hy ? `P ${hyId(it.projectId)} | ${it.kind === 'task' ? 'T' : 'F'} ${hyId(it.id)}` : it.url) + ' | ' + sanitize(String(it.name || it.subject || '').slice(0, 30))), 80);
     const end = from + rows.length;
     return `[링크 ${from}-${end} of ${items.length}]` + (end < Math.min(to, items.length) ? ` ▶ 다음 조각 ${end}` : '') + '\n' + rows.join('\n');
+  }
+  // linkOf(x) — 답에 줄 링크를 이름과 한 줄로: '[F번호] 이름 | 날짜 | 경로 → 주소'. 답의 링크는 여기(또는 ■ 파일 목록)에서만 옮긴다. 부를 때는 await kkDry.linkOf(…).
+  //   결과 화면(작업 탭)의 DOM 을 훑어 링크를 뽑지 않는다 — 카드의 'Dooray 에서 열기' 는 이름과 떨어져 있어 옆 파일 링크를 집는다(2026-09-30 실측 실수).
+  //   x = F번호(quick·scanFiles 의 [F번호]) · 이름 조각(글, 대소문자·NFKC 무시) · 정규식. 여러 개가 걸리면 모두 보여 준다(이름으로 더 좁힌다).
+  //   대상 = 마지막 quick·scanFiles 가 읽은 파일 + 마지막 report·find 의 드라이브 항목·업무(T번호).
+  //   드라이브 파일의 부모 폴더를 아직 모르면(검색 화면으로 열리는 주소) 여기서 채워 '폴더가 열리고 파일이 선택되는' 주소로 준다(앞 6개, 실패하면 그 주소 그대로 + 표시).
+  async function linkOf(x) {
+    if (x == null || x === '') return 'ERR linkOf(F번호 | 이름 조각 | /정규식/)';
+    const key = (s) => NF(s).toLowerCase();
+    const hit = (name) => x instanceof RegExp ? x.test(NF(name)) : key(name).includes(key(x));
+    const picks = [], seen = new Set();
+    const add = (tag, f, name) => { if (!f || !f.url || seen.has(f.url + '|' + name)) return; seen.add(f.url + '|' + name); picks.push({ tag, f, name }); };
+    const S = (lastQuick && lastQuick.S) || lastScan;
+    const R = lastReport && !lastReport.error ? lastReport : null;
+    if (typeof x === 'number') {
+      const v = S && S.files.find(v => v.k === x);
+      if (v) add(`[F${v.k}]`, v.f, v.f.name);
+      else if (R && R.drive && R.drive.items && R.drive.items[x]) add(`[F${x}]`, R.drive.items[x], R.drive.items[x].name);
+    } else {
+      if (S) S.files.forEach(v => { if (hit(v.f.name)) add(`[F${v.k}]`, v.f, v.f.name); });
+      if (R) {
+        ((R.drive && R.drive.items) || []).forEach((it, k) => { if (hit(it.name)) add(`[F${k}]`, it, it.name); });
+        ((R.tasks && R.tasks.items) || []).forEach((it, k) => { if (hit(it.subject)) add(`[T${k}]`, it, it.subject); });
+      }
+    }
+    if (!picks.length) return 'ERR 결과에 그 파일이 없습니다 — ' + sanitize(String(x)) + ' (이름을 확인하거나 먼저 quick·report 로 찾기)';
+    const need = picks.filter(p => p.f.driveId && !p.f.folderId && !p.f.taskId && p.f.kind !== 'folder').slice(0, 6);
+    const fails = new Set();
+    if (need.length) await pool(need, 3, async (p) => { try { await drivePath(p.f); } catch (e) { fails.add(p.f); } });
+    const rows = picks.map(p => `${p.tag} ${sanitize(p.name)} | ${ymd(p.f.updated || p.f.created)} | ${sanitize(whereOf(p.f) || p.f.project || '')} → ${p.f.url}`
+      + (/\?query=/.test(p.f.url) ? (fails.has(p.f) ? ' (폴더를 못 읽어 검색 화면으로 열림)' : ' (검색 화면으로 열림)') : ''));
+    const out = fitRows(rows, 80);
+    return `[링크 ${out.length} of ${rows.length}]` + (rows.length > 1 ? ' ⚠ 여러 개 — 답의 파일 이름과 같은 줄만 쓴다' : '') + '\n' + out.join('\n');
+  }
+  // checkLinks(답) — 링크가 든 답을 보내기 전에 한 번: 답의 Dooray 주소마다 같은 줄(이름이 없으면 바로 위 두 줄)의 파일·업무 이름이 그 주소의 것인지 결정적으로 대조한다.
+  //   2026-09-30 실수(줄에는 260623, 주소는 260713) 뒤 추가. x = 답 글(여러 줄) · 줄 배열 · [이름, 주소] 쌍 배열.
+  //   대조 대상 = 이 탭의 마지막 quick·scanFiles·report·find 결과(업무 링크는 그 업무 제목과 첨부 이름 모두 인정).
+  //   결과 첫 줄 'OK …' = 통과. '✗' = 다른 항목의 주소(linkOf 로 다시 받아 고침) · '?' = 찾은 결과에 없는 주소 · '△' = 줄에 이름이 없거나 최상위 폴더로 열리는 주소.
+  function checkLinks(x) {
+    const lines = Array.isArray(x) ? x.map(v => Array.isArray(v) ? v.join(' ') : String(v == null ? '' : v)) : String(x == null ? '' : x).split(/\r?\n/);
+    const known = new Map();   // 항목 id → [{tag, name}]
+    const put = (url, tag, name) => { const id = idOfUrl(url); if (!id || !name) return; if (!known.has(id)) known.set(id, []); const a = known.get(id); if (!a.some(e => e.name === name)) a.push({ tag, name: String(name) }); };
+    const S = (lastQuick && lastQuick.S) || lastScan, R = lastReport && !lastReport.error ? lastReport : null;
+    if (S) S.files.forEach(v => { put(v.f.url, `[F${v.k}]`, v.f.name); if (v.f.via) put(v.f.url, `[F${v.k}]`, v.f.via); });
+    if (R) {
+      ((R.drive && R.drive.items) || []).forEach((it, k) => put(it.url, `[F${k}]`, it.name));
+      ((R.tasks && R.tasks.items) || []).forEach((it, k) => { put(it.url, `[T${k}]`, it.subject); filesOf(it).forEach(f => put(it.url, `[T${k}]`, f.name)); });
+    }
+    if (!known.size) return 'ERR 대조할 찾기 결과가 없습니다 — 이 작업 탭에서 quick·report·find 로 찾은 뒤 부르세요(탭을 새로 열었으면 결과가 없어짐)';
+    const toks = (s) => [...new Set(NF(s).toLowerCase().replace(/\.(pptx?|docx?|xlsx?|hwpx?|pdf|txt|csv|md|zip|png|jpe?g)\b/g, ' ').split(/[^\p{L}\p{N}]+/u).filter(t => t.length >= 2))];
+    const score = (name, ctx) => { const t = toks(name); return t.length ? t.filter(w => ctx.includes(w)).length / t.length : 0; };
+    const best = (ctx, skipId) => { let b = { s: 0 }; known.forEach((es, id) => { if (id === skipId) return; es.forEach(e => { const s = score(e.name, ctx); if (s > b.s) b = { s, e }; }); }); return b; };
+    const out = []; let n = 0, bad = 0;
+    lines.forEach((line, li) => {
+      const urls = String(line).match(/https:\/\/kist\.gov-dooray\.com\/[^\s)\]>"'`]+/g) || [];
+      urls.forEach(u => {
+        n++;
+        const id = idOfUrl(u), where = `${li + 1}줄 '${sanitize(String(line).replace(/https?:\/\/\S+/g, '').replace(/[*[\]()]/g, '').trim().slice(0, 36))}'`;
+        if (/\/drive\/\d+\/views\/\d+\/?$/.test(u)) { out.push(`△ ${where}: 드라이브 최상위가 열리는 주소(파일이 안 보임) — linkOf 의 주소로`); bad++; }
+        const es = known.get(id);
+        if (!es) { out.push(`? ${where}: 찾은 결과에 없는 주소 — linkOf 로 받은 주소인지 확인`); bad++; return; }
+        const bare = (t) => NF(String(t).replace(/https?:\/\/\S+/g, ' ')).toLowerCase();   // 주소 속 ?query= 에 파일 이름이 들어 있어 주소는 빼고 본다
+        let ctx = bare(line), mine = Math.max(...es.map(e => score(e.name, ctx))), other = best(ctx, id);
+        if (mine < 0.6 && other.s < 0.6) {   // 줄에 이름이 없으면 바로 위 두 줄까지
+          ctx = bare(lines.slice(Math.max(0, li - 2), li + 1).join(' ')); mine = Math.max(...es.map(e => score(e.name, ctx))); other = best(ctx, id);
+        }
+        if (other.s > mine && other.s >= 0.6) { out.push(`✗ ${where}: 주소는 ${es[0].tag} ${sanitize(es[0].name.slice(0, 40))} 의 것 — 줄의 이름은 ${other.e.tag} ${sanitize(other.e.name.slice(0, 40))} → linkOf 로 다시`); bad++; }
+        else if (mine < 0.6) { out.push(`△ ${where}: 줄에 ${es[0].tag} ${sanitize(es[0].name.slice(0, 40))} 의 이름이 없음 — 이름과 링크를 한 줄에`); bad++; }
+      });
+    });
+    if (!n) return 'ERR 답에 Dooray 링크가 없습니다 — 링크가 든 줄을 넘기세요';
+    const head = bad ? `✗ 링크 ${n}개 중 ${bad}곳 확인 필요 — 고친 뒤 다시 checkLinks` : `OK 링크 ${n}개 — 모두 같은 줄의 이름과 맞음`;
+    return [head].concat(fitRows(out, 120)).join('\n');
+  }
+  function idOfUrl(u) {
+    u = String(u || '');
+    let m = u.match(/\/views\/(\d+)/); if (m) return m[1];
+    m = u.match(/\/task\/\d+\/(\d+)/); if (m) return m[1];
+    m = u.match(/\/drive\/\d+\/(\d+)/); if (m) return m[1];
+    return '';
   }
   // 파일 내용 조각: 머리(이름·형식·글자 수·쪽수) + 글 chars 자(offset 으로 이어 읽기)
   function fmtText(r, chars = 800, offset = 0) {
@@ -1978,9 +2101,9 @@
     searchTasks, searchTasksMany, projectTasks, getTask, getTasks,
     searchDrive, searchDriveMany, drivePath, drivePaths,
     find, report, last, show, showItems, showFiles, showText, only, filesOf, readFile, readBytes, saveFile,
-    scanFiles, scanned, showFigures, showPages, quick, more, _tableMd: tableMd, _tmo: TMO, previewOf, pageText, pageTexts, unitsOf, driveUrl, _inflate: inflateJS,
-    fmtFind, fmtTasks, fmtDrive, fmtTask, fmtComments, fmtFiles, fmtLinks, fmtText, fmtSaved, sanitize, hyId,
-    _version: 'kk-dry-ops/2.4',
+    scanFiles, scanned, showFigures, showPages, quick, more, done, goto, _tableMd: tableMd, _tmo: TMO, previewOf, pageText, pageTexts, unitsOf, driveUrl, _inflate: inflateJS,
+    fmtFind, fmtTasks, fmtDrive, fmtTask, fmtComments, fmtFiles, fmtLinks, linkOf, checkLinks, fmtText, fmtSaved, sanitize, hyId,
+    _version: 'kk-dry-ops/2.9',
   };
   window.kkDooray = window.kkDry;   // 옛 이름(2026-09-29 kk-dooray → kk-dry 개명 전) — 같은 객체
   return window.kkDry._version + ' =^.^=';

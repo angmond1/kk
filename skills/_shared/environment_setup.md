@@ -57,7 +57,7 @@ kiki 는 Chrome 창 두 종류를 쓴다. **skill 마다 쓰는 창이 정해져
 | kk-inspect | `Pillow` (+ pdf→jpg 시 `PyMuPDF`) | 증빙 변환 직전 |
 | kk-mail | — | — |
 | kk-dry | `requests` (찾기·파일 내용 읽기는 불필요 — 브라우저 안에서) | 받기·쓰기·올리기(`dooray_io.py`)를 처음 쓸 때 |
-| kk-wiki | `requests` (토큰 경로) | 스냅샷 수집·최신 확인 직전 |
+| kk-wiki | `requests` (토큰 경로) · 첨부를 절 단위 글로 풀 때만 `PyMuPDF`(pdf) `pyhwp`(hwp → hwp5html) `python-docx` `python-pptx` `openpyxl` `xlrd`(xls) (+Windows doc 은 Word 가 있을 때만) | 스냅샷 수집·최신 확인 직전 / 첨부 추출(`wiki_extract.py run`) 직전 — 없는 형식은 건너뛰고 목록에만 남긴다 |
 
 ### 5. 아래아한글 · MS Office — 있으면 자동, 없으면 **물어본다**
 - 필요한 경우만: kk-pay 증빙이 hwp/docx/xlsx 라 pdf 변환이 필요할 때. (kk-meet 의 hwpx 회의록은 **한글 없이 생성**되므로 해당 없음 — 열람만 한글/HOP) 대부분의 KIST PC 엔 둘 다 있다 — `python convert.py --check`(kk-pay) 로 유무 확인.

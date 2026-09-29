@@ -138,7 +138,8 @@ kk-meet 은 Dooray 토큰이 필요 없다(통합정보 SSO 세션만). 토큰�
 - `references/fam_0703_automation.md` — ⭐ **연구비카드 회의비(fam_0703_02) 전용 절차서** (정찰 스니펫 / 이름표 / closure curRow 행 전환 `goRow()` / 매핑→계정→적요 순서 / DESP_LIST 오염 검증·복구 / 저장 체크리스트 / 2026-09-08 버벅거림 13건→예방).
 - `../_shared/nexacro_file_upload.md` — ⭐ **NEXACRO `ExtFileUpload` 첨부 자동화 공통 가이드**(2026-06-07 codex 실증, A/B/C 3 패턴). kk-pay·kk-meet·kk-inspect 공유. **C(정공법, `extUp._input_node` 직접) 우선 시도** 권장.
 - `references/meeting_log_excel.md` — 회의록 엑셀 9컬럼 관리 표준 (월별 1파일).
-- `references/meeting_form.md` — (요청 시) hwpx 별지1호 양식·셀매핑·인원·증빙·중복.
+- `references/meeting_form.md` — (요청 시) hwpx 별지1호 양식·셀매핑·인원·증빙·중복 + 회의비 규정(1인 5만원·차상위·심야) + **청탁금지법 합산 한도**(외부인 참석 시 식사+선물·경조사비·커피 합산, 시간적 연속성, 현안 진행 중 금지 — 길라잡이 2024-09, 2026-09-30 추가).
+- `../_shared/rule_changes.md` — 규정 변경표(옛 값 → 현행 값). 옛 문서의 회의비 3만원·외부기관 관련자 요건은 현행(5만원·과제 미참여자)으로 읽는다.
 - `references/meeting_transcribe.md` — ⭐ **회의 기록 → 회의내용**: 글 → 녹음 → 없음 순서와 묻는 말, 글 형식별 읽기, 녹음을 그대로 줄 때 `[사용자 안내]` 한 줄 전달과 다섯 경우, 백그라운드 변환·결과 점검, 휴대폰 녹음 앱·클로바노트·온라인 회의 녹취록 안내, 초안 규칙, 회의시간 힌트, 보관·보안.
 - `references/project_code.md` — 분류코드·비목·면제(I·S·B·F·부서운영비)·발의자.
 - `references/fam0100_reference.md` — 사전결재 fetch 명세.

@@ -138,7 +138,7 @@ s.textContent = `[id*="_form_modalPopDiv"], [id*="modalPopDivScrollableInnerCont
 ```js
 () => {
   const c = localStorage.getItem('kk.dry.core') || '';
-  if (c.includes('kk-dry-ops/2.4')) return (0, eval)(c);
+  if (c.includes('kk-dry-ops/2.9')) return (0, eval)(c);
   document.body.innerHTML = '';
   const i = document.createElement('input');
   i.type = 'file'; i.id = 'kkcore'; i.setAttribute('aria-label', 'kk core file');
@@ -147,14 +147,14 @@ s.textContent = `[id*="_form_modalPopDiv"], [id*="modalPopDivScrollableInnerCont
 }
 ```
 
-`NEED_UPLOAD`이면 `take_snapshot({pageId})`에서 **최신** 파일 입력의 `uid`를 얻어 `upload_file({pageId, uid, filePaths:["<설치본>/scripts/kk_dry_ops.min.js의 절대경로"]})`를 호출한다. 이어서 아래 함수를 `evaluate_script({pageId, function:"async () => { ... }"})`로 실행하고 `kk-dry-ops/2.4 =^.^=` 반환을 확인한다. 파일 경로가 도구의 workspace 검사에서 거부되면 §5처럼 **코어 파일만** OS 임시폴더에 복사해 업로드한다. 새로고침 뒤에는 저장된 코어의 버전을 확인해 다시 주입한다. 전역은 `window.kkDry`이며 `window.kkDooray`는 구 이름 별칭이다.
+`NEED_UPLOAD`이면 `take_snapshot({pageId})`에서 **최신** 파일 입력의 `uid`를 얻어 `upload_file({pageId, uid, filePaths:["<설치본>/scripts/kk_dry_ops.min.js의 절대경로"]})`를 호출한다. 이어서 아래 함수를 `evaluate_script({pageId, function:"async () => { ... }"})`로 실행하고 `kk-dry-ops/2.9 =^.^=` 반환을 확인한다. 파일 경로가 도구의 workspace 검사에서 거부되면 §5처럼 **코어 파일만** OS 임시폴더에 복사해 업로드한다. 새로고침 뒤에는 저장된 코어의 버전을 확인해 다시 주입한다. 전역은 `window.kkDry`이며 `window.kkDooray`는 구 이름 별칭이다.
 
 ```js
 async () => {
   const f = document.getElementById('kkcore')?.files?.[0];
   if (!f) return 'ERR 코어 파일 없음';
   const c = await f.text();
-  if (!c.includes('kk-dry-ops/2.4')) return 'ERR 코어 버전 다름';
+  if (!c.includes('kk-dry-ops/2.9')) return 'ERR 코어 버전 다름';
   localStorage.setItem('kk.dry.core', c);
   return (0, eval)(c);
 }

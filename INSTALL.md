@@ -140,7 +140,7 @@ mkdir -p budget meeting inspect _tmp
 | **kk-meet** | `openpyxl` (hwpx 회의록 옵션은 추가 설치 없음) | `kk-meet 설정해줘` (hwpx 동봉 여부·업로드 여부) | `회의비 처리하자` |
 | **kk-budget** | `openpyxl` | `kk-budget 설정해줘` (추적 과제·카테고리) | `예산 수집해줘` / `예산 잔액 표로` |
 | **kk-inspect** | `Pillow` (+ pdf→jpg 시 `PyMuPDF`) | `kk-inspect 설정해줘` (위치·행정원·검수 폴더) | `이 폴더 증빙들 소액검수 올려줘` |
-| **kk-wiki** | `requests` (토큰 경로만) | `kk-wiki 설정해줘` (위키 스냅샷 만들기 2~3분) | `출장 식비 한도 알려줘` / `외자 구매 절차 관련 페이지 다 모아줘` |
+| **kk-wiki** | `requests` (토큰 경로만) · 첨부 문서까지 풀 때 `PyMuPDF` `pyhwp` `python-docx` `python-pptx` `openpyxl` `xlrd` | `kk-wiki 설정해줘` (위키 스냅샷 만들기 2~3분) | `출장 식비 한도 알려줘` / `외자 구매 절차 관련 페이지 다 모아줘` |
 
 > **쓰기 작업(업로드·제출·결재상신·검수 신청·파일 첨부)은 항상 본인 확인 후** 진행된다.
 

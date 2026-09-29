@@ -501,7 +501,7 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
     if (url.startsWith('/v2/wapi/drives/D1/files/')) return J({ header: { isSuccessful: true }, result: { content: { parentFile: { id: '5100000000000000002', path: 'root/2026/2026-06' } } } });
     return { ok: false, status: 404, text: async () => '{}' };
   };
-  ok('dry inject 2.4', load('kk-dry/scripts/kk_dry_ops.min.js') === 'kk-dry-ops/2.4 =^.^=');
+  ok('dry inject 2.9', load('kk-dry/scripts/kk_dry_ops.min.js') === 'kk-dry-ops/2.9 =^.^=');
   const DR = window.kkDry;
   const noQ = (s) => !/=/.test(s) && !/\w=\w*&/.test(s);
   window.__d = null; DR.find([['가나다'], ['가나다', '보고서']], { since: '2026-04-01' }).then(r => window.__d = r, e => window.__d = { error: String(e) });
@@ -545,6 +545,28 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
   const iOld = shownText.indexOf('2026-09-10 09:00 김키키'), iNew = shownText.indexOf('2026-09-19 09:00 이키키');
   ok('dooray report: 업무 3건(프로젝트 전체로 1건 더함)·드라이브·링크·댓글 오래된 순·요약 반환', /업무 3건 · 드라이브 2건/.test(rp.summary) && shownText.includes("+ 프로젝트 '○○-공동연구' 업무 2건 중 검색에 안 걸린 1건을 더함") && shownText.includes('| 같은 프로젝트') && shownText.includes('https://kist.gov-dooray.com/task/3300000000000000001/4100000000000000003') && shownText.includes('[F0]') && iOld > 0 && iNew > iOld && rp.chars === shownText.length, rp.summary + ' // ' + shownText.slice(0, 300));
   ok('dooray last(): 후속 질문용 결과 보관', DR.last().tasks.items.length === 3 && DR.last().drive.items.length === 2);
+  { const d0 = DR.last().drive.items[0], d1 = DR.last().drive.items[1], lo = await DR.linkOf(d1.name.slice(0, 4)), ln = await DR.linkOf(1), lx = await DR.linkOf('없는파일이름');
+    ok('dooray linkOf: 이름 조각·번호 → 그 파일 이름과 주소가 한 줄(옆 파일 주소 아님)', lo.split(String.fromCharCode(10)).some(l => l.includes(d1.name) && (l.split('→ ')[1] || '').split(' ')[0] === d1.url) && !lo.split(String.fromCharCode(10)).some(l => l.includes(d1.name) && (l.split('→ ')[1] || '').split(' ')[0] === d0.url) && ln.includes(d1.url) && lx.startsWith('ERR'), lo + ' // ' + ln);
+    ok('dooray fmtLinks: 주소 옆에 이름', DR.fmtLinks(DR.last().drive).includes(d1.url + ' | ' + d1.name.slice(0, 30)), DR.fmtLinks(DR.last().drive)); }
+  { // checkLinks — 답의 링크가 같은 줄 이름의 것인지 결정적 대조(2026-09-30 옆 파일 링크 실수)
+    const L = DR.last(), f = L.drive.items.find(it => it.kind === 'file'), t0 = L.tasks.items[0], NL = String.fromCharCode(10);
+    const a1 = DR.checkLinks([`**${f.name}** — [Dooray 에서 열기](${f.url})`]);
+    const a2 = DR.checkLinks([`**${f.name}** — [Dooray 에서 열기](${t0.url})`]);
+    const a3 = DR.checkLinks(['그 파일 — https://kist.gov-dooray.com/task/1/999']);
+    const a4 = DR.checkLinks([`**${f.name}** https://kist.gov-dooray.com/drive/${f.projectId}/views/${f.id}`]);
+    const a5 = DR.checkLinks(`**${f.name}** (2026-06-10)` + NL + `[Dooray 에서 열기](${f.url})`);
+    const a6 = DR.checkLinks(['링크 없는 답']);
+    const A = { kind: 'file', id: '5100000000000000077', projectId: '3300000000000000009', name: '260713 - PEOR_Kiki.pptx', url: 'https://kist.gov-dooray.com/drive/3300000000000000009/5100000000000000002/views/5100000000000000077' };
+    const B = { kind: 'file', id: '5100000000000000078', projectId: '3300000000000000009', name: '260623 - PEOR_Kiki.pptx', url: 'https://kist.gov-dooray.com/drive/3300000000000000009/5100000000000000002/views/5100000000000000078' };
+    L.drive.items.push(A, B);
+    const a7 = DR.checkLinks([`**260623 - PEOR_Kiki.pptx, 슬라이드 9** — [Dooray 에서 열기](${A.url})`]);
+    const a8 = DR.checkLinks([`**260623 - PEOR_Kiki.pptx, 슬라이드 9** — [Dooray 에서 열기](${B.url})`, `260713 - PEOR_Kiki.pptx 에는 없음 — [열기](${A.url})`]);
+    const a9 = DR.checkLinks([`**260623 - PEOR_Kiki.pptx** — [열기](https://kist.gov-dooray.com/drive/3300000000000000009/views/5100000000000000077?query=all%3D260713%26all%3DPEOR_Kiki.pptx)`]);   // 실측 실수: 주소 속 ?query= 의 이름에 속지 않기
+    L.drive.items.splice(L.drive.items.indexOf(A), 2);
+    ok('dooray checkLinks: 맞는 링크 OK · 다른 항목 주소 ✗ · 모르는 주소 ? · 최상위 주소 △ · 이름이 윗줄이면 OK · 링크 없으면 ERR',
+      a1.startsWith('OK 링크 1개') && a2.startsWith('✗') && a2.includes('✗ 1줄') && a3.includes('? 1줄') && a4.includes('최상위') && a5.startsWith('OK') && a6.startsWith('ERR'), [a1, a2, a3, a4, a5, a6].join(' // '));
+    ok('dooray checkLinks: 이름이 비슷한 두 파일(260623 줄에 260713 주소)도 ✗ / 맞으면 OK, 출력에 주소·= 없음',
+      a7.startsWith('✗') && a7.includes('260713') && a7.includes('260623') && a8.startsWith('OK 링크 2개') && !/https?:|=/.test(a7) && a9.startsWith('✗'), a7 + ' // ' + a8 + ' // ' + a9); }
   ok('dooray showItems(only 결과) 줄 제한 없이', DR.showItems(DR.only(DR.last().tasks, { who: '이키키' })).startsWith('shown') && shownText.startsWith('■ 목록 3건'), shownText.slice(0, 80));
   // 결과가 5만 자를 넘지 않게 스스로 줄이기 + 첨부 전체 목록(showFiles) — 2026-09-29 실사용 결함(10.7만 자 → get_page_text 5만 자 잘림)
   await DR.report([['가나다']]);   // 작은 결과는 그대로(줄임 없음·첨부 이름 전부)
@@ -690,7 +712,7 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
   const ATT = (name, dl, id) => ({ name, size: 1000, ext: name.split('.').pop(), created: '2026-06-01T10:00:00+09:00', by: '이키키', dl, id });
   const tA = TKI('4100000000000000011', '발표 자료 공유', [ATT('260623 - 발표 <b>.pptx', '/scan/deck', 'A1'), ATT('260623 - 발표 <b>.pptx', '/scan/deck', 'A2'), ATT('원고.docx', '/scan/doc', 'A3')]), tB = TKI('4100000000000000012', '안 읽은 업무', null);
   const sct = await DR.scanFiles([tA, tB], /전압|voltage/i, { name: /발표/ }), stt = shownText;
-  ok('dooray scanFiles(업무 목록 → 첨부): 같은 첨부 한 번·이름으로 좁히기·안 읽은 업무 알림·업무 링크', sct.hits === 3 && /파일 1개: 걸린 파일 1/.test(stt) && stt.includes('| 업무 발표 자료 공유 |') && stt.includes('\n     https://kist.gov-dooray.com/task/3300000000000000001/4100000000000000011')
+  ok('dooray scanFiles(업무 목록 → 첨부): 같은 첨부 한 번·이름으로 좁히기·안 읽은 업무 알림·업무 링크', sct.hits === 3 && /파일 1개: 걸린 파일 1/.test(stt) && stt.includes('| 업무 발표 자료 공유 |') && stt.includes(' → https://kist.gov-dooray.com/task/3300000000000000001/4100000000000000011')
     && stt.includes('※ 첨부를 읽지 않은 업무 1건은 빠짐') && DR.scanned().list.length === 3 && stt.includes('※ 내용이 똑같은 파일 1개는 한 번만 보임: [F1]=F0'), stt.slice(0, 500));
   await DR.showFigures([[0, [1]]]);
   ok('dooray showFigures(업무 첨부): 결과 화면에 그 업무 제목·업무 링크', document.body.innerHTML.includes('업무 발표 자료 공유') && document.body.innerHTML.includes('href="https://kist.gov-dooray.com/task/3300000000000000001/4100000000000000011"'), document.body.innerHTML.slice(0, 300));
@@ -752,11 +774,15 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
     && !QH.includes('<h3>② 원고.docx') && (QH.match(/<img src="blob:x"/g) || []).length === 2 && !QH.includes('kkwait') && document.title === '👉 kk-dry 결과 — 2곳'
     && QH.includes('<h3>■ 글 결과</h3>') && QH.includes('② [F1] 원고.docx | 2026-06-20 | 걸린 곳 2 · 보인 곳 ¶3 · 남은 0 | 연구실 /2026/발표 | 박키키') && QH.includes('   ▸ ¶3 [바로 위 그림 1 — ¶2, 보려면 그림으로]: Figure 2. Yield at each cell voltage')
     && QH.includes('문서(한글·워드·엑셀·PDF 등)에서 찾은 글·표는 <b>대화창</b>에') && !QH.includes('Claude'), qk.summary + ' // ' + qDl + ' // ' + JSON.stringify(thumbs) + ' // ' + document.title + ' // ' + QH.slice(QH.indexOf('<h3>■ 글'), QH.indexOf('<h3>■ 글') + 600));
-  ok('dooray quick: 보일 드라이브 파일만 폴더 경로를 채워 파일이 선택된 채 열리는 링크 + 끝에 ■ 파일 목록(보인 곳·어디에·남은 곳·링크·시간)', qPaths.length === 2
+  ok('dooray quick: 걸린 드라이브 파일의 폴더 경로를 채워 파일이 선택된 채 열리는 링크 + 끝에 ■ 파일 목록(이름과 주소 한 줄·보인 곳·어디에·남은 곳·시간)', qPaths.length === 2
     && QH.includes('href="https://kist.gov-dooray.com/drive/3300000000000000009/5100000000000000005/views/5300000000000000001"') && QH.includes('<h3>■ 파일 목록</h3>')
-    && QH.includes('① [F0] 2026-06-20 | 발표.pptx | 걸린 곳 3 · 보인 곳 S1 S2 (Chrome 화면) · 남은 1 | 연구실 /2026/발표 | 박키키\n   https://kist.gov-dooray.com/drive/3300000000000000009/5100000000000000005/views/5300000000000000001')
+    && QH.includes('① [F0] 2026-06-20 | 발표.pptx | 걸린 곳 3 · 보인 곳 S1 S2 (Chrome 화면) · 남은 1 | 연구실 /2026/발표 | 박키키 → https://kist.gov-dooray.com/drive/3300000000000000009/5100000000000000005/views/5300000000000000001')
     && QH.includes('② [F1] 2026-06-20 | 원고.docx | 걸린 곳 2 · 보인 곳 ¶3 (채팅 글) · 남은 0') && QH.indexOf('<h3>■ 글 결과</h3>') < QH.indexOf('<h3>■ 파일 목록</h3>')
     && /읽은 파일 2 · 걸린 2 · 없음 0 \| 찾기 \d+\.\d초 · 파일 속 \d+\.\d초 · 그림 \d+\.\d초 · 합계/.test(QH), QH.slice(QH.indexOf('<h3>■ 파일'), QH.indexOf('<h3>■ 파일') + 700));
+  { // done: 도는 quick 이 끝나면 바로 같은 요약(고정 대기 없이) · 결과 화면 카드에 파일 id·곳 번호(goto 스크롤용) · goto 없는 번호는 ERR
+    const dn = await DR.done(5);
+    ok('dooray done: 끝난 quick 의 요약을 바로 · 카드에 data-id·data-n · goto 없는 번호 ERR', dn === qk.summary && QH.includes('<section class="file" data-id="5300000000000000001">') && QH.includes('<div class="unit" data-n="1">')
+      && DR.goto(99).startsWith('ERR 결과에 그 파일이 없습니다'), dn + ' // ' + DR.goto(99)); }
   const mo = await DR.more(), MH = document.body.innerHTML;
   ok('dooray more: 다음 순위 곳만(발표 S3) — 파일은 다시 받지 않음', /^■ kk-dry more — .* Chrome 화면 파일 1개 1곳 · 채팅 글 파일 0개 0곳 \| shown 1 units, 1 images/.test(mo.summary) && qDl === 2 && MH.includes('<h4>슬라이드 3</h4>') && !MH.includes('<h4>슬라이드 1</h4>')
     && MH.includes('이번 S3 (Chrome 화면) · 남은 0') && document.title === '👉 kk-dry 결과 — 1곳', mo.summary + ' // ' + MH.slice(MH.indexOf('<h3>'), MH.indexOf('<h3>') + 300));
