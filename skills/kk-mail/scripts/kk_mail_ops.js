@@ -195,6 +195,7 @@
     const from = (c.users && c.users.from && c.users.from.emailUser) || {};
     const to = ((c.users && c.users.to) || []).map(u => (u.emailUser && u.emailUser.emailAddress) || '').filter(Boolean);
     const cc = ((c.users && c.users.cc) || []).map(u => (u.emailUser && u.emailUser.emailAddress) || '').filter(Boolean);
+    const bcc = c.users && Array.isArray(c.users.bcc) ? c.users.bcc.map(u => (u.emailUser && u.emailUser.emailAddress) || '').filter(Boolean) : null;   // 없으면 null(확인 불가)
     const files = (c.fileList || []).map(f => f.name || f.fileName || f.originalName || f.originalFileName || '').filter(Boolean);
     let restored = false, restoreError = '';
     if (restoreUnread && wasRead === false) {
@@ -202,7 +203,7 @@
       restored = !restoreError;
     }
     const out = { id, subject: c.subject || '', date: (c.createdAt || '').slice(0, 16).replace('T', ' '), fromName: from.name || '', fromEmail: from.emailAddress || '',
-      to, cc, files, text, textLen: text.length, htmlLen: html.length, restoredUnread: restored };
+      to, cc, bcc, files, text, textLen: text.length, htmlLen: html.length, restoredUnread: restored };
     if (restoreError) {
       const e = new Error('DOORAY 안 읽음 복원 실패 — 이 메일은 읽음으로 바뀌었습니다: ' + restoreError);
       e.mail = Object.assign(out, { restoreError });
@@ -574,30 +575,41 @@
   const KIND_KO = { member: '조직도', recent: '최근', contact: '주소록', contactsLabel: '주소록 그룹', distributionList: '그룹 메일', projectMail: '프로젝트 메일', sharedMailMember: '공유 메일' };
   const str = (v) => (typeof v === 'string' ? v : '');
   // 받는 사람 찾기 — 쓰기 화면 받는 사람·참조 칸에 이름을 칠 때와 같은 검색(조직도·주소록·최근 받는 사람). 사번·전화번호는 꺼내지 않는다.
-  async function findAddress(q, { size = 30 } = {}) {
-    const d = await dfetch(`/v2/wapi/search-email-addresses?page=0&size=${size}`, { method: 'POST', body: { all: String(q || ''), typeList: SEARCH_TYPES, tenantMemberRoles: SEARCH_ROLES } });
-    const bad = apiErr(d);
-    if (bad || !d.result) throw new Error('DOORAY 주소 검색 실패: ' + (bad || 'no result'));
+  //   쪽을 넘겨 끝까지 읽는다(maxPages×size 까지) → complete=false 면 못 읽은 후보가 있다 — 한 명만 나왔다고 고르지 않는다(Codex 검토 2026-09-30).
+  async function findAddress(q, { size = 30, maxPages = 5 } = {}) {
     const seen = new Set(), list = [];
-    for (const c of d.result.contents || []) {
-      const o = (c && c[c.type]) || {};
-      const email = str(o.emailAddress || o.email).trim();
-      if (!email || seen.has(email.toLowerCase())) continue;   // 조직도와 최근 받는 사람에 같은 주소가 겹치면 한 번
-      seen.add(email.toLowerCase());
-      const deps = Array.isArray(o.departments) ? o.departments : [];
-      const dep = deps.find(x => x && x.primaryFlag) || deps[0] || {};
-      list.push({ kind: c.type, name: str(o.name || o.displayName), email, dept: str(dep.name) || str(o.department), rank: str(o.rank) || str(o.position), company: str(o.company) || str(o.tenantName) });
+    let total = null, fetched = 0, complete = false;
+    for (let page = 0; page < maxPages; page++) {
+      const d = await dfetch(`/v2/wapi/search-email-addresses?page=${page}&size=${size}`, { method: 'POST', body: { all: String(q || ''), typeList: SEARCH_TYPES, tenantMemberRoles: SEARCH_ROLES } });
+      const bad = apiErr(d);
+      if (bad || !d.result) throw new Error('DOORAY 주소 검색 실패: ' + (bad || 'no result'));
+      const cs = d.result.contents || [];
+      if (total == null && typeof d.result.totalCount === 'number') total = d.result.totalCount;
+      fetched += cs.length;
+      for (const c of cs) {
+        const o = (c && c[c.type]) || {};
+        const email = str(o.emailAddress || o.email).trim();
+        if (!email || seen.has(email.toLowerCase())) continue;   // 조직도와 최근 받는 사람에 같은 주소가 겹치면 한 번
+        seen.add(email.toLowerCase());
+        const deps = Array.isArray(o.departments) ? o.departments : [];
+        const dep = deps.find(x => x && x.primaryFlag) || deps[0] || {};
+        list.push({ kind: c.type, name: str(o.name || o.displayName), email, dept: str(dep.name) || str(o.department), rank: str(o.rank) || str(o.position), company: str(o.company) || str(o.tenantName) });
+      }
+      if (cs.length < size || (total != null && fetched >= total)) { complete = true; break; }
     }
-    return { q: String(q || ''), total: d.result.totalCount, list };
+    return { q: String(q || ''), total, fetched, complete, list };
   }
+  // 한 명으로 정해졌을 때만 그 주소(끝까지 읽었고 주소가 하나) — 아니면 null(사용자에게 고르게 하거나 좁혀 다시)
+  function onlyAddress(x) { return x && !x.error && x.complete && (x.list || []).length === 1 ? x.list[0] : null; }
   // 주소 검색 조각: idx | 이름 | 주소 | 부서 | 직급 | 종류. 같은 이름이 여럿이면 사용자에게 골라 달라고 한다(추측해서 보내지 않는다).
   function fmtAddress(x, from = 0, to = 15) {
     if (x == null) return NOT_YET;
     if (x.error) return 'ERR ' + sanitize(x.error);
     const L = x.list || [];
-    const rows = fitRows(L.slice(from, to).map((a, k) => `${from + k} | ${sanitize(a.name) || '-'} | ${a.email} | ${sanitize(a.dept || a.company) || '-'} | ${sanitize(a.rank) || '-'} | ${KIND_KO[a.kind] || a.kind}`));
+    const rows = fitRows(L.slice(from, to).map((a, k) => `${from + k} | ${sanitize(a.name) || '-'} | ${a.email} | ${sanitize(a.dept || a.company) || '-'} | ${sanitize(a.rank) || '-'} | ${KIND_KO[a.kind] || a.kind}`), 260);
     const end = from + rows.length;
-    return `[주소 검색 '${sanitize(x.q)}' ${from}-${end} of ${L.length}]` + (end < Math.min(to, L.length) ? ` ▶ 다음 조각 ${end}` : '') + (L.length ? '' : ' — 찾은 주소 없음(철자·다른 이름으로, 또는 주소를 직접)') + '\n' + rows.join('\n');
+    const scope = x.complete ? ` | 검색 ${x.total != null ? x.total : x.fetched}건 다 읽음` : ` | ⚠ 검색 ${x.total != null ? x.total + '건 중 ' : ''}앞 ${x.fetched}건만 읽음 — 자동으로 고르지 말고 성+이름·부서로 좁혀 다시`;
+    return `[주소 검색 '${sanitize(x.q)}' ${from}-${end} of ${L.length}${scope}]` + (end < Math.min(to, L.length) ? ` ▶ 다음 조각 ${end}` : '') + (L.length ? '' : ' — 찾은 주소 없음(철자·다른 이름으로, 또는 주소를 직접)') + '\n' + rows.join('\n');
   }
   let senderCache = null;
   // 보내는 사람·서명·글꼴(쓰기 화면이 쓰는 개인 설정 3가지)
@@ -654,10 +666,40 @@
       reservation: { type: '', toBeSentAt: null, toBeSentTimezone: null }, individualSend: false, securityEditable: true, version: 0, mimeSize: 0 };
     const key = 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     const external = o.to.concat(o.cc, o.bcc).filter(a => !INTERNAL_MAIL.test(a.email.split('@')[1] || '')).map(a => a.email);
-    const p = { key, from: me.email, fromName: me.name, to: o.to, cc: o.cc, bcc: o.bcc, subject: o.subject, text: o.text, signature: o.signature, external };
+    // fullText = 실제로 나갈 본문 전체(서명·원문 인용 포함) — 확인 전에 끝까지 보여 준다(Codex 검토 2026-09-30)
+    const p = { key, from: me.email, fromName: me.name, to: o.to, cc: o.cc, bcc: o.bcc, subject: o.subject, text: o.text, fullText: htmlToText(o.content), signature: o.signature, external };
     if (o.reply) p.reply = o.reply;
-    prepared[key] = { draft, p, sent: false };
+    prepared[key] = { draft, p, sent: false, approved: snapOf({ to: o.to, cc: o.cc, bcc: o.bcc, subject: o.subject, html: o.content }) };
     return p;
+  }
+  // 승인본 대조용 요약 — 주소는 소문자 정렬, 본문은 글만 남겨 빈칸을 모두 뺀다(HTML 모양·줄바꿈 차이는 같다고 보고 글자가 바뀌면 다르다고 본다)
+  const flat = (html) => htmlToText(html).replace(/\s+/g, '');
+  function snapOf(o) {
+    const s = (a) => (a || []).map(x => String(x && x.email != null ? x.email : x).toLowerCase()).filter(Boolean).sort();
+    return { to: s(o.to), cc: s(o.cc), bcc: s(o.bcc), subject: String(o.subject || '').trim(), flat: o.flat != null ? o.flat : flat(o.html || '') };
+  }
+  const KO3 = { to: '받는 사람', cc: '참조', bcc: '숨은 참조' };
+  // a = 승인본, b = 지금 → 바뀐 것(주소는 빠진 것·더해진 것 모두). skip 에 든 칸(bcc 등)은 확인 불가라 비교하지 않는다.
+  function diffSnap(a, b, skip = []) {
+    const out = [];
+    for (const k of ['to', 'cc', 'bcc']) {
+      if (skip.includes(k)) continue;
+      const add = b[k].filter(x => !a[k].includes(x)), miss = a[k].filter(x => !b[k].includes(x));
+      if (miss.length) out.push(`${KO3[k]} 빠짐: ${miss.join(', ')}`);
+      if (add.length) out.push(`${KO3[k]} 더해짐: ${add.join(', ')}`);
+    }
+    if (a.subject !== b.subject) out.push(`제목 다름: '${a.subject}' → '${b.subject}'`);
+    if (a.flat !== b.flat) out.push('본문 다름');
+    return out;
+  }
+  // 임시 보관함 초안의 지금 내용(Dooray 에서 고쳤을 수 있다) — GET /v2/wapi/mails/{초안 id}(쓰기 화면 미리 보기도 이 호출, 2026-09-30 캡처)
+  async function draftNow(draftId) {
+    const d = await dfetch(`/v2/wapi/mails/${draftId}`);
+    const bad = apiErr(d);
+    if (bad || !(d.result && d.result.content)) throw new Error('DOORAY 임시 보관함 초안을 읽지 못함(보내지 않음): ' + (bad || '초안 없음 — Dooray 에서 이미 보냈거나 지웠을 수 있음'));
+    const c = d.result.content, u = c.users || {};
+    const ul = (a) => (a || []).map(x => ({ name: str(x && x.emailUser && x.emailUser.name), email: str(x && x.emailUser && x.emailUser.emailAddress) })).filter(x => x.email);
+    return { to: ul(u.to), cc: ul(u.cc), bcc: ul(u.bcc), subject: c.subject || '', html: (c.body && c.body.content) || '' };
   }
   // ---------- 답장 (2026-09-30 답장 버튼 화면 캡처 + 사용자 승인 후 실제 답장 1통) ----------
   // 답장 버튼 = /mail/write/reply/{mailId} — 초안에 relation {type:'reply', mailId}, 제목 'RE: 원제목', 받는 사람 = 원래 보낸 사람,
@@ -703,21 +745,38 @@
     return p;
   }
   const who = (a) => (a.name ? `${a.name} <${a.email}>` : a.email);
-  // 미리보기 글(사용자에게 그대로 보여 줄 것). 본문은 chars 자씩(offset 으로 이어 읽기)
-  function fmtPrepared(p, chars = 600, offset = 0) {
+  // 미리보기 글(사용자에게 그대로 보여 줄 것) — 본문은 실제로 나갈 전체(서명·원문 인용 포함)를 조각으로. ▶ 다음 조각이 없을 때까지 읽고 확인을 묻는다.
+  //   첫 조각(offset 0)에 머리(보내는 사람·받는 사람·참조·숨은 참조·제목·서명·외부 주소)를 싣고, 1,000자 안에 들도록 본문 길이를 줄인다.
+  function fmtPrepared(p, chars = 900, offset = 0) {
     if (p == null) return NOT_YET;
     if (p.error) return 'ERR ' + String(p.error).replace(/=/g, '＝');
-    const L = [`[${p.reply ? '답장' : '보낼 메일'} 미리보기 — 아직 보내지 않음${p.draftId ? ' · 임시 보관함에 저장됨' : ''} | 키 ${p.key}]`];
-    if (p.reply) L.push(`답장할 메일: ${p.reply.date} | ${p.reply.from} | ${p.reply.subject} (원문 인용 붙음)`);
-    L.push('보내는 사람: ' + who({ name: p.fromName, email: p.from }), '받는 사람: ' + p.to.map(who).join(', '));
-    if (p.cc.length) L.push('참조: ' + p.cc.map(who).join(', '));
-    if (p.bcc.length) L.push('숨은 참조: ' + p.bcc.map(who).join(', '));
-    L.push('제목: ' + p.subject, '서명: ' + (p.signature ? '붙음(설정의 서명)' : '안 붙음'));
-    if (p.external.length) L.push(`⚠ 외부 주소 ${p.external.length}개(KIST 밖): ` + p.external.join(', '));
-    if (p.draftId) L.push('임시 보관함 초안 id ' + hyId(p.draftId) + ' (Dooray 에서 고쳐 보내도 된다)');
-    if (p.restoreError) L.push('⚠ 원래 메일 안 읽음 복원 실패(읽음으로 바뀜): ' + p.restoreError);
-    L.push(`본문(${p.text.length}자${offset || p.text.length > offset + chars ? `, ${offset}-${Math.min(p.text.length, offset + chars)}` : ''}):`, p.text.slice(offset, offset + chars));
+    const full = p.fullText != null ? p.fullText : p.text, N = full.length;
+    const L = [];
+    if (!offset) {
+      L.push(`[${p.reply ? '답장' : '보낼 메일'} 미리보기 — 아직 보내지 않음${p.draftId ? ' · 임시 보관함에 저장됨' : ''}${p.refreshed ? ' · 임시 보관함의 지금 내용(다시 확인 필요)' : ''} | 키 ${p.key}]`);
+      if (p.reply) L.push(`답장할 메일: ${p.reply.date} | ${p.reply.from} | ${p.reply.subject} (원문 인용 붙음)`);
+      L.push('보내는 사람: ' + who({ name: p.fromName, email: p.from }), '받는 사람: ' + p.to.map(who).join(', '));
+      if (p.cc.length) L.push('참조: ' + p.cc.map(who).join(', '));
+      if (p.bcc.length) L.push('숨은 참조: ' + p.bcc.map(who).join(', '));
+      L.push('제목: ' + p.subject, '서명: ' + (p.signature ? '붙음(설정의 서명 — 아래 본문 끝에 보임)' : '안 붙음'));
+      if (p.external.length) L.push(`⚠ 외부 주소 ${p.external.length}개(KIST 밖): ` + p.external.join(', '));
+      if (p.draftId) L.push('임시 보관함 초안 id ' + hyId(p.draftId) + ' (Dooray 에서 고치면 보내기 전에 다시 확인받는다)');
+      if (p.restoreError) L.push('⚠ 원래 메일 안 읽음 복원 실패(읽음으로 바뀜): ' + p.restoreError);
+    }
+    const head = L.join('\n');
+    const room = offset ? chars : Math.max(150, Math.min(chars, 940 - head.length - 90));
+    const end = Math.min(N, offset + room);
+    L.push(`본문 전체(서명·원문 인용 포함) ${N}자 — ${offset}-${end}${end < N ? '' : ' 끝'}:`, full.slice(offset, end));
+    if (end < N) L.push(`▶ 다음 조각 fmtPrepared(p, ${chars}, ${end})`);
     return L.join('\n').replace(/=/g, '＝');
+  }
+  // 실제로 나갈 HTML(서명·원문 인용 포함)을 조각으로 — 모양까지 확인할 때. '=' 는 출력 필터 때문에 '＝' 로 보인다.
+  function fmtPreparedHtml(p, chars = 900, offset = 0) {
+    if (p == null) return NOT_YET;
+    if (p.error) return 'ERR ' + String(p.error).replace(/=/g, '＝');
+    const it = prepared[p.key];
+    const html = (it && (it.currentHtml || it.draft.body.content)) || '', end = Math.min(html.length, offset + chars);
+    return (`[보낼 HTML ${html.length}자 — ${offset}-${end}${end < html.length ? ` ▶ 다음 조각 fmtPreparedHtml(p, ${chars}, ${end})` : ' 끝'}]\n` + html.slice(offset, end)).replace(/=/g, '＝');
   }
   const idOfDraft = (d) => { const r0 = Array.isArray(d.result) ? d.result[0] : d.result && (Array.isArray(d.result.contents) ? d.result.contents[0] : d.result); return r0 && r0.id ? String(r0.id) : ''; };
   function entryOf(key) {
@@ -736,12 +795,22 @@
     it.draftId = draftId; it.p.draftId = draftId;
     return { ok: true, draftId, subject: it.p.subject };
   }
-  // 보내기 — 준비물 키로 한 번만. 임시 보관함에 저장해 둔 초안이면 그 초안을 보낸다(Dooray 에서 고쳤다면 고친 내용이 나간다).
-  //   초안 만들기가 실패하면 보내지 않고, 보내기가 실패하면 초안이 임시 보관함에 남는다(e.draftId).
+  // 보내기 — 준비물 키로 한 번만. 임시 보관함에 저장해 둔 초안이면 보내기 직전에 서버 초안을 다시 읽어 승인본(사용자가 본 미리보기)과 대조한다:
+  //   Dooray 에서 받는 사람·제목·본문을 고쳤으면 보내지 않고 오류(e.changed) — refreshPrepared(키) 로 지금 내용을 다시 보여 주고 확인받은 뒤 보낸다(Codex 검토 2026-09-30).
+  //   이때 키는 쓰지 않은 채로 남는다. 초안 만들기가 실패하면 보내지 않고, 보내기가 실패하면 초안이 임시 보관함에 남는다(e.draftId).
   async function sendPrepared(key) {
     const it = entryOf(key);
     if (it.sent) throw new Error('이미 보낸(또는 보내려 한) 준비물입니다 — 같은 메일을 두 번 보내지 않습니다. 다시 보내려면 prepareMail 부터');
-    it.sent = true;   // 실패해도 이 키로는 다시 보내지 않는다(중복 발송 방지)
+    if (it.draftId) {
+      const cur = snapOf(await draftNow(it.draftId));   // 읽지 못하면 throw — 보내지 않음, 키 유지
+      const changes = diffSnap(it.approved, cur);
+      if (changes.length) {
+        const e = new Error('임시 보관함 초안이 확인받은 미리보기와 다릅니다 — 보내지 않았습니다: ' + changes.join(' / ') + ' → refreshPrepared(키) 로 지금 내용을 다시 보여 주고 확인받을 것');
+        e.changed = changes; e.draftId = it.draftId;
+        throw e;
+      }
+    }
+    it.sent = true;   // 여기부터는 실패해도 이 키로 다시 보내지 않는다(중복 발송 방지)
     let draftId = it.draftId || '';
     if (!draftId) {
       const d = await dfetch('/v2/wapi/mail-drafts', { method: 'POST', body: [it.draft] });
@@ -753,37 +822,64 @@
     catch (e) { const er = new Error('DOORAY 보내기 응답 없음 — 보내졌는지 보낸편지함에서 확인(checkSent): ' + ((e && e.message) || e)); er.draftId = draftId; throw er; }
     if (apiErr(s)) { const er = new Error('DOORAY 보내기 실패 — 초안은 임시 보관함에 남음: ' + apiErr(s)); er.draftId = draftId; throw er; }
     it.draftId = draftId;
-    const out = { ok: true, draftId, sentAt: Date.now(), subject: it.p.subject, to: it.p.to.map(a => a.email), cc: it.p.cc.map(a => a.email), bcc: it.p.bcc.map(a => a.email) };
+    const out = { ok: true, draftId, sentAt: Date.now(), subject: it.p.subject, to: it.p.to.map(a => a.email), cc: it.p.cc.map(a => a.email), bcc: it.p.bcc.map(a => a.email), approved: it.approved };
     if (it.p.reply) out.replyTo = it.p.reply.mailId;   // 답장이면 원래 메일 — checkReplied 로 '답장함' 표시 확인
     return out;
   }
-  // 보낸 메일함 확인(사용자 지시 2026-09-30 "보냈으면 보낸 메일함에서 잘 보내졌는지 확인까지") — 보낸 메일함 목록(최신순)에서
-  //   같은 제목·보낸 시각 이후의 메일을 찾고, 그 메일을 열어 받는 사람·참조가 보낸 것과 같은지 대조한다(보낸 메일은 이미 읽음이라 상태는 그대로).
-  //   r = sendPrepared 결과(권장) 또는 제목 글. 방금 보낸 메일이 목록에 늦게 뜰 수 있어 없으면 몇 초 뒤 한 번 더.
+  // 임시 보관함 초안을 Dooray 에서 고쳤을 때 — 지금 내용으로 미리보기를 다시 만든다(sendPrepared 가 e.changed 로 멈춘 뒤).
+  //   돌려주는 p(같은 키)를 fmtPrepared 로 사용자에게 다시 보여 주고, 확인을 받은 뒤에만 sendPrepared(키). 확인 기준(승인본)은 이 지금 내용으로 바뀐다.
+  async function refreshPrepared(key) {
+    const it = entryOf(key);
+    if (it.sent) throw new Error('이미 보낸(또는 보내려 한) 준비물입니다');
+    if (!it.draftId) throw new Error('임시 보관함에 저장하지 않은 준비물이라 다시 읽을 서버 초안이 없습니다');
+    const cur = await draftNow(it.draftId);
+    const p = it.p;
+    p.to = cur.to; p.cc = cur.cc; p.bcc = cur.bcc; p.subject = cur.subject;
+    p.fullText = htmlToText(cur.html); p.text = p.fullText; p.refreshed = true;
+    p.external = cur.to.concat(cur.cc, cur.bcc).filter(a => !INTERNAL_MAIL.test(a.email.split('@')[1] || '')).map(a => a.email);
+    it.currentHtml = cur.html;
+    it.approved = snapOf(cur);
+    return p;
+  }
+  // 보낸 메일함 확인(사용자 지시 2026-09-30 "보냈으면 보낸 메일함에서 잘 보내졌는지 확인까지") — r = sendPrepared 결과(권장) 또는 제목 글.
+  //   초안 번호가 있으면 보낸 메일함에서 **그 번호의 메일만** 인정한다(보낸 메일 id = 초안 id, 2026-09-30 실측 — 같은 제목의 다른 메일은 성공으로 치지 않는다).
+  //   그 메일을 열어 받는 사람·참조·숨은 참조의 빠진 주소와 더해진 주소, 제목·본문을 승인본과 대조한다(Codex 검토 2026-09-30). 보낸 메일은 이미 읽음이라 상태는 그대로.
+  //   제목 글만 주면 같은 제목·최근 withinMin 분의 메일을 찾되 대조할 승인본이 없어 '대조 못 함'으로 적는다. 방금 보낸 메일이 늦게 뜰 수 있어 없으면 몇 초 뒤 한 번 더.
   async function checkSent(r, { withinMin = 30 } = {}) {
     const subject = typeof r === 'string' ? r : String((r && r.subject) || '');
-    const since = r && r.sentAt ? r.sentAt - 120000 : Date.now() - withinMin * 60000;   // 보낸 시각 2분 전부터(목록 시각은 분 단위) — 앞서 같은 제목으로 보낸 메일과 섞이지 않게
-    const l = await listMails({ folder: 'sent', size: 50, maxPages: 1 });
+    const draftId = r && typeof r === 'object' && r.draftId ? String(r.draftId) : '';
+    const l = await listMails({ folder: 'sent', size: 50, maxPages: 2 });
     if (l.error) return { error: l.error };
     const ts = (m) => new Date(String(m.date).replace(' ', 'T') + ':00+09:00').getTime();
-    const exact = r && r.draftId ? l.mails.filter(m => String(m.id) === String(r.draftId)) : [];   // 보낸 메일 id = 초안 id(2026-09-30 실측)
-    const hit = exact.length ? exact : l.mails.filter(m => m.subject === subject && ts(m) >= since);
-    if (!hit.length) return { found: false, subject };
+    const since = r && r.sentAt ? r.sentAt - 120000 : Date.now() - withinMin * 60000;
+    const hit = draftId ? l.mails.filter(m => String(m.id) === draftId) : l.mails.filter(m => m.subject === subject && ts(m) >= since);
+    if (!hit.length) return { found: false, subject, draftId };
     const m = hit[0];
     let got;
-    try { got = await getMail(m.id, { wasRead: true, restoreUnread: false }); } catch (e) { return { found: true, subject, mail: m, error: 'DOORAY 보낸 메일 열기 실패: ' + ((e && e.message) || e) }; }
-    const low = (a) => (a || []).map(x => String(x).toLowerCase());
-    const want = typeof r === 'object' && r ? { to: low(r.to), cc: low(r.cc) } : null;
-    const missing = want ? want.to.filter(x => !low(got.to).includes(x)).concat(want.cc.filter(x => !low(got.cc).includes(x))) : [];
-    return { found: true, subject, mail: m, date: m.date, to: got.to, cc: got.cc, recipientsOk: !missing.length, missing, count: hit.length };
+    try { got = await getMail(m.id, { wasRead: true, restoreUnread: false, maxChars: 1e7 }); } catch (e) { return { found: true, subject, mail: m, error: 'DOORAY 보낸 메일 열기 실패: ' + ((e && e.message) || e) }; }
+    const out = { found: true, subject, mail: m, date: m.date, to: got.to, cc: got.cc, bcc: got.bcc, count: hit.length };
+    const want = r && typeof r === 'object' ? (r.approved || (r.to ? snapOf({ to: r.to, cc: r.cc, bcc: r.bcc, subject: r.subject, flat: null, html: '' }) : null)) : null;
+    if (!want) { out.unchecked = true; return out; }
+    const skip = got.bcc == null ? ['bcc'] : [];
+    const now = snapOf({ to: got.to, cc: got.cc, bcc: got.bcc || [], subject: got.subject, flat: String(got.text || '').replace(/\s+/g, '') });
+    if (!r.approved) { now.flat = want.flat; }   // 본문 승인본이 없으면 본문은 대조하지 않는다
+    out.problems = diffSnap(want, now, skip);
+    out.ok = !out.problems.length;
+    if (skip.length) out.bccUnknown = true;
+    return out;
   }
   function fmtSent(c) {
     if (c == null) return NOT_YET;
     if (c.error && !c.found) return 'ERR ' + String(c.error).replace(/=/g, '＝');
-    if (!c.found) return `보낸 메일함에 아직 없음 — '${c.subject}'(몇 초 뒤 checkSent 한 번 더, 그래도 없으면 보내기 실패로 보고)`.replace(/=/g, '＝');
-    const head = `보낸 메일함 확인 ✓ ${c.date} | ${c.subject} | id ${hyId(c.mail.id)}`;
-    const rec = c.error ? '⚠ ' + c.error : `받는 사람 ${(c.to || []).join(', ')}${(c.cc || []).length ? ' | 참조 ' + c.cc.join(', ') : ''} | ` + (c.recipientsOk ? '받는 사람 일치' : '⚠ 빠진 주소: ' + c.missing.join(', '));
-    return (head + (c.count > 1 ? ` (같은 제목 ${c.count}통 — 가장 최근 것)` : '') + '\n' + rec).replace(/=/g, '＝');
+    if (!c.found) return (c.draftId ? `보낸 메일함에 이 메일(초안 번호 ${hyId(c.draftId)})이 아직 없음` : `보낸 메일함에 아직 없음 — '${c.subject}'`) + ' — 몇 초 뒤 checkSent 한 번 더, 그래도 없으면 보내기 실패로 보고(같은 제목의 다른 메일은 인정하지 않음)';
+    const tail = `${c.date} | ${c.subject} | id ${hyId(c.mail.id)}` + (c.count > 1 ? ` (같은 제목 ${c.count}통 — 가장 최근 것)` : '');
+    const rec = `받는 사람 ${(c.to || []).join(', ') || '-'}${(c.cc || []).length ? ' | 참조 ' + c.cc.join(', ') : ''}${(c.bcc || []).length ? ' | 숨은 참조 ' + c.bcc.join(', ') : ''}`;
+    let head;
+    if (c.error) head = `보낸 메일함에 있음(내용 확인 실패) ${tail}\n⚠ ${c.error}`;
+    else if (c.unchecked) head = `보낸 메일함에 있음(대조할 승인본 없음 — 제목으로만 찾음) ${tail}\n${rec}`;
+    else if (c.ok) head = `보낸 메일함 확인 ✓ ${tail}\n${rec} | 받는 사람·참조${c.bccUnknown ? '' : '·숨은 참조'}·제목·본문이 확인받은 내용과 같음${c.bccUnknown ? ' (숨은 참조는 보낸 메일에 안 보여 대조 못 함)' : ''}`;
+    else head = `⚠ 보낸 메일함에 있지만 확인받은 내용과 다름 ${tail}\n${rec}\n⚠ ${c.problems.join(' / ')}`;
+    return head.replace(/=/g, '＝');
   }
   // 답장 안 한 받은 메일 — 받은 메일의 '답장함' 표시(flags.replied)가 꺼진 것만. 휴대폰·다른 메일 프로그램에서 답했을 수 있어
   //   보낸 메일함에 같은 제목(RE:·회신: 머리말을 뗀)으로 그 발신자에게 보낸 메일이 있으면 repliedElsewhere 로 표시한다.
@@ -879,9 +975,9 @@
     createRule, listMailRules, deleteMailRule,
     subjectKeyword, checkSubjectKeywords, previewSubjectRule,
     externalOf, fmtExternal, fmtFolders, fmtRules, ruleTarget, overview, fmtOverview, apiErr,
-    findAddress, fmtAddress, mailSender, prepareMail, fmtPrepared, sendPrepared, checkSent, fmtSent,
+    findAddress, onlyAddress, fmtAddress, mailSender, prepareMail, fmtPrepared, fmtPreparedHtml, sendPrepared, refreshPrepared, checkSent, fmtSent,
     prepareReply, saveDraft, unrepliedMails, fmtUnreplied, checkReplied,
-    _version: 'kk-mail-ops/1.11',
+    _version: 'kk-mail-ops/1.12',
   };
   return window.kkMail._version + ' =^.^=';
 })();

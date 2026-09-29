@@ -108,7 +108,7 @@ POST /v2/wapi/search-email-addresses?page=0&size=30        // 받는 사람·참
   "typeList": ["member","distributionList","projectMail","contact","recent","contactsLabel","sharedMailMember"],
   "tenantMemberRoles": ["admin","owner","member","subMember","guest","dummy"] }
 → result.contents[{type, <type>:{name, emailAddress, departments[{name,primaryFlag}], rank, …}}], totalCount
-   (all 이 빈 글이면 최근 받는 사람 목록. member 에는 사번·전화번호도 있으니 꺼내지 않는다)
+   (all 이 빈 글이면 최근 받는 사람 목록. member 에는 사번·전화번호도 있으니 꺼내지 않는다. page 를 넘겨 totalCount 까지 읽는다 — 코어는 5쪽×30건까지, 다 못 읽으면 complete=false)
 
 POST /v2/wapi/mail-drafts                                   // 초안 만들기 — body 는 배열
 [{ "id": null,
@@ -128,6 +128,7 @@ POST /v2/wapi/mails/send            { "draftId": "{id}" }     // 보내기
 - 받는 사람(`to`)·참조(`cc`)·숨은 참조(`bcc`)는 같은 모양이다. 주소로 쓸 수 없는 글이 들어가면 `emailAddress:"invalid"` 가 된다(쓰기 화면의 빨간 칩).
 - 보내는 사람 = `GET /v2/wapi/members/me/settings/mail.write-from` 의 `result.content.value.{selectedName, selectedEmailAddress}`. 보낼 수 있는 내 주소 목록 = `GET /v2/wapi/members/me/email-addresses?page=0&size=100&status=confirmed&emailAddressTypes=general%2CmemberAlias&sendable=true`.
 - 서명 = `GET /v2/wapi/members/me/settings/mail.signature` 의 `value.{enabled, options:{new, reply, forward}, useIndex, signatures[{name, content}]}` — 쓰기 화면은 `signatures[useIndex].content` 를 `<!-- begin signature -->`·`<!-- end signature -->` 사이에 그대로 넣는다. 글꼴 = `mail.write` 의 `value.format.{font, fontSize}`.
+- 저장한 초안의 지금 내용 = `GET /v2/wapi/mails/{초안 id}`(쓰기 화면 미리 보기도 `?render=html` 로 같은 호출) → `result.content.{subject, users.{to,cc,bcc}, body.content}`. 코어는 임시 보관함 초안을 보내기 직전에 이것으로 승인본과 대조한다(Dooray 에서 고쳤으면 보내지 않음).
 - 쓰기 화면의 '미리 보기' 창(보내기/취소)은 개인 설정 `mail.write.preview`(value `all`)일 뿐 API 단계가 아니다. 보낸 메일은 보낸 메일함(`folderName=sent`)에 남는다 → 코어 `checkSent` 가 목록에서 같은 제목·보낸 시각 이후의 메일을 찾아 받는 사람을 대조한다.
 ## 답장 (기능 6, ✅ 2026-09-30 답장 버튼 화면 캡처 + 사용자 승인 답장 1통)
 - 받은 메일의 답장 버튼 = `window.open('/mail/write/reply/{mailId}?_t=…','_blank')`. 쓰기 화면이 저장하는 초안은 새 메일과 같은 모양에 `"relation": {"type": "reply", "mailId": "{원래 메일}"}`, 제목 `RE: 원제목`, 받는 사람 = 원래 보낸 사람.
