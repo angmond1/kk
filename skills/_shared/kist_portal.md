@@ -81,7 +81,7 @@ fetch 실패해도 포기 말고 화면 캡처+좌표로 2차 시도:
 | 과제 심의요청 | `mis.rdc::rdc_2700` |
 
 ## endpoint 상세 (검색조건 ds_search · 응답 컬럼) — fetch 재현용
-> 여러 skill 공용. fam_0711(카드)·rdm_2011(과제)은 kk-pay·kk-meeting·kk-inspect 가 공유.
+> 여러 skill 공용. fam_0711(카드)·rdm_2011(과제)은 kk-pay·kk-meet·kk-inspect 가 공유.
 
 | 기능 | POST | 요청 ds_search | 응답 핵심 |
 |------|------|---------------|----------|

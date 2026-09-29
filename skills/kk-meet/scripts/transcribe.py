@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-r"""kk-meeting 회의 기록 → 글. 녹음은 이 PC 밖으로 나가지 않는다(로컬 음성 인식 faster-whisper).
+r"""kk-meet 회의 기록 → 글. 녹음은 이 PC 밖으로 나가지 않는다(로컬 음성 인식 faster-whisper).
 
   python transcribe.py check [<녹음 파일>] [--json]
       이 PC 사양(CPU·메모리·NVIDIA 그래픽카드)·설치 상태(faster-whisper·모델)·녹음 길이·녹음 시각 힌트를 보고 권장 경로를 고른다.
@@ -517,7 +517,7 @@ def transcribe_file(path: str, model: str, device: str, hint: str, out: str) -> 
     t0 = time.time()
     au = audio_info(path)
     dur = au["duration"]
-    print(f"[kk-meeting] 변환 시작: {au['file']} · " + (f"{dur / 60:.0f}분" if dur else "길이 모름") + f" · 모델 {model} · {device} (모델을 처음 쓰면 내려받기부터)", flush=True)
+    print(f"[kk-meet] 변환 시작: {au['file']} · " + (f"{dur / 60:.0f}분" if dur else "길이 모름") + f" · 모델 {model} · {device} (모델을 처음 쓰면 내려받기부터)", flush=True)
     try:
         m = _load_model(model, device)
     except Exception as e:

@@ -3,7 +3,7 @@
 > **모든 kk-* skill 은 첫 실행(부트스트랩)과 매 작업 시작 때 아래를 동일하게 확인/안내한 뒤 진행한다.**
 > **먼저 `python <skills>/_shared/kiki_doctor.py` 한 번** — Python·패키지·Node·설치된 skill 과 코어 버전·개인 설정 유무(값은 안 보임)·토큰 유무·kiki_root·다운로드 폴더·변환 엔진·kk-wiki 상태를 한 번에 출력한다(`--json` 도 됨). 아래 개별 점검은 doctor 가 문제를 보일 때만.
 > 무자격 환경(미연결·미로그인)이면 **크래시 대신 친절한 안내로 멈춘다**. 설치 자체(패키지·Python·Node.js·MCP 등록)는 `CLAUDE.md`/`INSTALL.md` 가 담당 — 여기는 *실행 직전* 점검.
-> 권장 모델: 첫 설정·첫 1~2회 = Opus 5(high), 이후 kk-budget 은 Sonnet 5, kk-mail 은 Opus 5(분류, 스팸처리 Sonnet 5), kk-dooray 는 Opus 5, kk-meeting·세금계산서 직접작성은 Opus 5 유지(README 표).
+> 권장 모델: 첫 설정·첫 1~2회 = Opus 5(high), 이후 kk-budget 은 Sonnet 5, kk-mail 은 Opus 5(분류, 스팸처리 Sonnet 5), kk-dry 는 Opus 5, kk-meet·세금계산서 직접작성은 Opus 5 유지(README 표).
 
 ## 0단계 — 환경 점검 (모든 skill 공통, 부트스트랩 맨 앞)
 
@@ -13,17 +13,17 @@ kiki 는 Chrome 창 두 종류를 쓴다. **skill 마다 쓰는 창이 정해져
 | skill / 작업 | 창 | 도구 | 로그인 |
 |--------------|----|------|--------|
 | kk-mail | **평소 쓰는 Chrome** | Claude in Chrome 확장 (`javascript_tool` 등) | Dooray `kist.gov-dooray.com` 로그인 상태면 끝 |
-| kk-dooray | **평소 쓰는 Chrome** (+ 받기·쓰기·올리기는 `token.txt`) | Claude in Chrome 확장 (`javascript_tool` 등) + `dooray_io.py`(공식 API) | Dooray `kist.gov-dooray.com` 로그인 상태면 찾기는 끝 |
+| kk-dry | **평소 쓰는 Chrome** (+ 받기·쓰기·올리기는 `token.txt`) | Claude in Chrome 확장 (`javascript_tool` 등) + `dooray_io.py`(공식 API) | Dooray `kist.gov-dooray.com` 로그인 상태면 찾기는 끝 |
 | kk-budget | 평소 쓰는 Chrome | Claude in Chrome 확장 | 포탈 `e.kist.re.kr` 로그인 상태면 끝 |
 | kk-pay — 카드결제건 RPA 업로드 | 평소 쓰는 Chrome + `token.txt` | Claude in Chrome 확장 + `dooray_drive.py` | 포탈 + Dooray(업로드 확인 페이지). **새 창 없음** |
 | kk-pay — 세금계산서 직접작성 | **Claude 전용 새 Chrome 창** | chrome-devtools-mcp (`evaluate_script`·`upload_file` …) | 그 창에서 포탈 로그인 **한 번 더** |
-| kk-meeting | **Claude 전용 새 Chrome 창** (첨부 때문) | chrome-devtools-mcp | 그 창에서 포탈 로그인 한 번 더 |
+| kk-meet | **Claude 전용 새 Chrome 창** (첨부 때문) | chrome-devtools-mcp | 그 창에서 포탈 로그인 한 번 더 |
 | kk-inspect | **Claude 전용 새 Chrome 창** | chrome-devtools-mcp | 그 창에서 포탈 로그인 한 번 더 |
 | kk-wiki | 토큰 있으면 **브라우저 불요**(Python) / 없으면 평소 쓰는 Chrome | `wiki_snapshot.py` 또는 Claude in Chrome 확장(`kk_wiki_ops.js`) | 토큰 또는 Dooray 로그인 상태면 끝 |
 
 - **"Claude in Chrome" 확장** — `list_connected_browsers` 로 연결 확인. 안 되면: *"이 skill 은 Chrome 의 'Claude in Chrome' 확장으로 동작합니다. 확장 설치(https://chromewebstore.google.com/detail/claude/fcoeoabgfenejglbffodgkkbkcdhcgfn)·연결(Desktop: 좌하단 이니셜 → 설정 → 좌측 탭 'Claude in Chrome 설정' → 'Claude in Chrome 사용설정' 켜기 / Code: `claude --chrome`) 후 다시 해주세요."* 후 중단. 연결됐으면 `select_browser` / `tabs_context_mcp` 로 작업 탭 확보.
 - 🔴 **내장 브라우저 ≠ Claude in Chrome** — Claude Desktop 앱에는 별도의 내장 브라우저(`mcp__Claude_Browser__*`, 'browser pane')가 있고 세션 기본값으로 잡혀 있을 수 있다. 여기엔 **사용자 Chrome 의 포탈 로그인이 없다** → kiki skill 은 항상 `mcp__claude-in-chrome__*` 도구(ToolSearch 로 로드)를 쓴다. 내장 쪽 `browser_batch` 를 부르면 빈 창이 열리고 `Preview not found` 로 실패한다.
-- **chrome-devtools-mcp** *(kk-inspect · kk-meeting · kk-pay 세금계산서 직접작성 필수)* — 도구 목록에 `upload_file`·`evaluate_script`·`select_page` 가 없으면 미등록: *"파일첨부 자동화에는 chrome-devtools-mcp 등록이 필요합니다: `claude mcp add --scope user chrome-devtools -- npx -y chrome-devtools-mcp@latest` (Node.js 필요) 후 Claude 재시작."* 미등록이면 입력까지만 자동·**첨부는 사용자 수동**으로 진행 여부를 묻는다.
+- **chrome-devtools-mcp** *(kk-inspect · kk-meet · kk-pay 세금계산서 직접작성 필수)* — 도구 목록에 `upload_file`·`evaluate_script`·`select_page` 가 없으면 미등록: *"파일첨부 자동화에는 chrome-devtools-mcp 등록이 필요합니다: `claude mcp add --scope user chrome-devtools -- npx -y chrome-devtools-mcp@latest` (Node.js 필요) 후 Claude 재시작."* 미등록이면 입력까지만 자동·**첨부는 사용자 수동**으로 진행 여부를 묻는다.
 - ⭐ **첨부가 있는 작업은 *처음부터* chrome-devtools 창에서 시작한다** (2026-07-07 실측 교훈): Claude in Chrome 으로 작성·저장까지 해놓고 첨부 단계에서 갈아타면 **로그인·작성을 처음부터 다시** 하게 된다(Claude in Chrome `file_upload` 는 채팅에 첨부한 파일만 올릴 수 있어 로컬 증빙 첨부 불가). 첨부 없는 단순 조회만 Claude in Chrome 무방. chrome-devtools 는 자체 Chrome(별도 프로필)을 띄우며 도구 매핑·workspace root 제약은 [`nexacro_file_upload.md`](nexacro_file_upload.md) §4-6.
 - **새 창 안내 문구(첨부 작업 시작 전 반드시)**: *"파일첨부를 위해 Claude 전용 Chrome 창을 하나 띄웁니다. 평소 Chrome 과 로그인이 공유되지 않아 그 창에서 포탈(e.kist.re.kr)에 한 번 더 로그인해 주세요. 한 번 하면 그 창은 기억합니다(정오 리셋 제외)."*
 - **chrome-devtools-mcp 연결 방식 두 가지**: 기본 등록은 **새 Chrome 창**(별도 프로필 — 평소 로그인이 넘어오지 않아 그 창에서 포탈 로그인 한 번 더). `--autoConnect`(또는 `--browserUrl`)로 등록했다면 새 창이 아니라 **평소 쓰는 Chrome 에 붙는다** — 로그인은 그대로이고, 처음 연결 때 Chrome 의 원격 디버깅 허용을 사용자가 승인해야 한다. 어느 쪽인지 모르면 `list_pages` 에 평소 탭들이 보이는지로 판단한다(2026-09-27 Codex 점검). page 를 가리키는 인자 이름(`pageId`/`pageIdx`)은 버전마다 다르니 도구 스키마에 나온 이름을 따른다.
@@ -36,14 +36,14 @@ kiki 는 Chrome 창 두 종류를 쓴다. **skill 마다 쓰는 창이 정해져
 - **⚠️ 업무화면 전 포탈 로그인부터 확인 (표준 절차)**: 작업 시작 시(특히 새 세션·새 창·오래 미사용·**정오 이후**) 업무화면(`indexQ.jsp` 등)으로 바로 navigate 하지 말 것 — 세션 만료면 `Your session has expired` alert 가 **반복**되고 진행 불가. 먼저 `e.kist.re.kr` 포탈 메인으로 가 로그인 상태 확인(로그인돼 있으면 eKIST 메인에 본인 이름) → 그 뒤 업무화면 navigate. SSO 쿠키가 살아 있으면 `e.kist.re.kr → nsso → login.do → eKIST 메인` 이 **자동 로그인**되는 경우도 많다.
 - **KIST 포탈은 매일 정오(12:00) 전체 세션 리셋** — 오전에 시작한 작업은 정오 전에 저장까지 끝내고, 오후엔 재로그인 후 재오픈.
 
-### 3. 토큰 (`token.txt`) *(kk-pay 카드 RPA 업로드 · kk-meeting RPA 업로드 옵션만)*
+### 3. 토큰 (`token.txt`) *(kk-pay 카드 RPA 업로드 · kk-meet RPA 업로드 옵션만)*
 - 위치: **`<kiki_root>/token.txt`**(설치 스크립트가 생성, 예 `C:\kiki\token.txt`). `kiki_root` 는 `~/.claude/kiki/kiki.config.json` 에 기록돼 있다. (구형 `~/.claude/kiki/kiki.env` 도 계속 읽힌다.)
 - 토큰이 비어 있으면 **절대경로를 보여주며** 안내: *"https://kist.gov-dooray.com/setting/api/token 에서 개인 인증 토큰을 만들어 `<kiki_root>\token.txt`(예 `C:\kiki\token.txt`) 의 `Dooray token:` 다음 줄에 붙여넣고 저장한 뒤 '두레이 토큰 저장했다' 라고 알려주세요. ⚠️ 채팅창에 토큰을 붙여넣지 마세요(대화 기록 노출)."* 원하면 파일을 열어준다(`notepad`/`open -e`).
-- 사용자가 넣었다고 하면 `python <skill>/scripts/dooray_drive.py check --live`(kk-pay·kk-meeting 에 있음) 로 **값은 출력하지 않고** 길이·파일 위치 + 실제 인증(읽기 1회)만 확인(파일을 Read 하면 값이 대화에 남는다). 토큰이 없으면 종료 코드 1, 만료·오타면 `ERR … 401`. 안내 줄 위나 머리글 없이 붙여넣어도 읽힌다. 채팅에 값이 붙여넣어졌으면 즉시 파일로 옮기고 노출 위험을 알린다. 상세 `personal_config.md`.
-- 조회 전용(kk-budget·kk-inspect)·세션쿠키(kk-mail·kk-dooray 찾기·읽기)·세금계산서 직접작성은 토큰 불요. kk-dooray 받기·쓰기·올리기는 토큰 필요(업로드는 세션 쿠키로 안 됨).
+- 사용자가 넣었다고 하면 `python <skill>/scripts/dooray_drive.py check --live`(kk-pay·kk-meet 에 있음) 로 **값은 출력하지 않고** 길이·파일 위치 + 실제 인증(읽기 1회)만 확인(파일을 Read 하면 값이 대화에 남는다). 토큰이 없으면 종료 코드 1, 만료·오타면 `ERR … 401`. 안내 줄 위나 머리글 없이 붙여넣어도 읽힌다. 채팅에 값이 붙여넣어졌으면 즉시 파일로 옮기고 노출 위험을 알린다. 상세 `personal_config.md`.
+- 조회 전용(kk-budget·kk-inspect)·세션쿠키(kk-mail·kk-dry 찾기·읽기)·세금계산서 직접작성은 토큰 불요. kk-dry 받기·쓰기·올리기는 토큰 필요(업로드는 세션 쿠키로 안 됨).
 
 ### 4. Python 패키지 — **필요한 시점에, 그때그때** (부트스트랩에서 일괄 설치 X)
-- 선택: `faster-whisper`(kk-meeting 회의 녹음 → 글, 로컬 음성 인식). 기본은 휴대폰 녹음 앱·클로바노트로 바꾼 글을 받는다. 사용자가 녹음 파일을 그대로 주고 이 PC 에서 바꾸길 원할 때만 `kk-meeting/scripts/transcribe.py check <녹음>` 의 `[사용자 안내]` 한 줄로 묻고 동의받아 설치(그래픽카드가 없으면 오래 걸린다) → `kk-meeting/references/meeting_transcribe.md`.
+- 선택: `faster-whisper`(kk-meet 회의 녹음 → 글, 로컬 음성 인식). 기본은 휴대폰 녹음 앱·클로바노트로 바꾼 글을 받는다. 사용자가 녹음 파일을 그대로 주고 이 PC 에서 바꾸길 원할 때만 `kk-meet/scripts/transcribe.py check <녹음>` 의 `[사용자 안내]` 한 줄로 묻고 동의받아 설치(그래픽카드가 없으면 오래 걸린다) → `kk-meet/references/meeting_transcribe.md`.
 `python -c "import X"` 로 확인 → 없으면 *"`pip install X` 가 필요합니다(용도). 설치할까요?"* → confirm 후 설치. 크래시 X.
 - **OS 별 설치 명령**(에이전트가 셸에서 실행): Windows `python -m pip install X`(`python` 이 PATH 에 없으면 `py -3 -m pip install X`, 스크립트 실행도 `py -3 …`). **스크립트와 pip 는 같은 파이썬 하나로** — `python` 과 `py -3` 이 서로 다른 버전을 가리키는 PC 가 있다(2026-09-27 Codex 점검: `python` 3.11 에는 패키지가 있고 `py -3` 3.14 에는 없음). `kiki_doctor.py` 첫 줄의 파이썬 경로와 `참고: py -3 은 다른 파이썬…` 줄로 확인하고, 그 경로로 설치·실행한다 / macOS·Linux `python3 -m pip install --user X`. Python 본체가 아예 없으면 4단계가 아니라 설치(`CLAUDE.md` Step 0 — Windows `winget install -e --id Python.Python.3.12 …`)부터 안내.
   - macOS(Homebrew Python)·최신 Ubuntu 는 `externally-managed-environment` 오류로 막힐 수 있다 → `python3 -m pip install --user --break-system-packages X` (여기 쓰는 패키지는 순수 라이브러리라 시스템에 영향 없음). 그래도 안 되면 `python3 -m venv ~/.claude/kiki/venv` 후 그 venv 의 python 으로 skill 스크립트 실행.
@@ -52,17 +52,17 @@ kiki 는 Chrome 창 두 종류를 쓴다. **skill 마다 쓰는 창이 정해져
 | skill | 패키지 | 필요한 시점 |
 |-------|--------|------------|
 | kk-budget | `openpyxl` | 엑셀 리포트 저장 직전 |
-| kk-meeting | `openpyxl` (hwpx 회의록 옵션은 추가 패키지 없음) | 지난 회의 제목 확인(단계 5) 때 — 회의록이 아직 없으면 그 뒤 엑셀 작성 직전 |
+| kk-meet | `openpyxl` (hwpx 회의록 옵션은 추가 패키지 없음) | 지난 회의 제목 확인(단계 5) 때 — 회의록이 아직 없으면 그 뒤 엑셀 작성 직전 |
 | kk-pay | `Pillow`(이미지→jpg) · `requests`(Dooray 업로드) · Windows 문서 변환 시 `pywin32` | 증빙 변환 직전 / 업로드 직전 |
 | kk-inspect | `Pillow` (+ pdf→jpg 시 `PyMuPDF`) | 증빙 변환 직전 |
 | kk-mail | — | — |
-| kk-dooray | `requests` (찾기·파일 내용 읽기는 불필요 — 브라우저 안에서) | 받기·쓰기·올리기(`dooray_io.py`)를 처음 쓸 때 |
+| kk-dry | `requests` (찾기·파일 내용 읽기는 불필요 — 브라우저 안에서) | 받기·쓰기·올리기(`dooray_io.py`)를 처음 쓸 때 |
 | kk-wiki | `requests` (토큰 경로) | 스냅샷 수집·최신 확인 직전 |
 
 ### 5. 아래아한글 · MS Office — 있으면 자동, 없으면 **물어본다**
-- 필요한 경우만: kk-pay 증빙이 hwp/docx/xlsx 라 pdf 변환이 필요할 때. (kk-meeting 의 hwpx 회의록은 **한글 없이 생성**되므로 해당 없음 — 열람만 한글/HOP) 대부분의 KIST PC 엔 둘 다 있다 — `python convert.py --check`(kk-pay) 로 유무 확인.
+- 필요한 경우만: kk-pay 증빙이 hwp/docx/xlsx 라 pdf 변환이 필요할 때. (kk-meet 의 hwpx 회의록은 **한글 없이 생성**되므로 해당 없음 — 열람만 한글/HOP) 대부분의 KIST PC 엔 둘 다 있다 — `python convert.py --check`(kk-pay) 로 유무 확인.
 - **없을 때** 단정하지 말고 묻는다: docx/xlsx → *"MS Office 가 없어 무료 LibreOffice(https://www.libreoffice.org/download/)를 설치하면 자동 변환됩니다. 설치할까요?"* / hwp → *"아래아한글이 없습니다. 무료 오픈소스 한글 편집기 HOP(Open HWP, Windows/macOS/Linux, https://github.com/golbin/hop)을 설치하면 hwp 를 열어 편집하고 PDF 로 내보낼 수 있습니다(자동 변환은 안 됨 — 내보낸 PDF 를 주시면 됩니다). 설치할까요?"* (Windows `.msi` / macOS `brew install hop` / Linux `.deb`·`.rpm`·`.AppImage`; rhwp 엔진 기반, MIT) 설치는 사용자 confirm 후. 거절하면 "직접 pdf 로 저장해 주세요" 로 진행.
-- kk-meeting **hwpx 회의록 생성은 한글 불요·모든 OS**(`scripts/make_meetinglog_hwpx.py`, 표준 라이브러리 — 양식 hwpx 의 값 셀 XML 치환). 한글이 없는 PC 에서 열어보려면 무료 HOP(https://github.com/golbin/hop) 안내(**작성엔 불필요**; HOP 0.4.4 에서 hwpx 표시 확인 2026-09-24). hwp(구형)는 더 이상 만들지 않는다.
+- kk-meet **hwpx 회의록 생성은 한글 불요·모든 OS**(`scripts/make_meetinglog_hwpx.py`, 표준 라이브러리 — 양식 hwpx 의 값 셀 XML 치환). 한글이 없는 PC 에서 열어보려면 무료 HOP(https://github.com/golbin/hop) 안내(**작성엔 불필요**; HOP 0.4.4 에서 hwpx 표시 확인 2026-09-24). hwp(구형)는 더 이상 만들지 않는다.
 
 ## OS 차이 (실행 중 에이전트가 알아야 할 것 — macOS/Linux 는 미실측, 알려진 차이)
 - 명령: Python 은 Windows `python` / macOS·Linux `python3`(첫 실행 때 Xcode 명령줄 도구 설치 창이 뜰 수 있음 — 사용자에게 설치하라고 안내). pip 는 4단계 표기대로.

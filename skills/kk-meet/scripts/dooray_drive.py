@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""kiki 공용 — dooray drive 폴더 검색·구조파악·업로드·처리완료 아카이브 (kk-pay/kk-meeting 공유).
+"""kiki 공용 — dooray drive 폴더 검색·구조파악·업로드·처리완료 아카이브 (kk-pay/kk-meet 공유).
 
 인증: dooray 개인 토큰 (업로드는 세션쿠키로 안 됨 → 토큰 필요).
   토큰 로드 우선순위: 환경변수 DOORAY_TOKEN → <kiki_root>/token.txt → 지금 쓰는 쪽(Claude/Codex) 설정 폴더의 token.txt·(구형) kiki.env → 다른 쪽

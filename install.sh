@@ -65,19 +65,38 @@ for s in "${skills[@]}"; do
   echo "[복사] $s"
 done
 
-# 2-1) 개명된 skill 의 옛 폴더 정리 (2026-09-26 kk-dining → kk-meeting) — 이번에 kk-meeting 을 설치했을 때만
-if [ -d "$dst/kk-dining" ]; then
-  if [ -d "$dst/kk-meeting" ]; then rm -rf "$dst/kk-dining"; echo "[정리] 옛 이름 kk-dining 폴더 삭제 (지금은 kk-meeting)";
-  else echo "[안내] 옛 kk-dining 폴더가 있습니다 — kk-meeting 을 설치하면 정리됩니다: bash ./install.sh kk-meeting"; fi
+# 개명된 skill 의 옛 이름 정리(폴더·설정·캐시·데이터)는 새 이름 skill 이 설치돼 있을 때만(이번에 복사했거나 전에 설치) —
+# 다른 skill 만 설치하면 옛 skill 이 쓰던 설정·데이터를 그대로 둔다(2026-09-29 Codex 검토 H3)
+has_meet=0; [ -f "$dst/kk-meet/SKILL.md" ] && has_meet=1
+has_dry=0;  [ -f "$dst/kk-dry/SKILL.md" ] && has_dry=1
+
+# 2-1) 개명된 skill 의 옛 폴더 정리 (2026-09-26 kk-dining → kk-meeting, 2026-09-29 kk-meeting → kk-meet) — kk-meet 이 설치돼 있을 때만
+for old in kk-dining kk-meeting; do
+  if [ -d "$dst/$old" ]; then
+    if [ "$has_meet" -eq 1 ]; then rm -rf "$dst/$old"; echo "[정리] 옛 이름 $old 폴더 삭제 (지금은 kk-meet)";
+    else echo "[안내] 옛 $old 폴더가 있습니다 — kk-meet 을 설치하면 정리됩니다: bash ./install.sh kk-meet"; fi
+  fi
+done
+
+# 2-2) 개명된 skill 의 옛 폴더 정리 (2026-09-29 kk-dooray → kk-dry) — kk-dry 가 설치돼 있을 때만
+if [ -d "$dst/kk-dooray" ]; then
+  if [ "$has_dry" -eq 1 ]; then rm -rf "$dst/kk-dooray"; echo "[정리] 옛 이름 kk-dooray 폴더 삭제 (지금은 kk-dry)";
+  else echo "[안내] 옛 kk-dooray 폴더가 있습니다 — kk-dry 를 설치하면 정리됩니다: bash ./install.sh kk-dry"; fi
 fi
 
 # 3) 개인설정 폴더 + 템플릿 (없을 때만 — 기존 값 보존) + kiki_root 확정·기록 (기존 값이 있으면 그것이 진짜 작업 폴더)
 mkdir -p "$cfg"
-if [ -f "$cfg/kk-dining.config.json" ] && [ ! -f "$cfg/kk-meeting.config.json" ]; then
-  mv "$cfg/kk-dining.config.json" "$cfg/kk-meeting.config.json"
+if [ "$has_meet" -eq 1 ] && [ -f "$cfg/kk-meeting.config.json" ] && [ ! -f "$cfg/kk-meet.config.json" ]; then
+  mv "$cfg/kk-meeting.config.json" "$cfg/kk-meet.config.json"; echo "[정리] kk-meeting.config.json → kk-meet.config.json (skill 개명)"
+fi
+if [ "$has_meet" -eq 1 ] && [ -f "$cfg/kk-dining.config.json" ] && [ ! -f "$cfg/kk-meet.config.json" ]; then
+  mv "$cfg/kk-dining.config.json" "$cfg/kk-meet.config.json"
   # 옛 설정 안의 dining 경로도 meeting 으로
-  sed -e 's#/dining/#/meeting/#g' -e 's#\\\\dining\\\\#\\\\meeting\\\\#g' "$cfg/kk-meeting.config.json" > "$cfg/kk-meeting.config.json.tmp" && mv "$cfg/kk-meeting.config.json.tmp" "$cfg/kk-meeting.config.json"
-  echo "[정리] kk-dining.config.json → kk-meeting.config.json (skill 개명, 안의 dining 경로도 meeting 으로)"
+  sed -e 's#/dining/#/meeting/#g' -e 's#\\\\dining\\\\#\\\\meeting\\\\#g' "$cfg/kk-meet.config.json" > "$cfg/kk-meet.config.json.tmp" && mv "$cfg/kk-meet.config.json.tmp" "$cfg/kk-meet.config.json"
+  echo "[정리] kk-dining.config.json → kk-meet.config.json (skill 개명, 안의 dining 경로도 meeting 으로)"
+fi
+if [ "$has_dry" -eq 1 ] && [ -f "$cfg/kk-dooray.cache.json" ] && [ ! -f "$cfg/kk-dry.cache.json" ]; then
+  mv "$cfg/kk-dooray.cache.json" "$cfg/kk-dry.cache.json"; echo "[정리] kk-dooray.cache.json → kk-dry.cache.json (skill 개명)"
 fi
 if [ ! -f "$cfg/kiki.config.json" ]; then
   cp "$src/_shared/kiki.config.example.json" "$cfg/kiki.config.json"
@@ -100,11 +119,14 @@ else
 fi
 
 # 4) kiki 작업 폴더 (확정된 root) — 데이터 폴더 + token.txt
-if [ -d "$root/dining" ]; then
+if [ "$has_meet" -eq 1 ] && [ -d "$root/dining" ]; then
+  # 앞선 설치가 만들어 둔 빈 meeting/ 은 비어 있을 때만 치우고 옮긴다(내용이 있으면 손대지 않음)
+  if [ -d "$root/meeting" ] && [ -z "$(ls -A "$root/meeting")" ]; then rmdir "$root/meeting"; fi
   if [ ! -d "$root/meeting" ]; then mv "$root/dining" "$root/meeting"; echo "[정리] 데이터 폴더 dining/ → meeting/ (skill 개명)";
   else echo "[안내] dining/ 과 meeting/ 이 둘 다 있습니다 — dining/ 의 내용을 meeting/ 으로 직접 합친 뒤 dining/ 을 지우세요: $root"; fi
 fi
-mkdir -p "$root" "$root/budget" "$root/meeting" "$root/inspect" "$root/_tmp"
+mkdir -p "$root" "$root/budget" "$root/inspect" "$root/_tmp"
+[ -d "$root/dining" ] || mkdir -p "$root/meeting"   # 옛 dining/ 이 남아 있으면(kk-meet 미설치) 빈 meeting/ 을 만들지 않는다 — 나중 이동이 막히지 않게
 tok="$root/token.txt"
 if [ ! -f "$tok" ]; then
   cp "$src/_shared/token.txt.example" "$tok"
@@ -114,7 +136,7 @@ fi
 # 5) Python / Node.js 확인 (실제로 실행해 본다 — 이름만 있는 스텁은 제외; 설치는 안내만)
 echo ""
 if python3 -c 'import sys' >/dev/null 2>&1 || python -c 'import sys' >/dev/null 2>&1; then echo "[확인] Python  있음"
-else echo "[주의] Python 이 없습니다 — kk-budget/kk-pay/kk-meeting/kk-inspect/kk-wiki(와 kk-dooray 받기·쓰기·올리기) 에 필요. macOS: brew install python  /  Linux: sudo apt install python3 python3-pip  /  https://www.python.org/downloads/"; fi
+else echo "[주의] Python 이 없습니다 — kk-budget/kk-pay/kk-meet/kk-inspect/kk-wiki(와 kk-dry 받기·쓰기·올리기) 에 필요. macOS: brew install python  /  Linux: sudo apt install python3 python3-pip  /  https://www.python.org/downloads/"; fi
 if node --version >/dev/null 2>&1 && npx --version >/dev/null 2>&1; then echo "[확인] Node.js 있음"
 else echo "[주의] Node.js 가 없습니다 — 파일첨부(chrome-devtools-mcp) 에 필요. macOS: brew install node  /  Linux: sudo apt install nodejs npm  /  https://nodejs.org/ (LTS)"; fi
 

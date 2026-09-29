@@ -1,10 +1,10 @@
 // ============================================================
-// kk-meeting 코어 (1) — KIST 통합정보시스템 조회 (window.kkmeeting)
+// kk-meet 코어 (1) — KIST 통합정보시스템 조회 (window.kkmeet)
 // ------------------------------------------------------------
 // 동작: p.kist.re.kr:8081 (NEXACRO) 탭의 세션쿠키 + window.application.authTk 로
 //   backend 를 fetch 직접 호출. 화면 클릭·좌표 0, 해상도/모니터 무관.
 //   (kk-pay/portal_ops.js 의 카드·과제 조회 패턴 재사용 + 사전결재 fam_0100 추가)
-// 사용법: 통합정보 NEXACRO 화면 1개 연 뒤(아무 화면, authTk 확보용) inject → window.kkmeeting.*
+// 사용법: 통합정보 NEXACRO 화면 1개 연 뒤(아무 화면, authTk 확보용) inject → window.kkmeet.*
 // credential 없음(세션쿠키 + 페이지 authTk). 개인 식별자 하드코딩 없음.
 // ============================================================
 (function () {
@@ -176,12 +176,13 @@
     var nP = all.filter(function (c) { return c.pending; }).length, end = from + lines.length;
     return '[' + (opt.all ? '전체' : '영수증함') + ' ' + from + '-' + end + ' of ' + list.length + ' | 조회 ' + all.length + '건 중 영수증함 ' + nP + ']' + (end < Math.min(to, list.length) ? ' ▶ 다음 조각 ' + end : '') + ' 인원은 하한, 업종·명세서는 거래처명으로 판단\n' + lines.join('\n');
   }
-  window.kkmeeting = {
+  window.kkmeet = {
     authTk: authTk, ready: ready, nexBody: nexBody, ds: ds, post: post, parseRows: parseRows,
     queryCards: queryCards, queryCardsBoth: queryCardsBoth, queryProjects: queryProjects,
     queryPreApprovals: queryPreApprovals, matchPreApproval: matchPreApproval, fmtCards: fmtCards, esc: esc,
     meetingHints: meetingHints, fmtMeeting: fmtMeeting, headcount: headcount,
-    _version: 'kk-meeting-portal/1.3',
+    _version: 'kk-meet-portal/1.4',
   };
-  return window.kkmeeting._version + ' =^.^=';
+  window.kkmeeting = window.kkmeet;   // 옛 이름(2026-09-29 kk-meeting → kk-meet 개명 전) — 같은 객체
+  return window.kkmeet._version + ' =^.^=';
 })();

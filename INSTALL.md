@@ -6,7 +6,7 @@
 
 ### 0-1. 계정·앱
 - **Claude** — Claude Code(CLI) 또는 Claude Desktop 앱. 둘 다 같은 `~/.claude/skills/` 를 쓴다. Desktop 만 쓰더라도 **CLI 를 함께 설치**해 두면 설치 스크립트·MCP 등록이 쉽다(https://code.claude.com/docs/ko/quickstart).
-- **권장 모델**: 설치·첫 설정·첫 1~2회 실사용은 **Opus 5**(Fable 5.1 가능하면 그것), 노력도 high. 익숙해지면 kk-budget 은 Sonnet 5(medium), kk-mail·kk-dooray 는 Opus 5(kk-mail 스팸처리는 Sonnet 5), kk-pay 카드 RPA·kk-inspect 는 Sonnet 5(high). **kk-meeting · kk-pay 세금계산서 직접작성은 계속 Opus 5**(NEXACRO 폼 제어 함정이 많고 결재 직전 작업).
+- **권장 모델**: 설치·첫 설정·첫 1~2회 실사용은 **Opus 5**(Fable 5.1 가능하면 그것), 노력도 high. 익숙해지면 kk-budget 은 Sonnet 5(medium), kk-mail·kk-dry 는 Opus 5(kk-mail 스팸처리는 Sonnet 5), kk-pay 카드 RPA·kk-inspect 는 Sonnet 5(high). **kk-meet · kk-pay 세금계산서 직접작성은 계속 Opus 5**(NEXACRO 폼 제어 함정이 많고 결재 직전 작업).
 
 ### 0-2. Google Chrome + "Claude in Chrome" 확장 (필수 — 평소 Chrome 창 제어)
 1. 설치: https://chromewebstore.google.com/detail/claude/fcoeoabgfenejglbffodgkkbkcdhcgfn
@@ -29,7 +29,7 @@
 - 이 창은 **평소 Chrome 과 로그인이 공유되지 않는다** → 첨부 작업 때 그 창에서 `e.kist.re.kr` 에 **한 번 더 로그인**(이후 기억).
 
 ### 0-4. Python 3 + Node.js (설치 때 에이전트가 기본으로 설치)
-- 어느 skill 에 필요한가: **kk-mail 없음 / kk-dooray 찾기는 없음·받기·쓰기·올리기는 Python / kk-budget·kk-wiki Python / kk-pay·kk-meeting·kk-inspect Python + Node.js**(파일첨부 도구 chrome-devtools-mcp 가 Node 프로그램). 전체 설치(기본)면 둘 다.
+- 어느 skill 에 필요한가: **kk-mail 없음 / kk-dry 찾기는 없음·받기·쓰기·올리기는 Python / kk-budget·kk-wiki Python / kk-pay·kk-meet·kk-inspect Python + Node.js**(파일첨부 도구 chrome-devtools-mcp 가 Node 프로그램). 전체 설치(기본)면 둘 다.
 - **직접 할 일은 없다** — "kiki 설치해줘" 과정에서 에이전트가 없는 것을 찾아 안내와 함께 바로 설치한다(Windows `winget`, 1~3분; kk-mail 만 설치할 때는 건너뜀). **설치 중 '사용자 계정 컨트롤' 창이나 설치 화면이 뜨면 '예 / 다음'**만 눌러 주면 된다.
 - `winget` 은 Windows 11·최신 Windows 10 에 기본 포함(PowerShell 어디서든 실행). 새 PC 에서 `winget` 이 안 잡히면 Microsoft Store 를 열어 '앱 설치 관리자'가 업데이트되게 하거나, 회사 정책으로 막힌 PC 면 에이전트가 다운로드 페이지를 열어 주고 설치 마법사 단계를 안내한다 — Python 은 첫 화면의 **"Add python.exe to PATH" 체크** 가 핵심, Node.js 는 기본값으로 Next 만 누르면 된다.
 - 미리 깔아두고 싶으면: Python https://www.python.org/downloads/ (PATH 체크) / Node.js(LTS) https://nodejs.org/en/download . macOS `brew install python node` / Ubuntu `sudo apt install python3 python3-pip nodejs npm`(macOS 에 Homebrew 가 없으면 `.pkg` 설치 파일로, 새 Mac 은 `python3` 첫 실행 때 Xcode 개발자 도구 설치 창이 뜰 수 있음).
@@ -43,12 +43,12 @@ KIST 내부망에서 실행. KIST 밖(재택·출장)이면 **KIST VPN 접속 �
 | skill / 작업 | Chrome 창 | 로그인 |
 |--------------|-----------|--------|
 | kk-mail | 평소 쓰는 Chrome(확장) | Dooray `https://kist.gov-dooray.com` |
-| kk-dooray | 평소 쓰는 Chrome(확장) (+ 받기·쓰기·올리기는 `token.txt`) | Dooray `https://kist.gov-dooray.com`. **새 창 없음** |
+| kk-dry | 평소 쓰는 Chrome(확장) (+ 받기·쓰기·올리기는 `token.txt`) | Dooray `https://kist.gov-dooray.com`. **새 창 없음** |
 | kk-budget | 평소 쓰는 Chrome(확장) | 포탈 `https://e.kist.re.kr` |
 | kk-wiki | 평소 쓰는 Chrome(확장) — 토큰이 있으면 브라우저 없이 Python 만 | Dooray(위키) + 담당자표는 포탈 |
 | kk-pay — 카드결제건 RPA 업로드 | 평소 쓰는 Chrome(확장) + `token.txt` | 포탈 + Dooray(업로드 확인 페이지). **새 창 없음** |
 | kk-pay — 세금계산서 직접작성 | **Claude 전용 새 Chrome 창**(chrome-devtools) | 그 창에서 포탈 로그인 한 번 더 |
-| kk-meeting | **Claude 전용 새 Chrome 창** | 그 창에서 포탈 로그인 한 번 더 |
+| kk-meet | **Claude 전용 새 Chrome 창** | 그 창에서 포탈 로그인 한 번 더 |
 | kk-inspect | **Claude 전용 새 Chrome 창** | 그 창에서 포탈 로그인 한 번 더 |
 
 - chrome-devtools-mcp 를 `--autoConnect` 로 등록했다면 '새 Chrome 창' 대신 **평소 Chrome 에 붙는다** — 로그인은 그대로이고, 처음 연결 때 Chrome 의 원격 디버깅 허용을 승인하면 된다.
@@ -59,8 +59,8 @@ KIST 내부망에서 실행. KIST 밖(재택·출장)이면 **KIST VPN 접속 �
 설치 스크립트가 kiki 폴더에 `token.txt` 를 만든다(§2). 발급 https://kist.gov-dooray.com/setting/api/token → 파일의 `Dooray token:` 다음 줄에 붙여넣고 저장 → 채팅엔 "두레이 토큰 저장했다" 만. **채팅창에 토큰을 붙여넣지 말 것**(대화 기록 노출).
 
 ### 0-8. 아래아한글 · MS Office (선택)
-- 증빙이 hwp/docx/xlsx 일 때 pdf 변환(kk-pay), 회의록 hwp 저장 옵션(kk-meeting)에만 쓴다. 대부분 KIST PC 에 설치돼 있다.
-- 없으면 skill 이 묻는다: docx/xlsx → **LibreOffice**(무료, https://www.libreoffice.org/download/) 설치 시 자동 변환 / hwp → **HOP**(Open HWP — 무료 오픈소스 한글 편집기, Windows `.msi` / macOS `brew install hop` / Linux `.deb`·`.rpm`·`.AppImage`, https://github.com/golbin/hop)으로 열어 **PDF 내보내기**(수동 — HOP 은 CLI/API 가 없어 자동 변환은 안 됨). 회의록 파일(kk-meeting)은 **hwpx 로 한글 없이 생성**(모든 OS) — 열람만 한글 또는 HOP.
+- 증빙이 hwp/docx/xlsx 일 때 pdf 변환(kk-pay), 회의록 hwp 저장 옵션(kk-meet)에만 쓴다. 대부분 KIST PC 에 설치돼 있다.
+- 없으면 skill 이 묻는다: docx/xlsx → **LibreOffice**(무료, https://www.libreoffice.org/download/) 설치 시 자동 변환 / hwp → **HOP**(Open HWP — 무료 오픈소스 한글 편집기, Windows `.msi` / macOS `brew install hop` / Linux `.deb`·`.rpm`·`.AppImage`, https://github.com/golbin/hop)으로 열어 **PDF 내보내기**(수동 — HOP 은 CLI/API 가 없어 자동 변환은 안 됨). 회의록 파일(kk-meet)은 **hwpx 로 한글 없이 생성**(모든 OS) — 열람만 한글 또는 HOP.
 
 > 모든 skill 은 첫 실행 때 이 환경을 동일하게 점검한 뒤 진행한다(연결/로그인 안 돼 있으면 안내 후 멈춤).
 
@@ -72,7 +72,7 @@ KIST 내부망에서 실행. KIST 밖(재택·출장)이면 **KIST VPN 접속 �
 
 ## 2. skill 설치 — `~/.claude/skills/` 로
 
-> **이름 변경(2026-09-26)**: `kk-dining` 은 `kk-meeting` 으로 바뀌었다. 기존 설치본은 설치 스크립트를 다시 실행하면 옛 `kk-dining` 폴더가 지워지고 개인 설정 파일 이름(`kk-dining.config.json` → `kk-meeting.config.json`)이 바뀐다. 수동 복사(방법 B)면 직접 정리한다. 데이터 폴더 `dining/` 도 `meeting/` 으로 바뀐다(스크립트가 기존 폴더 이름을 바꿈).
+> **이름 변경**: 2026-09-26 `kk-dining` → `kk-meeting`, 2026-09-29 `kk-meeting` → `kk-meet`, `kk-dooray` → `kk-dry`. 기존 설치본은 설치 스크립트로 새 이름 skill(`kk-meet`·`kk-dry`)을 설치하면 그때 옛 폴더(`kk-dining`·`kk-meeting`·`kk-dooray`)가 지워지고 개인 설정 파일 이름(`kk-dining.config.json`·`kk-meeting.config.json` → `kk-meet.config.json`)과 캐시 이름(`kk-dooray.cache.json` → `kk-dry.cache.json`)이 바뀐다. 수동 복사(방법 B)면 직접 정리한다. 데이터 폴더 `dining/` 도 `meeting/` 으로 바뀐다(kk-meet 을 설치할 때 스크립트가 기존 폴더 이름을 바꿈). 다른 skill 만 설치하면 옛 skill 의 폴더·설정·데이터는 그대로 둔다.
 
 ### 방법 A — 설치 스크립트 (권장)
 패키지 폴더 안에서, OS 에 맞는 것 **하나**:
@@ -135,9 +135,9 @@ mkdir -p budget meeting inspect _tmp
 | skill | Python 패키지 (필요할 때 skill 이 확인·설치) | 첫 실행 | 사용 예 |
 |-------|------------|---------|---------|
 | **kk-mail** | — | `kk-mail 설정해줘` | `지난주 광고 스팸 골라줘` / `앞으로 nature.com 은 저널 폴더로` / `작년 ○○대 세미나 관련 메일 찾아줘` |
-| **kk-dooray** | `requests` (받기·쓰기·올리기 때만, 토큰도) | `kk-dooray 설정해줘` (설정할 것 없음 — 기능 안내만) | `○○ 과제 보고서 작성하던 업무 어디 있지` / `그 첨부 내려받아줘` / `이 파일 드라이브 ○○ 폴더에 올려줘` |
+| **kk-dry** | `requests` (받기·쓰기·올리기 때만, 토큰도) | `kk-dry 설정해줘` (설정할 것 없음 — 기능 안내만) | `○○ 과제 보고서 작성하던 업무 어디 있지` / `그 첨부 내려받아줘` / `이 파일 드라이브 ○○ 폴더에 올려줘` |
 | **kk-pay** | `Pillow` `requests` (+Windows 변환 시 `pywin32`) | `kk-pay 설정해줘` (토큰·행정원 폴더·영수증 폴더) | `이번달 영수증 지급신청 처리해줘` |
-| **kk-meeting** | `openpyxl` (hwpx 회의록 옵션은 추가 설치 없음) | `kk-meeting 설정해줘` (hwpx 동봉 여부·업로드 여부) | `회의비 처리하자` |
+| **kk-meet** | `openpyxl` (hwpx 회의록 옵션은 추가 설치 없음) | `kk-meet 설정해줘` (hwpx 동봉 여부·업로드 여부) | `회의비 처리하자` |
 | **kk-budget** | `openpyxl` | `kk-budget 설정해줘` (추적 과제·카테고리) | `예산 수집해줘` / `예산 잔액 표로` |
 | **kk-inspect** | `Pillow` (+ pdf→jpg 시 `PyMuPDF`) | `kk-inspect 설정해줘` (위치·행정원·검수 폴더) | `이 폴더 증빙들 소액검수 올려줘` |
 | **kk-wiki** | `requests` (토큰 경로만) | `kk-wiki 설정해줘` (위키 스냅샷 만들기 2~3분) | `출장 식비 한도 알려줘` / `외자 구매 절차 관련 페이지 다 모아줘` |
@@ -160,7 +160,7 @@ mkdir -p budget meeting inspect _tmp
 | 휴지통 | PowerShell 로 휴지통 이동 | Finder 를 통해 이동 → **첫 실행 때 "Finder 제어 허용" 권한 창**이 뜸(거부해도 파일 옆 `_trash/` 폴더로 대체 이동) |
 | 엑셀 | 파일이 열려 있으면 `PermissionError` → 닫고 재시도 | 열려 있어도 저장은 되지만 Excel 이 나중에 덮어쓸 수 있음 → 작업 전 닫기 |
 | 증빙 hwp/docx/xlsx → pdf | 아래아한글·MS Office COM 으로 자동 | **hwp→pdf 자동 변환 불가**(HOP 에서 PDF 내보내기 수동). docx/xlsx 는 LibreOffice(`/Applications/LibreOffice.app`) 있으면 자동 |
-| 회의록 hwpx (kk-meeting) | 생성 가능 | **생성 가능**(한글 불요). 열람은 HOP(`brew install hop` 또는 dmg) — 한글 글꼴이 없어 줄바꿈·자간이 조금 다를 수 있음 |
+| 회의록 hwpx (kk-meet) | 생성 가능 | **생성 가능**(한글 불요). 열람은 HOP(`brew install hop` 또는 dmg) — 한글 글꼴이 없어 줄바꿈·자간이 조금 다를 수 있음 |
 | 다운로드 파일 경고 | SmartScreen "PC 보호" → 추가 정보 → 실행 | Gatekeeper — HOP 은 서명·공증돼 있어 그대로 열림 |
 | KIST VPN | 회사 배포 클라이언트 | mac 용 클라이언트 필요(데이터정보팀 확인) |
 | Linux 추가 | — | Claude Desktop 미지원 → **Claude Code CLI** 로 사용. 휴지통은 `gio trash`(없으면 `_trash/`) |

@@ -1,5 +1,5 @@
 {
-  "_comment": "kk-meeting 고유 설정만. 실제 파일은 ~/.claude/kiki/kk-meeting.config.json (repo 밖).",
+  "_comment": "kk-meet 고유 설정만. 실제 파일은 ~/.claude/kiki/kk-meet.config.json (repo 밖).",
   "_common": "이름·사번·카드책임자·참여과제(분류코드 code 포함)는 공통 ~/.claude/kiki/kiki.config.json 에서 읽는다. 토큰은 <kiki_root>/token.txt (Dooray token: 다음 줄). 사전결재 면제·회의비 비목은 과제 분류코드(code)로 자동 판정(project_code.md) — 과제별로 저장하지 않음. 상세 ../_shared/personal_config.md.",
   "log_format": "xlsx_only",
   "log_root": "{kiki_root}/meeting/meeting_log",

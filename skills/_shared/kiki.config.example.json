@@ -6,9 +6,9 @@
 
   "user": {
     "name": "",
-    "_name": "본인 성함 — 발의자/과책(PI) 판별/카드책임자 기본값. (kk-budget·kk-meeting·kk-inspect·kk-pay 공통)",
+    "_name": "본인 성함 — 발의자/과책(PI) 판별/카드책임자 기본값. (kk-budget·kk-meet·kk-inspect·kk-pay 공통)",
     "emp_no": "",
-    "_emp_no": "사번(6자리). 검수신청자·발의자·카드책임자 자동대조. 개인 식별자라 로컬에만. (kk-inspect·kk-pay·kk-meeting)",
+    "_emp_no": "사번(6자리). 검수신청자·발의자·카드책임자 자동대조. 개인 식별자라 로컬에만. (kk-inspect·kk-pay·kk-meet)",
     "phone": "",
     "_phone": "내선/휴대폰. (kk-inspect 검수신청)"
   },
@@ -16,13 +16,13 @@
   "card_holder": {
     "name": "",
     "empno": "",
-    "_note": "회의비·지급신청 카드책임자(보통 본인). 카드영수증조회(fam_0711) 조회 키. 본인이면 user 와 동일하게. (kk-pay·kk-meeting·kk-inspect)"
+    "_note": "회의비·지급신청 카드책임자(보통 본인). 카드영수증조회(fam_0711) 조회 키. 본인이면 user 와 동일하게. (kk-pay·kk-meet·kk-inspect)"
   },
 
   "payment_admin": {
     "name": "",
     "folder_url": "",
-    "_note": "지급신청 담당 연구행정원 이름 + (RPA 업로드 시) dooray 드라이브 폴더 링크. (kk-inspect·kk-pay·kk-meeting)"
+    "_note": "지급신청 담당 연구행정원 이름 + (RPA 업로드 시) dooray 드라이브 폴더 링크. (kk-inspect·kk-pay·kk-meet)"
   },
 
   "location": {

@@ -145,7 +145,7 @@ skill-name/
 29. **도구 출력 필터는 '값'이 아니라 '키 이름'도 본다** — `authTk`·`token`·`cookie` 같은 단어가 반환 객체의 키에 있으면 길이·불리언이어도 차단될 수 있다. 민감값 존재 확인은 중립적 이름(`ready`)의 불리언으로.
 30. **Windows 셸 함정 2종** — (a) `"C:\dir\"` 처럼 역슬래시로 끝나는 따옴표 경로는 bash 에서 `unexpected EOF` → `/c/dir/` 형식, (b) cp949 콘솔에서 python print 가 `—` 등으로 크래시 → 스크립트에 `sys.stdout.reconfigure(encoding='utf-8')` 를 기본 탑재.
 
-> KIST 사례 (2026-06-05): kk-meeting v2 에서 **회의비 지급신청서(fam_0704_02) 완전자동작성·결재상신** 달성. 옛 "회의록 hwp 양산 → 두레이 업로드 → 행정원 수기" 폐기, 위 15-22 패턴 전부 적용. 11단계 자동화 JS = `skills/kk-meeting/references/fam_0704_automation.md`, 엑셀 master 9컬럼 = `meeting_log_excel.md`. **이전 세션이 "반자동이 한계"라 결론낸 popBudgList 선택확인 콜백 미해결** → 본 가이드 17(opener 콜백 재현) + 18(killfocus 동기화) + 15(DOC_CLS frozen 회피) + 16(base64 우회) 조합으로 돌파.
+> KIST 사례 (2026-06-05): kk-meet v2 에서 **회의비 지급신청서(fam_0704_02) 완전자동작성·결재상신** 달성. 옛 "회의록 hwp 양산 → 두레이 업로드 → 행정원 수기" 폐기, 위 15-22 패턴 전부 적용. 11단계 자동화 JS = `skills/kk-meet/references/fam_0704_automation.md`, 엑셀 master 9컬럼 = `meeting_log_excel.md`. **이전 세션이 "반자동이 한계"라 결론낸 popBudgList 선택확인 콜백 미해결** → 본 가이드 17(opener 콜백 재현) + 18(killfocus 동기화) + 15(DOC_CLS frozen 회피) + 16(base64 우회) 조합으로 돌파.
 
 > KIST 사례 (기존): 통합정보 NEXACRO 를 좌표 없이 fetch 로 조회(카드내역·과제목록·예산 예실대비표 등). 구체 패턴·캡처 코드·화면코드는 `skills/_shared/kist_portal.md`, dooray drive/wapi 는 `skills/_shared/dooray_wapi.md`. ⭐ **그리드/집계 화면**(예산표 등)은 보조 파라미터(분류코드)로 집계 레벨이 바뀌고 같은 명칭이 소계·세부에 중복되니 위 8·9·10 을 그대로 적용.
 

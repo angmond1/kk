@@ -124,7 +124,7 @@ def run():
     if not IS_WIN:
         pk.pop("pywin32")
     rep["packages"] = pk
-    try:                                                   # 선택: kk-meeting 녹음 → 글(필요할 때 동의 후 설치). import 하지 않고 있는지만 본다(무거움)
+    try:                                                   # 선택: kk-meet 녹음 → 글(필요할 때 동의 후 설치). import 하지 않고 있는지만 본다(무거움)
         import importlib.util
         rep["optional"] = {"faster-whisper": importlib.util.find_spec("faster_whisper") is not None}
     except Exception:
@@ -152,7 +152,10 @@ def run():
         rep["install"].append(f"kiki 작업 폴더가 없음: {root} — 설치 스크립트(install.ps1/.sh) 를 다시 실행")
     cfgs = {}
     for d in _cfg_dirs():
-        for fn in ("kiki.config.json", "kk-pay.config.json", "kk-meeting.config.json", "kk-budget.config.json", "kk-inspect.config.json", "kk-mail.config.json", "kk-wiki.config.json"):
+        for old in ("kk-meeting.config.json", "kk-dining.config.json"):   # skill 개명 전 설정 — 설치 스크립트로 kk-meet 을 설치하면 kk-meet.config.json 으로 옮겨진다
+            if os.path.exists(os.path.join(d, old)) and not os.path.exists(os.path.join(d, "kk-meet.config.json")):
+                rep["install"].append(f"옛 이름 설정 파일 {old} — 설치 스크립트로 kk-meet 을 설치하면(install.ps1 kk-meet / install.sh kk-meet) kk-meet.config.json 으로 옮겨집니다")
+        for fn in ("kiki.config.json", "kk-pay.config.json", "kk-meet.config.json", "kk-budget.config.json", "kk-inspect.config.json", "kk-mail.config.json", "kk-wiki.config.json"):
             p = os.path.join(d, fn)
             if os.path.exists(p):
                 c = _load_json(p)
@@ -212,7 +215,7 @@ def run():
 def text(rep):
     L = [f"[kiki doctor] Python {rep['python']} ({rep.get('python_exe', '')}) | 패키지 " + ", ".join(f"{k}{'✓' if v else '✗'}" for k, v in rep["packages"].items())
          + f" | Node {'✓' if rep['node']['node'] and rep['node']['npx'] else '✗'} {rep['node']['version']}"]
-    L.append("선택: " + ", ".join(f"{k}{'✓' if v else '✗'}" for k, v in rep.get("optional", {}).items()) + " (kk-meeting 회의 녹음 → 글. 기본은 휴대폰·클로바노트로 바꾼 글, 사용자가 원할 때만 설치)")
+    L.append("선택: " + ", ".join(f"{k}{'✓' if v else '✗'}" for k, v in rep.get("optional", {}).items()) + " (kk-meet 회의 녹음 → 글. 기본은 휴대폰·클로바노트로 바꾼 글, 사용자가 원할 때만 설치)")
     L.append("skills: " + "; ".join(f"{k} {' '.join(v) if v else '(코어 없음)'}" for k, v in rep["skills"].items()))
     kr = rep["kiki_root"]
     L.append(f"kiki_root: {kr['path']} ({kr['from']}, {'있음' if kr['exists'] else '없음'}) 하위 " + " ".join(f"{d}{'✓' if ok else '✗'}" for d, ok in kr["subdirs"].items()))

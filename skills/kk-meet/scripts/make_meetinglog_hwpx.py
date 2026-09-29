@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""kk-meeting 코어 (2) — 회의비 회의록(별지1호) .hwpx 생성.
+"""kk-meet 코어 (2) — 회의비 회의록(별지1호) .hwpx 생성.
 아래아한글 **불요**, Windows/macOS/Linux 공통, Python 표준 라이브러리만 사용(추가 pip 없음).
 
 원리: hwpx = zip 안의 OWPML XML. 양식(assets/minutes_template.hwpx)의 Contents/section0.xml 에서

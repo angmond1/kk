@@ -128,7 +128,7 @@ chk "안내 줄 위에 붙인 토큰(':' 포함)도 읽음" "grep -q 'OK (길이
 rm -f "$KIKI_ROOT/token.txt"
 
 echo "== 5. 회의록 엑셀(meeting_log_xlsx.py)"
-L="$PY $S/kk-meeting/scripts/meeting_log_xlsx.py"
+L="$PY $S/kk-meet/scripts/meeting_log_xlsx.py"
 cat > "$T/row.json" <<'J'
 {"date_text":"9월 15일 12:00~13:30","amount":"130,000","place":"○○식당","acccd":"2E11111","int_members":"김키키","ext_members":"이키키","ext_org":"○○대학교","title":"○○ 연구 진행 점검","content":"1. 진행 공유"}
 J
@@ -162,8 +162,8 @@ def root(extra, script):
     e = dict(env, **extra)
     code = "import sys;sys.path.insert(0,r'%s');import meeting_log_xlsx as m;print(m._kiki_root())" % os.path.dirname(script)
     return subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=e).stdout.strip()
-src = os.path.join(S, "kk-meeting", "scripts", "meeting_log_xlsx.py")
-inst = os.path.join(H, ".codex", "skills", "kk-meeting", "scripts")         # Codex 설치본 흉내(스크립트가 ~/.codex/skills 아래)
+src = os.path.join(S, "kk-meet", "scripts", "meeting_log_xlsx.py")
+inst = os.path.join(H, ".codex", "skills", "kk-meet", "scripts")         # Codex 설치본 흉내(스크립트가 ~/.codex/skills 아래)
 os.makedirs(inst, exist_ok=True); shutil.copy(src, inst)
 r_agent = root({"KIKI_AGENT": "codex"}, src)
 r_inst = root({}, os.path.join(inst, "meeting_log_xlsx.py"))
@@ -178,8 +178,8 @@ EOF
 chk "설정 폴더: KIKI_AGENT=codex·Codex 설치본은 Codex 설정, Claude 실행은 Claude 설정 + 토큰도 Codex 먼저" "grep -q 'AGENT True INST True CLAUDE True TOKEN True' '$T/h1'"
 rm -rf "$HOME/.claude/kiki/kiki.config.json" "$HOME/.codex/kiki/kiki.config.json" "$HOME/.claude/kiki/token.txt" "$HOME/.codex/kiki/token.txt" "$HOME/.codex/skills"
 
-echo "== 7. 회의 기록 → 글(kk-meeting transcribe.py)"
-TR="$S/kk-meeting/scripts/transcribe.py"
+echo "== 7. 회의 기록 → 글(kk-meet transcribe.py)"
+TR="$S/kk-meet/scripts/transcribe.py"
 "$PY" - "$T" <<'EOF'
 import os, sys, wave, zipfile
 T = sys.argv[1]
@@ -192,7 +192,7 @@ open(os.path.join(T, "old.hwp"), "wb").write(b"\xd0\xcf")
 EOF
 $PY "$TR" check "$T/회의 260915_130200.wav" > "$T/t1" 2>&1
 chk "check: 녹음 길이·파일 이름 시각·사용자 안내 한 줄·요약 줄" "grep -q '녹음 2분' '$T/t1' && grep -q '파일 이름 시각 2026-09-15 13:02' '$T/t1' && [ \$(grep -c '^\[사용자 안내\] ' '$T/t1') -eq 1 ] && grep -q '^\[요약\] 설치됨 ' '$T/t1'"
-"$PY" - "$S/kk-meeting/scripts" > "$T/t2" 2>&1 <<'EOF'
+"$PY" - "$S/kk-meet/scripts" > "$T/t2" 2>&1 <<'EOF'
 import sys
 sys.path.insert(0, sys.argv[1])
 import transcribe as t
@@ -212,7 +212,7 @@ print("cpu2", route(2, 16, None))
 print("ram4", route(8, 4, None))
 EOF
 chk "check: 사양별 권장(그래픽카드·8코어·4코어 62분·2코어·메모리 4GB)" "grep -q \"gpu ('local-gpu', 'local-cpu')\" '$T/t2' && grep -q \"cpu8 ('local-cpu', 'phone')\" '$T/t2' && grep -q \"cpu4_62min ('phone', 'local-cpu')\" '$T/t2' && grep -q \"cpu2 ('phone', 'local-cpu')\" '$T/t2' && grep -q \"ram4 ('phone', 'local-cpu')\" '$T/t2'"
-"$PY" - "$S/kk-meeting/scripts" > "$T/t2b" 2>&1 <<'EOF'
+"$PY" - "$S/kk-meet/scripts" > "$T/t2b" 2>&1 <<'EOF'
 import sys, re
 sys.path.insert(0, sys.argv[1])
 import transcribe as t
@@ -262,10 +262,41 @@ EOF
 PYTHONPATH="$T/fakefw" $PY "$TR" run "$T/회의 260915_130200.wav" --device cuda --hint "촉매 전극" > "$T/t5" 2>&1; rc=$?
 chk "run: 그래픽카드 강제 종료 → CPU 자동 전환, 지어낸 문구 2개 제거, 요약 줄" "[ $rc -eq 0 ] && grep -q 'CPU 로 다시' '$T/t5' && grep -q '지어낸 문구 2개 뺌' '$T/t5' && grep -q '^\[요약\] 녹음 2분 → 글' '$T/t5' && ! grep -q '시청해' \"$KIKI_ROOT/meeting/transcripts/회의 260915_130200_녹취록.txt\""
 
-echo "== 8. 두레이 쓰기·받기(kk-dooray dooray_io.py) — 127.0.0.1 가짜 서버"
+echo "== 8. 두레이 쓰기·받기(kk-dry dooray_io.py) — 127.0.0.1 가짜 서버"
 $PY "$REPO/tools/selftest_dooray_io.py" > "$T/dio.txt" 2>&1; rc=$?
 grep -E "^FAIL" "$T/dio.txt"; tail -1 "$T/dio.txt"
 chk "쓰기·받기 시험 전부 통과(미리보기 무동작·307·토큰 보호·덮어쓰기 없음·모호하면 멈춤)" "[ $rc -eq 0 ]"
+
+echo "== 9. 설치 스크립트 부분 설치(Codex 검토 H3) — 임시 HOME·작업 폴더에서만"
+[ "$HOME" = "$T/h" ] || { echo "HOME 이 임시 폴더가 아님 — 실제 설정을 건드리지 않게 중단"; exit 1; }
+old_state() {  # $1 = 임시 사용자 폴더, $2 = 임시 작업 폴더 — 옛 kk-meeting·kk-dooray 설치본과 그 설정·캐시·데이터
+  mkdir -p "$1/.claude/skills/kk-meeting" "$1/.claude/skills/kk-dooray" "$1/.claude/kiki" "$2/dining"
+  echo old > "$1/.claude/skills/kk-meeting/SKILL.md"; echo old > "$1/.claude/skills/kk-dooray/SKILL.md"
+  echo '{"a":1}' > "$1/.claude/kiki/kk-meeting.config.json"; echo '{"v":2}' > "$1/.claude/kiki/kk-dooray.cache.json"; echo m > "$2/dining/marker.txt"
+}
+kept() {  # 부분 설치 뒤: 옛 폴더·설정·캐시·데이터가 그대로, 빈 meeting 도 안 생김
+  echo "[ -d '$1/.claude/skills/kk-meeting' ] && [ -d '$1/.claude/skills/kk-dooray' ] && [ -f '$1/.claude/kiki/kk-meeting.config.json' ] && [ ! -f '$1/.claude/kiki/kk-meet.config.json' ] && [ -f '$1/.claude/kiki/kk-dooray.cache.json' ] && [ ! -f '$1/.claude/kiki/kk-dry.cache.json' ] && [ -f '$2/dining/marker.txt' ] && [ ! -d '$2/meeting' ] && [ -f '$1/.claude/skills/kk-mail/SKILL.md' ]"
+}
+moved() {  # 새 이름 설치 뒤: 설정·캐시·데이터가 새 이름으로, 옛 폴더 정리
+  echo "[ ! -d '$1/.claude/skills/kk-meeting' ] && [ ! -d '$1/.claude/skills/kk-dooray' ] && [ -f '$1/.claude/kiki/kk-meet.config.json' ] && [ ! -f '$1/.claude/kiki/kk-meeting.config.json' ] && [ -f '$1/.claude/kiki/kk-dry.cache.json' ] && [ -f '$2/meeting/marker.txt' ] && [ ! -d '$2/dining' ]"
+}
+IH="$T/ih"; IR="$T/iroot"; old_state "$IH" "$IR"
+HOME="$IH" bash "$REPO/install.sh" --root "$IR" kk-mail > "$T/i1" 2>&1; rci=$?
+chk "install.sh kk-mail 만 → 옛 kk-meeting·kk-dooray 폴더·설정·캐시·dining 데이터 그대로" "[ $rci -eq 0 ] && $(kept "$IH" "$IR")"
+mkdir -p "$IR/meeting"   # 예전 설치 스크립트가 만든 빈 meeting/ 흉내
+HOME="$IH" bash "$REPO/install.sh" --root "$IR" kk-meet kk-dry > "$T/i2" 2>&1; rci=$?
+chk "이어서 kk-meet·kk-dry 설치 → 그때 새 이름으로 옮기고 옛 폴더 정리(빈 meeting/ 이 있어도)" "[ $rci -eq 0 ] && $(moved "$IH" "$IR")"
+PSH=""; if command -v powershell.exe >/dev/null 2>&1; then PSH=powershell.exe; elif command -v pwsh >/dev/null 2>&1; then PSH=pwsh; fi
+if [ -n "$PSH" ]; then
+  PH="$T/ph"; PR="$T/proot"; old_state "$PH" "$PR"
+  USERPROFILE="$PH" "$PSH" -NoProfile -ExecutionPolicy Bypass -File "$(win "$REPO/install.ps1")" -Root "$PR" kk-mail > "$T/i3" 2>&1; rci=$?
+  chk "install.ps1 kk-mail 만 → 옛 폴더·설정·캐시·dining 데이터 그대로" "[ $rci -eq 0 ] && $(kept "$PH" "$PR")"
+  mkdir -p "$PR/meeting"
+  USERPROFILE="$PH" "$PSH" -NoProfile -ExecutionPolicy Bypass -File "$(win "$REPO/install.ps1")" -Root "$PR" kk-meet kk-dry > "$T/i4" 2>&1; rci=$?
+  chk "install.ps1 이어서 kk-meet·kk-dry → 새 이름으로 옮기고 옛 폴더 정리(빈 meeting 폴더가 있어도)" "[ $rci -eq 0 ] && $(moved "$PH" "$PR")"
+else
+  echo "SKIP PowerShell 없음"
+fi
 
 echo
 echo "[요약] $((n - fail))/$n PASS" $([ $fail -gt 0 ] && echo "— $fail FAIL")

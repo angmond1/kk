@@ -1,7 +1,7 @@
 # NEXACRO ExtFileUpload 첨부 자동화 (kiki 공통)
 
 > KIST 통합정보시스템(p.kist.re.kr:8081, NEXACRO) 의 **파일 첨부는 전부 `ExtFileUpload` 컴포넌트** 패턴. 첨부 자동화는 팝업 종류·컴포넌트 구조에 따라 3가지 패턴 (A/B/C) 으로 갈린다.
-> 2026-06-07 codex 실증 — A: kk-pay fam_0702, B: kk-inspect mcs_0003_pop2, **C: kk-meeting pop_fam_0703_02 — 사실상 가장 직접적·일반적인 정공법**(`extUp._input_node` = ExtFileUpload 내부 숨겨진 HTML input 을 노출 후 직접 주입). A/B 화면도 C 가 통할 가능성 큼(차후 검증).
+> 2026-06-07 codex 실증 — A: kk-pay fam_0702, B: kk-inspect mcs_0003_pop2, **C: kk-meet pop_fam_0703_02 — 사실상 가장 직접적·일반적인 정공법**(`extUp._input_node` = ExtFileUpload 내부 숨겨진 HTML input 을 노출 후 직접 주입). A/B 화면도 C 가 통할 가능성 큼(차후 검증).
 
 ## 0. 왜 그동안 안 됐고 왜 이제 되나
 - **막힌 이유**: `ExtFileUpload` 는 화면에 **DOM `<input type=file>` 가 없다** → 자동화 도구의 `upload_file`(또는 `file_upload`)가 input 을 못 찾아 즉시 실패.
@@ -40,7 +40,7 @@ Object.keys(f).filter(k => f[k] && f[k].ds_files)
 ---
 
 ## 3. 패턴 A — NEXACRO popupframe (같은 page 안)
-대표: 부모탭 화면(kk-meeting fam_0704_02 등). (kk-pay fam_0702 는 별도 page 라 지금은 패턴 C 로 — `tax_invoice_payment.md` §9-1.)
+대표: 부모탭 화면(kk-meet fam_0704_02 등). (kk-pay fam_0702 는 별도 page 라 지금은 패턴 C 로 — `tax_invoice_payment.md` §9-1.)
 첨부 화면이 부모 page 안에 있으니, **부모 page 에서 임시 DOM 버튼**을 만들고 그 버튼 onclick 에서 `addFiles()` 를 호출한다.
 
 ### 3-1. 임시 트리거 버튼 주입
@@ -163,8 +163,8 @@ Copy-Item "<원본폴더>\<파일패턴>" $dst -Force   # 파일명에 연속 �
 - 처리: 옛 요소 `remove()` → 새 `_input_node` 재노출(§5-1) → `take_snapshot` 재촬영 → **새 uid** 로 재업로드 → §4-7 개수 검증.
 - 예방: 파일명 특수문자(`+ & % # /`) 사전 제거 — `kk-inspect/references/evidence_rules.md`.
 
-## 5. 패턴 C — `extUp._input_node` 직접 노출 (정공법, kk-meeting 회의록 팝업 실증)
-대표: **kk-meeting `pop_fam_0703_02`** (회의비/업무추진비 회의록 팝업).
+## 5. 패턴 C — `extUp._input_node` 직접 노출 (정공법, kk-meet 회의록 팝업 실증)
+대표: **kk-meet `pop_fam_0703_02`** (회의비/업무추진비 회의록 팝업).
 ExtFileUpload 내부의 **숨겨진 HTML input** (`extUp._input_node`) 을 DOM 에 노출만 시키면 자동화도구가 그 input 에 **`setInputFiles`/`upload_file` 로 파일 직접 주입**. chooser open 이벤트 가로채기 우회 불필요 — 가장 직접적.
 
 ### 5-1. input 노출
@@ -273,8 +273,8 @@ s.textContent = `[id*="_form_modalPopDiv"], [id*="modalPopDivScrollableInnerCont
 | 화면 | skill | 패턴 | 컴포넌트 | 비고 | 상태 |
 |---|---|---|---|---|---|
 | fam_0702 | kk-pay | **C**(별도 page) | `importFileUpload` → `_input_node` | A 는 2026-06-07 실증, 현재 표준은 C(`tax_invoice_payment.md` §9-1) | ✅ |
-| fam_0704_02 | kk-meeting | (A 또는 C) | §2 로 확인 | 부모탭 화면 — 실행 창은 chrome-devtools(첨부가 있으니 처음부터) | 🔵 미실증 |
-| **pop_fam_0703_02** | kk-meeting | **C** | `fileDiv1`(서명록)/`fileDiv2`(증빙)/`fileDiv3`(사전결재) | RQST_NO=`CONFERENCENO + "-" + ds_param.CARDUSEMGRNO`, FLE_TP=`"02"`(증빙). 로컬 증빙은 **chrome-devtools `upload_file`**(노출한 `#kk_file_input` uid)로 — Claude in Chrome `file_upload` 는 채팅에 첨부한 파일만 | ✅ codex 실증 2026-06-07 |
+| fam_0704_02 | kk-meet | (A 또는 C) | §2 로 확인 | 부모탭 화면 — 실행 창은 chrome-devtools(첨부가 있으니 처음부터) | 🔵 미실증 |
+| **pop_fam_0703_02** | kk-meet | **C** | `fileDiv1`(서명록)/`fileDiv2`(증빙)/`fileDiv3`(사전결재) | RQST_NO=`CONFERENCENO + "-" + ds_param.CARDUSEMGRNO`, FLE_TP=`"02"`(증빙). 로컬 증빙은 **chrome-devtools `upload_file`**(노출한 `#kk_file_input` uid)로 — Claude in Chrome `file_upload` 는 채팅에 첨부한 파일만 | ✅ codex 실증 2026-06-07 |
 | mcs_0003_pop2 | kk-inspect | **B** | `fileDiv1` | 별도 chrome page (`window.open`) — **chrome-devtools-mcp 단일채널(§4-6) 권장**, `upload_file` 은 cwd workspace root 안 파일만(밖이면 복사) | ✅ codex 2026-06-07 / Claude(chrome-devtools) 2026-06-19 |
 
 새 화면에 적용할 때는 §1-1 (C 우선) → 안되면 §1-2 (A/B 판별) → §2 (컴포넌트명) 순으로 확인 후 이 표 갱신.

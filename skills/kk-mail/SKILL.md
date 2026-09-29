@@ -18,7 +18,7 @@ description: |
 ## 전제 (환경)
 - **환경 점검은 [`../_shared/environment_setup.md`](../_shared/environment_setup.md) 0단계를 따른다** — **평소 쓰는 Chrome 창**(Claude in Chrome 확장, 새 창·chrome-devtools 불필요) + **Dooray SSO 로그인**(`kist.gov-dooray.com`, =인증, 토큰·비번 없음) + KIST 사내망(밖이면 VPN). Python 불필요.
 - **Dooray API key 는 kk-mail 에 불필요**(메일은 세션 쿠키로 동작) → 설치 때 발급을 묻지 않는다. 단 토큰 필요 작업(메일 발송·알림·캘린더 등 = 범위 밖 공식 REST API)을 요청하면 그때 on-demand 안내: https://kist.gov-dooray.com/setting/api/token (`../_shared/dooray_api_guide.md`).
-- **개인 식별정보가 필요 없는 skill**(kk-dooray 와 함께 — 메일은 본인 세션으로 동작) — 분류 선호만 `~/.claude/kiki/kk-mail.config.json` 에. 공통 설정 체계는 `../_shared/personal_config.md`.
+- **개인 식별정보가 필요 없는 skill**(kk-dry 와 함께 — 메일은 본인 세션으로 동작) — 분류 선호만 `~/.claude/kiki/kk-mail.config.json` 에. 공통 설정 체계는 `../_shared/personal_config.md`.
 
 ---
 

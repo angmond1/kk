@@ -54,22 +54,46 @@ foreach ($s in $Skills) {
   Write-Host "[복사] $s"
 }
 
-# 2-1) 개명된 skill 의 옛 폴더 정리 (2026-09-26 kk-dining → kk-meeting) - kk-meeting 이 설치돼 있을 때만
-$legacy = Join-Path $dstDir "kk-dining"
-if (Test-Path -LiteralPath $legacy) {
-  if (Test-Path -LiteralPath (Join-Path $dstDir "kk-meeting")) { Remove-Item -LiteralPath $legacy -Recurse -Force; Write-Host "[정리] 옛 이름 kk-dining 폴더 삭제 (지금은 kk-meeting)" }
-  else { Write-Host "[안내] 옛 kk-dining 폴더가 있습니다 - kk-meeting 을 설치하면 정리됩니다: ./install.ps1 kk-meeting" }
+# 개명된 skill 의 옛 이름 정리(폴더·설정·캐시·데이터)는 새 이름 skill 이 설치돼 있을 때만(이번에 복사했거나 전에 설치) -
+# 다른 skill 만 설치하면 옛 skill 이 쓰던 설정·데이터를 그대로 둔다(2026-09-29 Codex 검토 H3)
+$hasMeet = Test-Path -LiteralPath (Join-Path $dstDir "kk-meet\SKILL.md")
+$hasDry  = Test-Path -LiteralPath (Join-Path $dstDir "kk-dry\SKILL.md")
+
+# 2-1) 개명된 skill 의 옛 폴더 정리 (2026-09-26 kk-dining → kk-meeting, 2026-09-29 kk-meeting → kk-meet) - kk-meet 이 설치돼 있을 때만
+foreach ($old in @("kk-dining", "kk-meeting")) {
+  $legacy = Join-Path $dstDir $old
+  if (Test-Path -LiteralPath $legacy) {
+    if ($hasMeet) { Remove-Item -LiteralPath $legacy -Recurse -Force; Write-Host "[정리] 옛 이름 $old 폴더 삭제 (지금은 kk-meet)" }
+    else { Write-Host "[안내] 옛 $old 폴더가 있습니다 - kk-meet 을 설치하면 정리됩니다: ./install.ps1 kk-meet" }
+  }
+}
+
+# 2-2) 개명된 skill 의 옛 폴더 정리 (2026-09-29 kk-dooray → kk-dry) - kk-dry 가 설치돼 있을 때만
+$legacy2 = Join-Path $dstDir "kk-dooray"
+if (Test-Path -LiteralPath $legacy2) {
+  if ($hasDry) { Remove-Item -LiteralPath $legacy2 -Recurse -Force; Write-Host "[정리] 옛 이름 kk-dooray 폴더 삭제 (지금은 kk-dry)" }
+  else { Write-Host "[안내] 옛 kk-dooray 폴더가 있습니다 - kk-dry 를 설치하면 정리됩니다: ./install.ps1 kk-dry" }
 }
 
 # 3) 개인설정 폴더 + 템플릿 (없을 때만 - 기존 값 보존) + kiki_root 확정·기록 (기존 값이 있으면 그것이 진짜 작업 폴더)
 New-Item -ItemType Directory -Force -Path $cfgDir | Out-Null
-$legacyCfg = Join-Path $cfgDir "kk-dining.config.json"; $newCfg = Join-Path $cfgDir "kk-meeting.config.json"
-if ((Test-Path -LiteralPath $legacyCfg) -and -not (Test-Path -LiteralPath $newCfg)) {
+$midCfg = Join-Path $cfgDir "kk-meeting.config.json"; $newCfg = Join-Path $cfgDir "kk-meet.config.json"
+if ($hasMeet -and (Test-Path -LiteralPath $midCfg) -and -not (Test-Path -LiteralPath $newCfg)) {
+  Move-Item -LiteralPath $midCfg -Destination $newCfg
+  Write-Host "[정리] kk-meeting.config.json → kk-meet.config.json (skill 개명)"
+}
+$legacyCfg = Join-Path $cfgDir "kk-dining.config.json"
+if ($hasMeet -and (Test-Path -LiteralPath $legacyCfg) -and -not (Test-Path -LiteralPath $newCfg)) {
   Move-Item -LiteralPath $legacyCfg -Destination $newCfg
   $old = Get-Content -LiteralPath $newCfg -Raw -Encoding UTF8
   $new = $old -replace '/dining/', '/meeting/' -replace '\\\\dining\\\\', '\\meeting\\'
   if ($new -ne $old) { [System.IO.File]::WriteAllText($newCfg, $new, (New-Object System.Text.UTF8Encoding($false))) }
-  Write-Host "[정리] kk-dining.config.json → kk-meeting.config.json (skill 개명, 안의 dining 경로도 meeting 으로)"
+  Write-Host "[정리] kk-dining.config.json → kk-meet.config.json (skill 개명, 안의 dining 경로도 meeting 으로)"
+}
+$legacyCache = Join-Path $cfgDir "kk-dooray.cache.json"; $newCache = Join-Path $cfgDir "kk-dry.cache.json"
+if ($hasDry -and (Test-Path -LiteralPath $legacyCache) -and -not (Test-Path -LiteralPath $newCache)) {
+  Move-Item -LiteralPath $legacyCache -Destination $newCache
+  Write-Host "[정리] kk-dooray.cache.json → kk-dry.cache.json (skill 개명)"
 }
 $cfg = Join-Path $cfgDir "kiki.config.json"
 if (-not (Test-Path -LiteralPath $cfg)) {
@@ -96,11 +120,14 @@ if ($json -match '"kiki_root":\s*""') {
 # 4) kiki 작업 폴더 (확정된 root) - 데이터 폴더 + token.txt
 New-Item -ItemType Directory -Force -Path $Root | Out-Null
 $legacyData = Join-Path $Root "dining"; $newData = Join-Path $Root "meeting"
-if (Test-Path -LiteralPath $legacyData) {
+if ($hasMeet -and (Test-Path -LiteralPath $legacyData)) {
+  # 앞선 설치가 만들어 둔 빈 meeting\ 은 비어 있을 때만 치우고 옮긴다(내용이 있으면 손대지 않음)
+  if ((Test-Path -LiteralPath $newData) -and -not (Get-ChildItem -LiteralPath $newData -Force | Select-Object -First 1)) { Remove-Item -LiteralPath $newData -Force }
   if (-not (Test-Path -LiteralPath $newData)) { Move-Item -LiteralPath $legacyData -Destination $newData; Write-Host "[정리] 데이터 폴더 dining/ → meeting/ (skill 개명)" }
   else { Write-Host "[안내] dining\ 과 meeting\ 이 둘 다 있습니다 - dining\ 의 내용을 meeting\ 으로 직접 합친 뒤 dining\ 을 지우세요: $Root" }
 }
 foreach ($sub in @("budget", "meeting", "inspect", "_tmp")) {
+  if ($sub -eq "meeting" -and (Test-Path -LiteralPath $legacyData)) { continue }   # 옛 dining\ 이 남아 있으면(kk-meet 미설치) 빈 meeting\ 을 만들지 않는다 - 나중 이동이 막히지 않게
   New-Item -ItemType Directory -Force -Path (Join-Path $Root $sub) | Out-Null
 }
 $tok = Join-Path $Root "token.txt"
@@ -121,7 +148,7 @@ function Test-Node { try { $null = & node --version 2>&1; if ($LASTEXITCODE -ne 
 $hasPy   = Test-Python
 $hasNode = Test-Node
 Write-Host ""
-if ($hasPy)   { Write-Host "[확인] Python  있음" } else { Write-Warning "Python 이 없습니다 - kk-budget/kk-pay/kk-meeting/kk-inspect/kk-wiki(와 kk-dooray 받기·쓰기·올리기) 에 필요. https://www.python.org/downloads/ (설치 시 'Add python.exe to PATH' 체크) 또는  winget install -e --id Python.Python.3.12" }
+if ($hasPy)   { Write-Host "[확인] Python  있음" } else { Write-Warning "Python 이 없습니다 - kk-budget/kk-pay/kk-meet/kk-inspect/kk-wiki(와 kk-dry 받기·쓰기·올리기) 에 필요. https://www.python.org/downloads/ (설치 시 'Add python.exe to PATH' 체크) 또는  winget install -e --id Python.Python.3.12" }
 if ($hasNode) { Write-Host "[확인] Node.js 있음" } else { Write-Warning "Node.js 가 없습니다 - 파일첨부(chrome-devtools-mcp) 에 필요. https://nodejs.org/ (LTS) 또는  winget install -e --id OpenJS.NodeJS.LTS" }
 
 Write-Host ""

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 r"""
-kk-meeting 회의록 엑셀 헬퍼.
+kk-meet 회의록 엑셀 헬퍼.
 
 표준(2026-09-24~): `{root}\{yymm}_회의록.xlsx` — 한 폴더, 월별 1파일(yymm = 지급신청 처리 연월). 그 달 처리 건은 모두 같은 파일에 행 추가.
 주된 목적 = 이전 회의 주제·내용과의 중복 방지 기록(지급신청에 첨부하지 않음). 새 회의록 전 all_titles() 로 전부 스캔.
@@ -88,8 +88,8 @@ def _kiki_root() -> str:
 
 
 def default_root() -> str:
-    """회의록 엑셀 폴더 — kk-meeting.config.json 의 log_root({kiki_root} 치환) → 없으면 {kiki_root}/meeting/meeting_log."""
-    for p in [os.path.join(h, "kk-meeting.config.json") for h in _kiki_homes()]:
+    """회의록 엑셀 폴더 — kk-meet.config.json 의 log_root({kiki_root} 치환) → 없으면 {kiki_root}/meeting/meeting_log."""
+    for p in [os.path.join(h, fn) for h in _kiki_homes() for fn in ("kk-meet.config.json", "kk-meeting.config.json")]:   # 옛 이름(2026-09-29 개명 전)도
         if os.path.exists(p):
             try:
                 import json

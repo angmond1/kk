@@ -2,7 +2,7 @@
 
 > 통합정보 fam_0701(지급신청서관리) → 신청서구분 **일반** → fam_0702 팝업. 전자세금계산서(매입) 기반 재료비·포스터 등 지급신청을 **부모탭 JS**로 자동작성.
 > 2026-06-06 도출: 진입·영수증함 매핑·적요·계정(popBudgList)·사용구분·검수 연결·통장표기 자동화. 2026-07-07 **계좌 실명검증·첨부·상신까지 end-to-end 실증**(§0-0 순서 / §8-0 계좌검증 / §9-1-A 첨부).
-> kk-meeting `fam_0704_automation.md`와 같은 계열(부모탭 JS · popBudgList doDecision · killfocus). 차이: 카드매핑 → **세금계산서 영수증함 매핑**, **검수 연결**, **계좌 실명검증**. 2026-07-07 첨부·계좌검증·상신까지 **end-to-end 실증 완료**.
+> kk-meet `fam_0704_automation.md`와 같은 계열(부모탭 JS · popBudgList doDecision · killfocus). 차이: 카드매핑 → **세금계산서 영수증함 매핑**, **검수 연결**, **계좌 실명검증**. 2026-07-07 첨부·계좌검증·상신까지 **end-to-end 실증 완료**.
 
 ## ⚡ 0-0. 실전 작업 순서 (2026-07-07 시행착오 총정리 — 이대로만 하면 재작업 없음)
 아래 원칙을 어겨서 **신청서 전체를 재작성**하고 한참 헤맸다. 다음엔 처음부터 이 순서로:
@@ -114,7 +114,7 @@ fire(ac,'onchanged',{fromobject:ac});       // 이 컴포넌트 이벤트는 onc
 - **실측 예(2026-09-09 상신)**: 4건 중 **발급 08-03 건만 대상**(한도 09-03 < 상신 09-09). 그 신청서(3건)는 「거래명세서 재발급으로 인한 지연」 추첨 → **대상 행만 기재, 나머지 행은 빈칸**(대상 아닌 행엔 넣지 않음). 추첨은 작업 시작 시 python `random.choice` 로 **신청서별 1회** 뽑아 두고 진행. 🔴 **경계 건 주의**: 발급 08-10 건은 한도 09-10 이라 09-09 상신은 정상이지만 **하루 밀리면 대상** — 경계 건이 있으면 사용자에게 '오늘 안에 상신' 을 명시 안내하고, 다음날로 넘어가면 재오픈해 참고사항을 채운 뒤 상신.
 - **설정 시점은 적요와 같이 맨 마지막**(§4) — `doDecision`·검수 dblclick 이 상세 필드를 리셋하므로 계정·검수 다 끝낸 뒤. 적요와 동일하게 **컴포넌트 `set_value` + `onchanged` fire** 패턴으로 넣고, 저장 직전 행별로 값이 남았는지 재확인.
 
-## 5. 지급계정 (popBudgList — kk-meeting 방식 동일)
+## 5. 지급계정 (popBudgList — kk-meet 방식 동일)
 계정번호 입력 `formDetail_BudgSbjtNo` + 검색버튼 `btn_formDetail_BudgSbjtNo`.
 ⚠️ **계정번호를 먼저 dataset에 넣고** 검색 — 빈 검색은 전체 과제 로드(매우 느림).
 ```js
@@ -122,7 +122,7 @@ f.ds_GNL.setColumn(0,"BUDGSBJCD",계정번호);    // ★ dataset 직접 (Edit s
 var btn=walk(f,'btn_formDetail_BudgSbjtNo',0);
 fire(btn,'onclick',{fromobject:btn});          // → popBudgList (해당 계정만 필터, 빠름)
 ```
-popBudgList = kk-meeting popBudgList 와 동일 구조 (Grid00 계정/Grid01 예산/Grid02 비용/Grid03 세부 + doDecision):
+popBudgList = kk-meet popBudgList 와 동일 구조 (Grid00 계정/Grid01 예산/Grid02 비용/Grid03 세부 + doDecision):
 ```js
 var P=window.application.popupframes.popBudgList.form;
 P.ds_BudgList.set_rowposition(0);                        // 계정 (1건 필터)
@@ -188,7 +188,7 @@ PT.datagrid1_oncelldblclick(gT,eT);   // 더블클릭=선택 → ds_GNL.PRCT_NO 
 - 전자세금계산서 매핑 시 계좌가 거래처 기준 자동 채워지기도 함. ⭐ **통장표기 = `KIST_`** (KIST 표준 입금자표기 — 2026-06 확정, 이전 연구원명/적요명 표기 폐기). 비거나 다른 값이면 `KIST_` 로 덮어쓴다:
 ```js
 var disp=walk(f,'dpstDispNm',0); disp.set_value("KIST_");
-fire(disp,'onkillfocus',{fromobject:disp,fromreferenceobject:disp});   // killfocus 동기화 (kk-meeting 교훈)
+fire(disp,'onkillfocus',{fromobject:disp,fromreferenceobject:disp});   // killfocus 동기화 (kk-meet 교훈)
 ```
 - ⭐ **통장사본 대조** (자동): 첨부 통장사본/사업자등록증 PDF → PyMuPDF 로 PNG 렌더 후 Read(스캔본은 텍스트 0) → 계좌번호·예금주·은행·사업자번호를 패널과 대조.
   ```python

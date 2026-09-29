@@ -30,7 +30,7 @@
 1. README 만 읽고 무엇을 준비해야 하는지 알 수 있는가(계정·Chrome·확장·chrome-devtools·포탈 로그인·토큰).
 2. Step 0: Python/Node 확인 명령이 맞는가, 없을 때 안내가 OS 별로 있는가.
 3. Step 1: 폴더 질문 → ZIP/clone/동료 폴더 분기가 모두 서술돼 있는가.
-4. Step 2: `install.ps1` 실제 실행 결과 — `{{RUN_HOME}}/.claude/skills/_shared` + `kk-*` 6개(kk-mail·kk-wiki·kk-pay·kk-meeting·kk-budget·kk-inspect) 복사, `{{RUN_HOME}}/.claude/kiki/kiki.config.json` 생성 + `kiki_root` 기록, root 에 `budget/ meeting/ inspect/ _tmp/` + `token.txt` 생성. 하나라도 빠지면 FAIL. `install.sh` 도 같은 항목 확인.
+4. Step 2: `install.ps1` 실제 실행 결과 — `{{RUN_HOME}}/.claude/skills/_shared` + `kk-*` 6개(kk-mail·kk-wiki·kk-pay·kk-meet·kk-budget·kk-inspect) 복사, `{{RUN_HOME}}/.claude/kiki/kiki.config.json` 생성 + `kiki_root` 기록, root 에 `budget/ meeting/ inspect/ _tmp/` + `token.txt` 생성. 하나라도 빠지면 FAIL. `install.sh` 도 같은 항목 확인.
 5. Step 3: 확장·chrome-devtools 등록 안내가 Desktop 사용자(CLI 없음)에게 실행 가능한가.
 6. Step 4: token.txt 절대경로 안내·채팅 붙여넣기 경고·"두레이 토큰 저장했다" 처리 절차가 있는가.
 7. Step 5: 재시작 안내(Desktop 은 Quit) + README 에서 뺀 안내(권장 모델·VPN·로그인 창)를 주라는 지시가 있는가.

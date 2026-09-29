@@ -1,9 +1,9 @@
 ---
-name: kk-meeting
-description: KIST 회의비 처리 자동화 — 카드 회의비 추출, 사전결재(fam_0100) 매칭, 회의록 엑셀 관리, fam_0704 지급신청서 직접 자동작성(카드매핑→계정/비목 콜백→통장표기→적요→회의록 입력→사전결재 연동→임시저장→결재상신). 회의내용은 회의 메모·녹취록·회의 자료(글) → 회의 녹음(휴대폰 녹음 앱·클로바노트로 바꾼 글, 원하면 이 PC 음성 인식) → 없으면 주제 순으로 기록에서 가져와 정리. 사용자가 "회의비 처리하자", "회의록 작성/만들어줘", "회의비 정리해줘", "이번달 회의비", "식대 회의록", "회의 녹음으로 회의록", "녹취록 정리" 등을 요청할 때 사용. 통합정보(p.kist.re.kr) + (선택)아래아한글 + (선택)두레이 기반.
+name: kk-meet
+description: KIST 회의비 처리 자동화 — 카드 회의비 추출, 사전결재(fam_0100) 매칭, 회의록 엑셀 관리, fam_0704 지급신청서 직접 자동작성(카드매핑→계정/비목 콜백→통장표기→적요→회의록 입력→사전결재 연동→임시저장→결재상신). 회의내용은 회의 메모·녹취록·회의 자료(글) → 회의 녹음(휴대폰 녹음 앱·클로바노트로 바꾼 글, 원하면 이 PC 음성 인식) → 없으면 주제 순으로 기록에서 가져와 정리. 사용자가 "회의비 처리하자", "회의록 작성/만들어줘", "회의비 정리해줘", "이번달 회의비", "식대 회의록", "회의 녹음으로 회의록", "녹취록 정리", "kk-meet", "kk-meeting"(옛 이름) 등을 요청할 때 사용. 통합정보(p.kist.re.kr) + (선택)아래아한글 + (선택)두레이 기반.
 ---
 
-# kk-meeting — KIST 회의비 처리
+# kk-meet — KIST 회의비 처리
 
 카드로 결제한 회의비(식사·카페)를 골라 **사전결재와 매칭 → 회의록 엑셀 작성 → fam_0704 지급신청서 직접 자동작성·임시저장·결재상신**까지 처리한다. 조회는 통합정보 SSO 세션(토큰 불요), fam_0704 자동작성은 부모탭 JS 로 NEXACRO 팝업 제어 — 회의록 팝업 **첨부가 있으므로 Claude 전용 새 Chrome 창(chrome-devtools-mcp)에서 처음부터**(JS 는 `evaluate_script`; 첨부 없는 조회만 Claude in Chrome). **회의록 엑셀은 항상 자동 저장**, 별지1호 회의록 **hwpx 는 사용자가 원할 때만**(매번 묻는다, 기본 안 만듦)·업로드는 사용자 옵션.
 
@@ -14,15 +14,15 @@ description: KIST 회의비 처리 자동화 — 카드 회의비 추출, 사전
 - **A 내장**: 회의비 판별(음식점·카페), 인원 산정(⌈금액÷5만⌉+1, **식대+음료 합산**), 회의시간 융통성(USETIME 참고), 별지1호 hwpx 셀매핑(요청 시만, 한글 불요), 회의록 엑셀 9컬럼, fam_0704 자동작성 11단계, 회의내용 가이드(기록 → 초안: 글 > 녹음 > 주제), 분류코드 면제(**I·S·B·F·부서운영비**).
 - **B 런타임조회**: 카드내역(fam_0711 법인+연구비)·참여과제(rdm_2011)·사전결재(fam_0100)·발의자 사번. → `scripts/portal_ops.js`
 - **C 환경준비**: **Claude 전용 새 Chrome 창**(chrome-devtools-mcp — 회의록 팝업 첨부 때문; 그 창에서 포탈 `e.kist.re.kr` 로그인 **한 번 더**, 평소 Chrome 로그인은 넘어오지 않는다고 미리 안내) + KIST 사내망(밖이면 VPN) / Python `openpyxl`(단계 5 지난 회의 제목 확인부터 필요 — `ERR openpyxl 이 없습니다` 가 나오면 그 명령으로 설치 후 다시) / (요청 시) hwpx 회의록 — **추가 설치 없음**(표준 라이브러리, 한글 불요·모든 OS; 열람은 한글 또는 무료 HOP) / (녹음 파일을 그대로 주고 이 PC 에서 바꾸길 원할 때만) 음성 인식 `faster-whisper` — 기본은 휴대폰 녹음 앱·클로바노트로 바꾼 글을 받는다. 설치는 `scripts/transcribe.py check` 의 `[사용자 안내]` 한 줄로 묻고 **동의 후**(ffmpeg 불필요, 그래픽카드 없으면 오래 걸림) / (Dooray 로그인·토큰 불요).
-- **D config**: 공통(이름·카드책임자·참여과제)은 `~/.claude/kiki/kiki.config.json`(형제 공유), kk-meeting 고유(폴더)는 `kk-meeting.config.json`. → `../_shared/personal_config.md`.
+- **D config**: 공통(이름·카드책임자·참여과제)은 `~/.claude/kiki/kiki.config.json`(형제 공유), kk-meet 고유(폴더)는 `kk-meet.config.json`. → `../_shared/personal_config.md`.
 - **E 격리**: 사번·참석자 실명·회의 녹음과 녹취록(`{kiki_root}\meeting\transcripts\` 로컬만, 외부 전송 금지). skill 텍스트엔 0건.
 
-## 설치/부트스트랩 (`kk-meeting 설정해줘`)
+## 설치/부트스트랩 (`kk-meet 설정해줘`)
 
-> 🐱 **키키 인사(정체성)**: 첫 실행의 첫 줄은 *"안녕하세요 🐱 kk-meeting 를 준비할게요."* 한 줄, 그 다음부터는 평소 문체. 작업 보고의 첫 줄은 상황별 머리표: `😸 완료 — kk-meeting`(정상) / `😻 완료`(확인할 것 없음) / `😼 완료`(사용자가 할 일 남음: 결재 상신·확인) / `😺 완료`(조회만 한 가벼운 작업) / `🙀 중단`(막혀서 멈춤, 상황 보고) / `😿 부분 완료`(일부만 처리). 제출 문서·적요·파일명·오류 문구에는 넣지 않는다.
+> 🐱 **키키 인사(정체성)**: 첫 실행의 첫 줄은 *"안녕하세요 🐱 kk-meet 를 준비할게요."* 한 줄, 그 다음부터는 평소 문체. 작업 보고의 첫 줄은 상황별 머리표: `😸 완료 — kk-meet`(정상) / `😻 완료`(확인할 것 없음) / `😼 완료`(사용자가 할 일 남음: 결재 상신·확인) / `😺 완료`(조회만 한 가벼운 작업) / `🙀 중단`(막혀서 멈춤, 상황 보고) / `😿 부분 완료`(일부만 처리). 제출 문서·적요·파일명·오류 문구에는 넣지 않는다.
 
 **0. 환경 점검** — `../_shared/environment_setup.md` 0단계(새 Chrome 창·통합정보 로그인[포탈 `e.kist.re.kr` → 업무화면 `p.kist.re.kr:8081`]; python `openpyxl` 은 지난 회의 제목을 처음 확인할 때(단계 5); hwpx 는 설치 때 묻지 않는다 — 작업마다 요청 시).
-**공통 식별정보는 `~/.claude/kiki/kiki.config.json` 에서 읽는다**(없으면 1회 수집·저장, 다른 skill 재사용). kk-meeting 고유만 `kk-meeting.config.json`. (`../_shared/personal_config.md`)
+**공통 식별정보는 `~/.claude/kiki/kiki.config.json` 에서 읽는다**(없으면 1회 수집·저장, 다른 skill 재사용). kk-meet 고유만 `kk-meet.config.json`. (`../_shared/personal_config.md`)
 
 1. **성함·카드책임자·참여과제** *(공통 `user`/`card_holder`/`projects`)* — kiki.config 에 없으면 묻는다. 카드책임자 본인 여부 확인. 사번은 묻지 않는다 — fam_0711 화면 `ds_search.SEARCHID` 에서 자동으로 읽는다(kiki.config 에 없으면 그 값을 저장). 참여과제는 `queryProjects` 자동조회 → 분류코드 포함 확인.
 2. **사전결재 면제 판정** *(자동 + 확인)* — 참여과제 분류코드(`projects[].code`)로 **I·S·B·F·부서운영비** 면제 자동 판정. **N(정부수탁) 과제는 소관부처에 따라 달라** 사용자가 답할 수 있게 부처 목록을 같이 보여준다: *"사전 내부결재 폐지 대상 = 과기정통부·산업통상자원부·문체부·식약처·국방부·환경부·복지부·경찰청·기상청 과제 + 주요사업(E). 이 과제의 소관부처가 이 중 하나인가요?"* → "맞나요?" 확인 (`project_code.md`). 과제별 저장 불필요.
@@ -34,7 +34,7 @@ description: KIST 회의비 처리 자동화 — 카드 회의비 추출, 사전
 6. **근거자료 요청** — *"회의록을 대신 쓰려면 근거자료가 필요합니다. 과제제안서·보고서 파일(hwp/hwpx/pdf/docx)을 `{kiki_root}\meeting\project_report\` 에 복사해 주세요 — 파일명에 과제번호를 넣어 주시면 매칭이 정확합니다(예 `2E11111_제안서.hwpx`). 회의 메모·녹취록이 있으면 회의비 처리 때 주세요 — 그걸로 회의내용을 정리합니다. 녹음만 있으면 휴대폰 녹음 앱의 텍스트 변환이나 클로바노트로 글로 바꿔서 주시면 됩니다."* + 폴더 지침 안내 — 아래 "경로".
 
 ### 토큰
-kk-meeting 은 Dooray 토큰이 필요 없다(통합정보 SSO 세션만). 토큰은 kk-pay 카드 RPA 업로드에서만 쓴다 — `../_shared/personal_config.md`.
+kk-meet 은 Dooray 토큰이 필요 없다(통합정보 SSO 세션만). 토큰은 kk-pay 카드 RPA 업로드에서만 쓴다 — `../_shared/personal_config.md`.
 
 ### 경로 (설치 시 지침으로 안내)
 - 📁 **카드영수증/증빙**: 카페·마트·편의점·호텔 결제건만 명세서 jpg 필요 (식당은 카드전표 갈음). 사용자 폴더 경로 알려주거나 그때그때 첨부. → `meeting_form.md`
@@ -46,7 +46,7 @@ kk-meeting 은 Dooray 토큰이 필요 없다(통합정보 SSO 세션만). 토�
 ## 작업 (`회의비 처리하자`)
 
 ### 단계 1-7: 정보 수집
-1. **카드 조회 즉시 출력** — 2-스텝 `window.__c=null; window.kkmeeting.queryCardsBoth({fromDt,toDt,empno}).then(r=>window.__c=r, e=>window.__c={error:String(e)}); 'started'` → `window.kkmeeting.fmtMeeting(window.__c)`: **영수증함(미처리) 건만** 15줄씩 — `idx(window.__c 번호) | 날짜 | 거래처 | 금액 | 법인/연구비 | 인원 N명↑(⌈금액÷5만⌉+1) | 비고(50만 초과 = 일상감사·차상위자) | 승인`. 처리된 건까지 보려면 `fmtMeeting(window.__c, 0, 15, {all:true})`. **식당·카페·주점 여부와 명세서 필요 여부는 Claude 가 거래처명을 보고 판단한다**(코드 키워드 규칙은 실측에서 식당·카페의 절반만 잡고 호프·와인을 후보로 올려 폐기, 2026-09-27) — 상호로 업종이 안 보이면 사용자에게 묻고, **주점·호프·이자카야·와인바 등 주류 업종은 회의비 불가**(재무팀 매뉴얼). 온라인 결제·구독·학회비는 회의비 아님으로 따로 묶는다. 코어 주입은 `scripts/portal_ops.min.js`(반환 `kk-meeting-portal/1.3 =^.^=`). 첫 줄이 `ERR …` 면 결과가 아니라 오류(`PORTAL:` = 세션 만료 → 로그인·탭 새로고침·재주입 1회).
+1. **카드 조회 즉시 출력** — 2-스텝 `window.__c=null; window.kkmeet.queryCardsBoth({fromDt,toDt,empno}).then(r=>window.__c=r, e=>window.__c={error:String(e)}); 'started'` → `window.kkmeet.fmtMeeting(window.__c)`: **영수증함(미처리) 건만** 15줄씩 — `idx(window.__c 번호) | 날짜 | 거래처 | 금액 | 법인/연구비 | 인원 N명↑(⌈금액÷5만⌉+1) | 비고(50만 초과 = 일상감사·차상위자) | 승인`. 처리된 건까지 보려면 `fmtMeeting(window.__c, 0, 15, {all:true})`. **식당·카페·주점 여부와 명세서 필요 여부는 Claude 가 거래처명을 보고 판단한다**(코드 키워드 규칙은 실측에서 식당·카페의 절반만 잡고 호프·와인을 후보로 올려 폐기, 2026-09-27) — 상호로 업종이 안 보이면 사용자에게 묻고, **주점·호프·이자카야·와인바 등 주류 업종은 회의비 불가**(재무팀 매뉴얼). 온라인 결제·구독·학회비는 회의비 아님으로 따로 묶는다. 코어 주입은 `scripts/portal_ops.min.js`(반환 `kk-meet-portal/1.4 =^.^=`). 첫 줄이 `ERR …` 면 결과가 아니라 오류(`PORTAL:` = 세션 만료 → 로그인·탭 새로고침·재주입 1회).
 2. **후보 확정** — "맞나요? 뺄 건? (**같은 날 식당+카페 = 1건**, 금액 합산)".
 3. **증빙 영수증 확인** — **식당·명확한 커피전문점**(스벅·테라로사·투썸·커피빈) = 카드전표 갈음(불요). **카페·마트·편의점·호텔·제과겸업**(파바·던킨·뚜레쥬르)·**애매한 카페** = 거래명세서 **jpg 변환 필수** (jpeg/png/pdf 불가). 파일명 `{yymmdd}_{거래처명}.jpg`. → `meeting_form.md`
 4. **과제·비목 자동** — 사전결재/계정 매칭으로 건별 과제 추정 + 분류코드로 비목 결정 (`33-523` 기본 / `17-448` 수탁계열 / `34-448` K과제 / `17-523`·`41-523` G계정) → **확인만**. → `project_code.md`
@@ -59,7 +59,7 @@ kk-meeting 은 Dooray 토큰이 필요 없다(통합정보 SSO 세션만). 토�
    - ①·② 에서 받은 기록으로 **회의 제목(주된 안건)과 회의내용 초안**을 만든다 — 기록에 있는 내용만(지어내지 않는다), 자동 변환이라 불확실한 이름·과제명·용어는 표시해 확인받는다. 사용자가 준 글이 이미 회의록 형태면 그대로 쓴다. **초안은 보여 주고 승인받은 뒤** 입력한다. **묻지 않고 처음부터 끝까지 임의로 채우지 않는다.**
    - 장소 = 카드 거래처. 주제를 정하기 전에 아래 "중복 방지" 스캔을 먼저 해 두고, 제목이 과거와 겹치면 알린다.
    - 사전결재: 2026-08-01 이후 건 중 **사전결재 폐지 대상 과제**(과기정통부·산업부·문체부·식약처·국방부·환경부·복지부·경찰청·기상청 과제 + 주요사업)만 사전결재 연동을 생략한다. 그 외 부처 과제는 `queryPreApprovals`→`matchPreApproval` + 회의록 사전결재 연동(button00)을 그대로 한다(`project_code.md`). 8/1 이전 건은 `queryPreApprovals`→`matchPreApproval` 로 목적·장소·시간 자동.
-6. **인원 산정** — **⌈금액(식대+음료 합산) ÷ 50,000⌉ + 1명**(`window.kkmeeting.headcount(합산금액)` — 암산하지 않는다; `fmtMeeting` 의 값은 건별이므로 같은날 식당+카페는 합산해서 다시 계산). 옛 "카페 음료 잔수=인원" 폐기.
+6. **인원 산정** — **⌈금액(식대+음료 합산) ÷ 50,000⌉ + 1명**(`window.kkmeet.headcount(합산금액)` — 암산하지 않는다; `fmtMeeting` 의 값은 건별이므로 같은날 식당+카페는 합산해서 다시 계산). 옛 "카페 음료 잔수=인원" 폐기.
 7. **참석자** — "내부 N·외부 N — 내부 성명 / 외부 (소속) 성명 알려주세요".
    - ⭐ **2026-08-01 규정변경**: 내부는 **해당 계정의 참여연구원만** 가능. KIST 소속이어도 미참여면 **외부/미참여자에 회사명 `한국과학기술연구원`** 으로 넣는다. 외부 grid 는 **`PROJJOINYN` 필수선택**(`N`=미참여 / `Y`=참여). 판정은 서버가 하므로 내부로 시도 → 거부되면 외부로 강등하면 된다. 총원은 사전결재 인원과 맞춘다. → `fam_0704_automation.md` §9-c
 
@@ -120,10 +120,10 @@ kk-meeting 은 Dooray 토큰이 필요 없다(통합정보 SSO 세션만). 토�
 ## 참고
 - `references/fam_0704_automation.md` — **NEXACRO 부모탭 JS 완전자동 11단계** (DOC_CLS / 식비팝업 / 카드매핑 / popBudgList 콜백 / 통장표기 killfocus / 회의록 / 사전결재 연동 / **첨부**(회의록 팝업 `pop_fam_0703_02` 의 `fileDiv1`서명록/`fileDiv2`증빙/`fileDiv3`사전결재, 패턴 C = `extUp._input_node` 직접 노출) / 저장 / 결재상신). gfn_msg 원복 트랩 포함.
 - `references/fam_0703_automation.md` — ⭐ **연구비카드 회의비(fam_0703_02) 전용 절차서** (정찰 스니펫 / 이름표 / closure curRow 행 전환 `goRow()` / 매핑→계정→적요 순서 / DESP_LIST 오염 검증·복구 / 저장 체크리스트 / 2026-09-08 버벅거림 13건→예방).
-- `../_shared/nexacro_file_upload.md` — ⭐ **NEXACRO `ExtFileUpload` 첨부 자동화 공통 가이드**(2026-06-07 codex 실증, A/B/C 3 패턴). kk-pay·kk-meeting·kk-inspect 공유. **C(정공법, `extUp._input_node` 직접) 우선 시도** 권장.
+- `../_shared/nexacro_file_upload.md` — ⭐ **NEXACRO `ExtFileUpload` 첨부 자동화 공통 가이드**(2026-06-07 codex 실증, A/B/C 3 패턴). kk-pay·kk-meet·kk-inspect 공유. **C(정공법, `extUp._input_node` 직접) 우선 시도** 권장.
 - `references/meeting_log_excel.md` — 회의록 엑셀 9컬럼 관리 표준 (월별 1파일).
 - `references/meeting_form.md` — (요청 시) hwpx 별지1호 양식·셀매핑·인원·증빙·중복.
 - `references/meeting_transcribe.md` — ⭐ **회의 기록 → 회의내용**: 글 → 녹음 → 없음 순서와 묻는 말, 글 형식별 읽기, 녹음을 그대로 줄 때 `[사용자 안내]` 한 줄 전달과 다섯 경우, 백그라운드 변환·결과 점검, 휴대폰 녹음 앱·클로바노트·온라인 회의 녹취록 안내, 초안 규칙, 회의시간 힌트, 보관·보안.
 - `references/project_code.md` — 분류코드·비목·면제(I·S·B·F·부서운영비)·발의자.
 - `references/fam0100_reference.md` — 사전결재 fetch 명세.
-- scripts: `portal_ops.js`(조회·`fmtMeeting`·`headcount`; 주입은 `.min.js`) · **`meeting_log_xlsx.py`(엑셀 헬퍼 + 명령줄 `append`(필수 항목·중복 검사)/`titles`(한 줄씩, 내용까지는 `--full`)/`path`)** · **`make_meetinglog_hwpx.py`**(요청 시 hwpx — 한글 불요·모든 OS) · **`transcribe.py`**(회의 기록 → 글: `check` 이 PC 점검·권장 경로 / `run` 녹음 → 녹취록 / `text` docx·hwpx·자막 → 글) · `dooray_drive.py`(kk-pay 와 공용 — kk-meeting 에서는 쓰지 않음). (구형 한글 COM 스크립트·.hwp 양식은 2026-09-27 삭제.)
+- scripts: `portal_ops.js`(조회·`fmtMeeting`·`headcount`; 주입은 `.min.js`) · **`meeting_log_xlsx.py`(엑셀 헬퍼 + 명령줄 `append`(필수 항목·중복 검사)/`titles`(한 줄씩, 내용까지는 `--full`)/`path`)** · **`make_meetinglog_hwpx.py`**(요청 시 hwpx — 한글 불요·모든 OS) · **`transcribe.py`**(회의 기록 → 글: `check` 이 PC 점검·권장 경로 / `run` 녹음 → 녹취록 / `text` docx·hwpx·자막 → 글) · `dooray_drive.py`(kk-pay 와 공용 — kk-meet 에서는 쓰지 않음). (구형 한글 COM 스크립트·.hwp 양식은 2026-09-27 삭제.)

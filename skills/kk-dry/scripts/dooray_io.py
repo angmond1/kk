@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""kk-dooray 쓰기·파일 주고받기 — Dooray 공식 API(개인 토큰)로 업무 글·댓글·첨부, 드라이브 올리기·내려받기.
+"""kk-dry 쓰기·파일 주고받기 — Dooray 공식 API(개인 토큰)로 업무 글·댓글·첨부, 드라이브 올리기·내려받기.
 
-찾기(검색·본문·댓글 읽기)는 브라우저 코어(kk_dooray_ops.js)가 세션으로 빠르게 하고, 글을 쓰거나 파일을 PC 와 주고받는 일은
+찾기(검색·본문·댓글 읽기)는 브라우저 코어(kk_dry_ops.js)가 세션으로 빠르게 하고, 글을 쓰거나 파일을 PC 와 주고받는 일은
 이 스크립트가 한다. 업로드는 세션 쿠키로 되지 않고 토큰이 필요하다(kk-pay 실측) — kk-pay·kk-wiki 와 같은 token.txt 를 쓴다.
 
 ⚠️ 쓰기·내려받기 명령은 전부 기본이 '미리보기'다 — 무엇을 어디에 할지 보여주고 아무것도 하지 않는다.
@@ -46,6 +46,7 @@ if not VERIFY_TLS:
     print("[kiki] 경고: KIKI_INSECURE_TLS 가 켜져 있어 TLS 인증서를 검증하지 않습니다(토큰 노출 위험) — 사내 프록시 문제일 때만 임시로 쓰세요.", file=sys.stderr)
 CACHE_DAYS = 7
 CACHE_VER = 2
+MEMBER_PAGES = 30   # 프로젝트 멤버는 100명씩 이 쪽 수까지(3,000명) — 넘으면 '멤버 아님'으로 단정하지 않고 멈춘다
 
 
 class Stop(Exception):
@@ -180,13 +181,15 @@ def parse_task(x: str) -> tuple:
 
 
 def parse_drive(x: str) -> dict:
-    """{'private':True} | {'project':P, 'kind':'root'|'folder'|'view', 'id':…}. view = 파일 또는 폴더(검색 결과 링크)."""
+    """{'private':True} | {'project':P, 'kind':'root'|'folder'|'view', 'id':…}. view = 파일 또는 폴더(찾기 결과 링크).
+    파일 링크는 …/drive/{P}/{부모 폴더}/views/{파일}(파일이 선택된 채 열림, 2026-09-29) 또는 …/drive/{P}/views/{파일}[?query=…] — 둘 다 파일로 읽는다
+    (앞 꼴을 폴더 링크로 잘못 읽으면 받기가 '폴더입니다'로 멈추고 올리기는 엉뚱한 폴더로 간다)."""
     s = str(x or "").strip()
     if s.lower().replace(" ", "") in ("private", "my", "mydrive", "내드라이브"):
         return {"private": True, "kind": "root", "id": ""}
-    m = re.search(r"/drive/(\d{6,})/views/(\d{6,})", s)
+    m = re.search(r"/drive/(\d{6,})/(?:(\d{6,})/)?views/(\d{6,})", s)
     if m:
-        return {"project": m.group(1), "kind": "view", "id": m.group(2)}
+        return {"project": m.group(1), "kind": "view", "id": m.group(3), "folder": m.group(2) or ""}
     m = re.search(r"/drive/(\d{6,})/(\d{6,})", s)
     if m:
         return {"project": m.group(1), "kind": "folder", "id": m.group(2)}
@@ -261,7 +264,13 @@ class Dooray:
             raise Stop(_token_hint())
         self.s = requests.Session()
         self.s.headers.update({"Authorization": f"dooray-api {tok}", "Accept": "application/json"})
-        self.cache_path = os.path.join(_kiki_homes()[0], "kk-dooray.cache.json")
+        self.cache_path = os.path.join(_kiki_homes()[0], "kk-dry.cache.json")
+        old = os.path.join(_kiki_homes()[0], "kk-dooray.cache.json")   # skill 개명(kk-dooray → kk-dry, 2026-09-29) 전 캐시
+        if not os.path.exists(self.cache_path) and os.path.exists(old):
+            try:
+                os.replace(old, self.cache_path)
+            except OSError:
+                pass
         self._cache = None
 
     def _req(self, method: str, url: str, *, params=None, json_body=None, files=None, stream=False, timeout=30):
@@ -277,14 +286,21 @@ class Dooray:
         return _check(self._req(method, path, **kw), what)
 
     def follow(self, method: str, path: str, what: str, *, params=None, files=None, stream=False, timeout=120):
-        """파일 받기·올리기: api → 307 → file-api 로 토큰을 들고 한 번 더(kk-pay·kk-wiki 실측). 다른 호스트면 멈춘다."""
-        r0 = self._req(method, path, params=params, files=files, stream=stream, timeout=30)
-        if r0.status_code not in (301, 302, 303, 307, 308):
-            return r0
-        loc = r0.headers.get("Location") or ""
-        if not _redirect_ok(loc):
-            raise Stop(f"{what}: 파일 주소가 dooray 가 아닙니다 — 토큰을 보내지 않고 멈춥니다({loc[:60]})")
-        return self._req(method if r0.status_code in (307, 308) else "GET", loc, files=files, stream=stream, timeout=timeout)
+        """파일 받기·올리기: api → 307 → file-api 로 토큰을 들고 한 번 더(kk-pay·kk-wiki 실측). 다른 호스트면 멈춘다.
+        파일 호스트가 다시 넘기면(3xx) 같은 확인(dooray 호스트만)을 거쳐 모두 3번까지 따라가고, 그래도 끝나지 않으면 멈춘다(Codex 검토 M2)."""
+        r = self._req(method, path, params=params, files=files, stream=stream, timeout=30)
+        for _ in range(3):
+            if r.status_code not in (301, 302, 303, 307, 308):
+                return r
+            loc = r.headers.get("Location") or ""
+            if not _redirect_ok(loc):
+                raise Stop(f"{what}: 파일 주소가 dooray 가 아닙니다 — 토큰을 보내지 않고 멈춥니다({loc[:60]})")
+            if r.status_code not in (307, 308):
+                method, files = "GET", None
+            r = self._req(method, loc, files=files, stream=stream, timeout=timeout)
+        if r.status_code in (301, 302, 303, 307, 308):
+            raise Stop(f"{what}: 파일 주소 넘기기가 끝나지 않습니다(3번 넘음) — 받지 않고 멈춥니다")
+        return r
 
     # ----- 캐시(내 프로젝트·드라이브 id) — 사람마다 다르므로 skill 이 아니라 설정 폴더에 -----
     # 2026-09-29 사용자 지적: 캐시에 본인 이름·개인 프로젝트 코드(@아이디)가 남았다 → 번호만 저장한다(v2).
@@ -306,7 +322,7 @@ class Dooray:
             json.dump(self._cache or {}, open(tmp, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
             os.replace(tmp, self.cache_path)
         except Exception as e:
-            print(f"[kk-dooray] 캐시 저장 실패(작업엔 지장 없음): {type(e).__name__}", file=sys.stderr)
+            print(f"[kk-dry] 캐시 저장 실패(작업엔 지장 없음): {type(e).__name__}", file=sys.stderr)
 
     def me(self, with_name: bool = False) -> dict:
         """{'id'} (with_name 이면 이번 실행에서만 'name' 도 — 이름은 캐시에 저장하지 않는다)."""
@@ -366,25 +382,43 @@ class Dooray:
                 raise Stop("프로젝트가 여럿입니다 — 하나를 골라 다시: " + " / ".join(v["code"] for _, v in part[:12]), 2)
         raise Stop(f"'{s}' 가 든 내 프로젝트가 없습니다(projects --refresh 로 목록 확인)")
 
-    def members(self, name: str, pid: str = "") -> list:
-        d = self.call("GET", "/common/v1/members", "사람 찾기", params={"name": name, "page": 0, "size": 20})
-        found = [{"id": str(x.get("id")), "name": x.get("name") or "", "email": x.get("externalEmailAddress") or ""} for x in d.get("result") or []]
+    def _pages(self, path: str, what: str, params: dict, size: int, max_pages: int) -> tuple:
+        """쪽을 넘겨 끝까지 읽는다 → (목록, 끝까지 읽었나). 한 쪽이 size 보다 적거나 totalCount 에 닿으면 끝."""
+        out = []
+        for page in range(max_pages):
+            d = self.call("GET", path, what, params=dict(params, page=page, size=size))
+            res = d.get("result") or []
+            out.extend(res)
+            total = d.get("totalCount")
+            if len(res) < size or (isinstance(total, int) and len(out) >= total):
+                return out, True
+        return out, False
+
+    def members(self, name: str, pid: str = "") -> tuple:
+        """→ (사람 목록, 사람 찾기를 끝까지 읽었나). 같은 이름이 많을 수 있어 쪽을 넘긴다(최대 300명),
+        프로젝트 멤버도 끝까지(최대 MEMBER_PAGES×100명 — Codex 검토 M5). 사람 찾기를 끝까지 못 읽으면 호출한 쪽이 단정하지 않는다(재검토 R2)."""
+        people, complete = self._pages("/common/v1/members", "사람 찾기", {"name": name}, 100, 3)
+        found = [{"id": str(x.get("id")), "name": x.get("name") or "", "email": x.get("externalEmailAddress") or ""} for x in people]
         if pid and found:
-            ids = {str(x.get("organizationMemberId")) for x in (self.call("GET", f"/project/v1/projects/{pid}/members", "프로젝트 멤버",
-                                                                         params={"page": 0, "size": 100}).get("result") or [])}
+            mem, mcomplete = self._pages(f"/project/v1/projects/{pid}/members", "프로젝트 멤버", {}, 100, MEMBER_PAGES)
+            ids = {str(x.get("organizationMemberId")) for x in mem}
             for f in found:
-                f["inProject"] = f["id"] in ids
-        return found
+                f["inProject"] = True if f["id"] in ids else (False if mcomplete else None)   # None = 끝까지 못 읽어 모름
+        return found, complete
 
     def member_ref(self, name: str, pid: str) -> dict:
         if name in ("나", "me"):
             return {"id": self.me()["id"], "name": "나"}
-        found = self.members(name, pid)
+        found, complete = self.members(name, pid)
+        if not complete:   # 같은 이름이 300명 넘게 나와 끝까지 못 봄 — '없음·멤버 아님·한 명'으로 단정하지 않는다(Codex 재검토 R2)
+            raise Stop(f"'{name}' 이름으로 찾은 사람이 아주 많아(300명 넘음) 끝까지 확인하지 못했습니다 — Dooray 화면에서 담당·참조를 지정해 주세요", 2)
         inp = [f for f in found if f.get("inProject")]
         if len(inp) == 1:
             return inp[0]
         if not found:
             raise Stop(f"'{name}' 이름의 사람을 찾지 못했습니다 — 이름을 정확히(성+이름) 다시", 2)
+        if not inp and any(f.get("inProject") is None for f in found):
+            raise Stop(f"'{name}' 이 이 프로젝트 멤버인지 끝까지 확인하지 못했습니다(멤버가 아주 많음) — Dooray 화면에서 담당·참조를 지정해 주세요", 2)
         if not inp:
             raise Stop(f"'{name}' 은 이 프로젝트 멤버가 아닙니다 — 업무 담당·참조는 프로젝트 멤버만(프로젝트에 먼저 추가하거나 다른 사람으로)", 2)
         raise Stop(f"'{name}' 이 이 프로젝트에 여럿입니다 — 메일 주소로 골라 주세요: " + " / ".join(f["email"] or f["id"] for f in inp[:6]), 2)
@@ -447,7 +481,11 @@ class Dooray:
         r = self.follow("GET", path, what, params={"media": "raw"}, stream=True)
         if r.status_code >= 400:
             _check(r, what)
+        if not 200 <= r.status_code < 300:   # 2xx 가 아니면(3xx 등) 파일로 확정하지 않는다
+            raise Stop(f"{what}: 파일 대신 HTTP {r.status_code} 응답 — 저장하지 않습니다")
         ctype = (r.headers.get("Content-Type") or "").lower()
+        if "text/html" in ctype and not dest.lower().endswith((".html", ".htm")):   # 로그인·오류 웹 화면
+            raise Stop(f"{what}: 파일 대신 웹 화면(HTML)이 왔습니다 — 로그인·권한을 확인하세요. 저장하지 않습니다")
         part, n = dest + ".part", 0
         with open(part, "wb") as f:
             for chunk in r.iter_content(1 << 16):
@@ -520,10 +558,11 @@ def cmd_projects(a):
 def cmd_members(a):
     D = Dooray()
     pid = D.find_project(a.project)[0] if a.project else ""
-    found = D.members(a.name, pid)
+    found, complete = D.members(a.name, pid)
     for f in found:
-        print(f"  {f['name']} | {f['email'] or '-'} | 멤버 id {f['id']}" + ("" if not pid else (" | 프로젝트 멤버" if f.get("inProject") else " | 프로젝트 멤버 아님")))
-    print(f"[요약] '{a.name}' {len(found)}명")
+        where = "" if not pid else {True: " | 프로젝트 멤버", False: " | 프로젝트 멤버 아님"}.get(f.get("inProject"), " | 프로젝트 멤버인지 모름(멤버가 아주 많음)")
+        print(f"  {f['name']} | {f['email'] or '-'} | 멤버 id {f['id']}" + where)
+    print(f"[요약] '{a.name}' {len(found)}명" + ("" if complete else " — 같은 이름이 아주 많아 앞 300명만(끝까지 못 읽음)"))
 
 
 def _task_files(D, pid, tid) -> list:
@@ -666,7 +705,9 @@ def cmd_drive_ls(a):
     items = [x for x in items if not a.q or a.q.lower() in str(x.get("name", "")).lower()]
     items.sort(key=lambda x: (x.get("type") != "folder", str(x.get("name", ""))))
     for i, x in enumerate(items[: a.max]):
-        print(f"  {i} | {'폴더' if x.get('type') == 'folder' else '파일'} | {x.get('name')} | {kb(x.get('size')) if x.get('type') != 'folder' else '-'} | {str(x.get('updatedAt', ''))[:10]} | {WEB}/drive/{pid}/views/{x.get('id')}")
+        folder = x.get("type") == "folder"   # 링크: 폴더는 그 폴더를, 파일은 이 폴더가 열리고 그 파일이 선택된 화면을(…/views/{파일}만 주면 최상위가 열림)
+        link = f"{WEB}/drive/{pid}/{x.get('id')}" if folder else f"{WEB}/drive/{pid}/{fid}/views/{x.get('id')}"
+        print(f"  {i} | {'폴더' if folder else '파일'} | {x.get('name')} | {kb(x.get('size')) if not folder else '-'} | {str(x.get('updatedAt', ''))[:10]} | {link}")
     print(f"[요약] {path} — {len(items)}개" + (f" ('{a.q}' 포함)" if a.q else "") + (f", 앞 {a.max}개만" if len(items) > a.max else "") + f" · 폴더 링크 {WEB}/drive/{pid}/{fid}")
 
 
@@ -709,7 +750,7 @@ def cmd_drive_upload(a):
             else:
                 r = D.upload(f"/drive/v1/drives/{did}/files", p, "드라이브 올리기", params={"parentId": fid}, name=n)
             nid = str((r.get("result") or {}).get("id") or xid or "")
-            ok += 1; print(f"  + {n}" + (f" → {WEB}/drive/{pid}/views/{nid}" if nid else ""))
+            ok += 1; print(f"  + {n}" + (f" → {WEB}/drive/{pid}/{fid}/views/{nid}" if nid else ""))
         except Stop as e:
             bad += 1; print(f"  ! {n}: {e}")
         time.sleep(0.2)
@@ -750,7 +791,7 @@ def cmd_drive_download(a):
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(prog="dooray_io.py", description="kk-dooray 쓰기·파일 주고받기(공식 API, 토큰)")
+    ap = argparse.ArgumentParser(prog="dooray_io.py", description="kk-dry 쓰기·파일 주고받기(공식 API, 토큰)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("check")
     p = sub.add_parser("resolve"); p.add_argument("link")
@@ -776,11 +817,11 @@ def main(argv=None) -> int:
     try:
         return fn(a) or 0
     except Stop as e:
-        print(f"[kk-dooray] {e}")
+        print(f"[kk-dry] {e}")
         print(f"[요약] {'사용자 선택 필요' if e.code == 2 else '실패'} — {str(e)[:100]}")
         return e.code
     except requests.RequestException as e:
-        print(f"[kk-dooray] 연결 실패: {type(e).__name__} — 사내망/VPN 을 확인하세요")
+        print(f"[kk-dry] 연결 실패: {type(e).__name__} — 사내망/VPN 을 확인하세요")
         print("[요약] 실패 — 연결")
         return 1
 

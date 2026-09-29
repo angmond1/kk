@@ -5,16 +5,16 @@
 > (Codex 사용자는 [CODEX.md](CODEX.md). `docs/`·`tools/` 는 메인테이너용 참고 자료라 사용자는 읽지 않아도 된다. 메인테이너 개인 노트 `CLAUDE.local.md` 는 배포본에 없다.)
 
 ## 0. kiki 가 무엇인가 (한 줄)
-KIST 행정 자동화 skill 7종(`kk-mail`·`kk-dooray`·`kk-wiki`·`kk-pay`·`kk-meeting`·`kk-budget`·`kk-inspect`). **로그인된 Chrome 을 "Claude in Chrome" 확장 + chrome-devtools-mcp 로 제어**해 포털/Dooray 를 다룬다. skill 은 `~/.claude/skills/` 에 두면 Claude Code·Desktop 이 인식한다(설치 후 **재시작 필요**).
+KIST 행정 자동화 skill 7종(`kk-mail`·`kk-dry`·`kk-wiki`·`kk-pay`·`kk-meet`·`kk-budget`·`kk-inspect`). **로그인된 Chrome 을 "Claude in Chrome" 확장 + chrome-devtools-mcp 로 제어**해 포털/Dooray 를 다룬다. skill 은 `~/.claude/skills/` 에 두면 Claude Code·Desktop 이 인식한다(설치 후 **재시작 필요**).
 
-**권장 모델**: 설치·첫 설정·첫 1~2회 실사용 = **Opus 5**(Fable 5.1 가능하면) · 노력도 high. 이후 kk-budget 은 Sonnet 5, kk-mail 은 Opus 5(분류, 스팸처리 Sonnet 5), kk-dooray 는 Opus 5(찾은 것을 뜻으로 고르기), kk-pay 카드 RPA·kk-inspect 는 Sonnet 5(high), **kk-meeting·kk-pay 세금계산서 직접작성은 Opus 5 유지**. README 에는 skill 별 권장모델(Opus/Sonnet)만 있으므로 **설치 완료 안내(Step 5) 때 "첫 설치·각 skill 첫 1~2회는 Opus, 이후 README 표대로" 를 한 번 알려준다**. 사용자가 다른 모델로 설치를 시작했으면 한 줄로 알려주되 진행은 계속한다.
+**권장 모델**: 설치·첫 설정·첫 1~2회 실사용 = **Opus 5**(Fable 5.1 가능하면) · 노력도 high. 이후 kk-budget 은 Sonnet 5, kk-mail 은 Opus 5(분류, 스팸처리 Sonnet 5), kk-dry 는 Opus 5(찾은 것을 뜻으로 고르기), kk-pay 카드 RPA·kk-inspect 는 Sonnet 5(high), **kk-meet·kk-pay 세금계산서 직접작성은 Opus 5 유지**. README 에는 skill 별 권장모델(Opus/Sonnet)만 있으므로 **설치 완료 안내(Step 5) 때 "첫 설치·각 skill 첫 1~2회는 Opus, 이후 README 표대로" 를 한 번 알려준다**. 사용자가 다른 모델로 설치를 시작했으면 한 줄로 알려주되 진행은 계속한다.
 
 ---
 
 ## 1. 설치 절차 (에이전트가 그대로 실행)
 
 ### Step 0 — 실행 환경 (Python · Node.js · 사내망)
-- **Python 3 와 Node.js 는 설치 때 기본으로 갖춘다** — 전체 설치(기본)면 둘 다, 사용자가 skill 을 골랐으면: kk-mail 만 → 둘 다 불필요 / kk-dooray → Python(받기·쓰기·올리기 때 — 찾기만이면 불필요) / kk-budget·kk-wiki → Python / **kk-pay·kk-meeting·kk-inspect(첨부 skill) → Python + Node.js**(chrome-devtools-mcp 가 Node 프로그램).
+- **Python 3 와 Node.js 는 설치 때 기본으로 갖춘다** — 전체 설치(기본)면 둘 다, 사용자가 skill 을 골랐으면: kk-mail 만 → 둘 다 불필요 / kk-dry → Python(받기·쓰기·올리기 때 — 찾기만이면 불필요) / kk-budget·kk-wiki → Python / **kk-pay·kk-meet·kk-inspect(첨부 skill) → Python + Node.js**(chrome-devtools-mcp 가 Node 프로그램).
 - 확인: `python --version`(macOS/Linux `python3`), `node --version`, `npx --version`. Windows 는 `python` 이 없어도 `py -3 --version` 이 되면 설치된 것(py 런처는 항상 PATH 에 있음) — 그 경우 이후 모든 명령을 `python` 대신 `py -3` 로 실행한다. `python` 을 쳤을 때 **Microsoft Store 창이 열리면 미설치**(Windows 의 가짜 python.exe).
 - 없으면 **에이전트가 바로 설치를 시작한다**(kk-mail 만 설치하는 경우 제외 — 확인 질문 없이, 시작 전에 한 줄만 알린다): *"Python(과 Node.js)이 없어 지금 설치합니다 — Python 은 엑셀·증빙 변환, Node.js 는 파일첨부 도구에 필요합니다. 1~3분 걸리고, 중간에 '사용자 계정 컨트롤' 창이나 설치 화면이 뜨면 **예 / 다음**을 눌러 주세요."* 그 다음:
   - Windows: `winget install -e --id Python.Python.3.12 --accept-source-agreements --accept-package-agreements` → `winget install -e --id OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements` (조용히 설치. Node.js 는 PC 전체 설치라 **UAC 창이 뜬다** — 사용자가 '예'를 눌러야 진행되니 실행 직후 그 사실을 다시 알린다. 타임아웃은 5분 이상으로.)
@@ -38,7 +38,7 @@ KIST 행정 자동화 skill 7종(`kk-mail`·`kk-dooray`·`kk-wiki`·`kk-pay`·`k
 ### Step 2 — skill 설치 (OS 자동 감지)
 현재 OS 를 판단해 **하나만** 실행한다. `-Root`/`--root` 에 Step 1 의 폴더를 넘긴다(패키지 폴더 = root 면 생략 가능).
 - 설치 폴더가 곧 kiki 작업 폴더면 `{root}/wiki`(kk-wiki 내부 자료)·`budget`·`meeting`·`inspect` 는 `.gitignore` 로 제외된다(그래도 `git add -A` 로 올리지 않도록 주의).
-- 기존 설치본 갱신이면: 2026-09-26 부터 `kk-dining` 은 **`kk-meeting`** 으로 이름이 바뀌었다. 설치 스크립트가 옛 `~/.claude/skills/kk-dining` 폴더를 지우고 개인 설정 `~/.claude/kiki/kk-dining.config.json` 을 `kk-meeting.config.json` 으로 바꾼다(수동 설치면 직접). 데이터 폴더도 `{kiki_root}/dining/` → `{kiki_root}/meeting/` 으로 바뀌었다(설치 스크립트가 기존 `dining/` 폴더 이름을 `meeting/` 으로 바꾼다. 수동 설치면 직접).
+- 기존 설치본 갱신이면: skill 이름이 바뀌었다 — 2026-09-26 `kk-dining` → `kk-meeting`, 2026-09-29 `kk-meeting` → **`kk-meet`**, `kk-dooray` → **`kk-dry`**. 새 이름 skill 을 설치하면 설치 스크립트가 옛 폴더(`~/.claude/skills/kk-dining`·`kk-meeting`·`kk-dooray`)를 지우고 개인 설정 `kk-dining.config.json`·`kk-meeting.config.json` 을 `kk-meet.config.json` 으로, 캐시 `kk-dooray.cache.json` 을 `kk-dry.cache.json` 으로 바꾼다(수동 설치면 직접 — 옛 설정·캐시 이름은 스크립트가 없어도 읽어 쓴다). 데이터 폴더도 `{kiki_root}/dining/` → `{kiki_root}/meeting/` 으로 바뀌었다(kk-meet 을 설치할 때 설치 스크립트가 기존 `dining/` 폴더 이름을 `meeting/` 으로 바꾼다. 수동 설치면 직접). 다른 skill 만 설치하면 옛 skill 의 폴더·설정·데이터는 그대로 둔다.
 - **Windows** (PowerShell) — 신규 PC 는 실행정책이 `Restricted` 라 `./install.ps1` 이 막힌다. **Bypass 로 호출**:
   ```powershell
   powershell -NoProfile -ExecutionPolicy Bypass -File ./install.ps1 -Root "C:/kiki"   # 전체 (또는 끝에 kk-mail kk-pay ...). -Root 는 꼭 이름을 붙여서
@@ -83,11 +83,11 @@ KIST 행정 자동화 skill 7종(`kk-mail`·`kk-dooray`·`kk-wiki`·`kk-pay`·`k
 | skill / 작업 | Chrome 창 | 로그인 |
 |--------------|-----------|--------|
 | kk-mail | 평소 Chrome(확장) | Dooray |
-| kk-dooray | 평소 Chrome(확장) (+ 받기·쓰기·올리기는 `token.txt`) | Dooray. 새 창 없음 |
+| kk-dry | 평소 Chrome(확장) (+ 받기·쓰기·올리기는 `token.txt`) | Dooray. 새 창 없음 |
 | kk-budget | 평소 Chrome(확장) | 포탈 `e.kist.re.kr` |
 | kk-wiki | 평소 Chrome(확장) 또는 토큰만(브라우저 불요) | Dooray(위키) + 담당자표는 포탈 |
 | kk-pay 카드 RPA 업로드 | 평소 Chrome(확장) + `token.txt` | 포탈 + Dooray. 새 창 없음 |
-| kk-pay 세금계산서 직접작성 · kk-meeting · kk-inspect | **Claude 전용 새 Chrome 창**(chrome-devtools) | 그 창에서 포탈 로그인 **한 번 더** |
+| kk-pay 세금계산서 직접작성 · kk-meet · kk-inspect | **Claude 전용 새 Chrome 창**(chrome-devtools) | 그 창에서 포탈 로그인 **한 번 더** |
 
 - 새 창은 별도 프로필이라 평소 Chrome 의 로그인이 넘어오지 않는다 — 낯설어하므로 **첨부 작업 시작 전에 먼저 설명**하고 로그인을 요청한다. (chrome-devtools-mcp 를 `--autoConnect` 로 등록했다면 새 창 대신 평소 Chrome 에 붙어 로그인이 그대로다 — `list_pages` 에 평소 탭이 보이면 이쪽.) 한 번 로그인하면 기억한다(정오 세션 리셋 제외).
 - 로그인은 **사용자 본인이**(Claude 가 대신 로그인하지 않는다). 업무화면 딥링크 전에 항상 `e.kist.re.kr` 먼저.
