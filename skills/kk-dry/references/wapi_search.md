@@ -64,7 +64,8 @@ GET /v2/wapi/drives/{driveId}/files/{fileId}
 ## 7. 링크 형식
 | 대상 | 주소 | 비고 |
 |---|---|---|
-| 업무 | `https://kist.gov-dooray.com/task/{projectId}/{taskId}` | |
+| 업무 | `https://kist.gov-dooray.com/task/{projectId}/{taskId}` | 본문 첨부도 이 주소 |
+| 업무 댓글(답글) ★ | `https://kist.gov-dooray.com/project/tasks/{taskId}#comment-{댓글 id}` | Dooray 댓글의 '링크 복사'(`detailEventCommentCopyUrl`) 가 주는 주소(2026-09-30 실측). 열면 그 업무가 뜨고 그 댓글로 스크롤된다. 댓글 id = 댓글 목록(`/events?eventType=comment`)의 `id`, 화면 요소 `id="comment-{id}"`. Dooray 화면은 최근 댓글 10개만 먼저 그려서, 더 오래된 댓글이면 Dooray 가 '더보기 버튼을 눌러 댓글을 확인해주세요' 안내를 띄운다(실측). 댓글에 단 첨부의 링크는 이 주소(첨부 → 댓글은 댓글의 `fileIdList` 로 맞춤 — 업무 `fileMap` 에는 어느 댓글인지 없음) |
 | 드라이브 파일 ★ | `https://kist.gov-dooray.com/drive/{projectId}/{부모 폴더 id}/views/{fileId}` | 폴더 안 파일을 누르면 생기는 주소(2026-09-29 실측). 새로 열어도 그 폴더가 열리고(왼쪽 트리 펼침) 파일이 선택되며 오른쪽에 미리보기 첫 장·크기·경로·히스토리. 부모 폴더 id = 파일 상세의 `parentFile.id`(검색 결과에는 없음 → 코어 `drivePath` 가 채움) |
 | 드라이브 파일(대안) | `https://kist.gov-dooray.com/drive/{projectId}/views/{fileId}?query=<all=낱말&all=낱말 을 인코딩>` | 검색 결과 화면에서 그 파일이 선택된다(부모 폴더를 모를 때). 낱말 = 파일 이름을 띄어쓰기로 나눈 것, 한글 이름도 됨(한 번·두 번 인코딩 모두 실측 OK) |
 | ⚠ `…/drive/{projectId}/views/{fileId}` (검색어 없이) | | **드라이브 최상위 폴더가 열리고 파일은 안 보인다**(2026-09-29 사용자 지적으로 확인). 검색창 결과 화면 안에서 누를 때만 선택 상태가 된다 — 링크로 주지 않는다 |

@@ -2,7 +2,7 @@
 
 > kiki 의 skill 본문은 **Claude (Claude Code / Claude in Chrome)** 기준으로 쓰여 있다. 이 문서는 **Codex Desktop / Codex CLI** 의 도구 이름·설치 경로·환경 차이만 정리하는 **Codex 어댑터**다.
 > 정본은 [CLAUDE.md](CLAUDE.md)·[INSTALL.md](INSTALL.md)·[README](README.md)·[환경 점검](skills/_shared/environment_setup.md)과 각 skill 의 `SKILL.md`다. 상세 절차는 정본을 따르고, 여기서는 Codex 차이만 적용한다.
-> 문서 동기화: **2026-09-30, v0.7.9** ([변경 이력](docs/HISTORY.md)) — 코어 kk-dry 2.11·kk-mail 1.13 기준(아래 Codex 실측 기록은 그 날짜·버전 그대로). 통합정보·메일의 Codex 브라우저 실측은 2026-09-27, kk-dry의 큰 결과 반환 실측은 2026-09-29 격리된 합성 페이지 기준이다. kk-dry 2.3은 2026-09-30 Dooray 실계정에서 검색·본문/첨부·슬라이드/문서 읽기와 공식 API 파일 스트림(메모리)·미리보기를 확인했다(2.4는 quick 요약의 파일 수 표시만 다름). `--yes` 저장·게시·업로드는 검증하지 않았다. 버전·연결 방식에 따른 차이는 따로 표시한다.
+> 문서 동기화: **2026-09-30, v0.7.10** ([변경 이력](docs/HISTORY.md)) — 코어 kk-dry 2.12·kk-mail 1.13 기준(아래 Codex 실측 기록은 그 날짜·버전 그대로). 통합정보·메일의 Codex 브라우저 실측은 2026-09-27, kk-dry의 큰 결과 반환 실측은 2026-09-29 격리된 합성 페이지 기준이다. kk-dry 2.3은 2026-09-30 Dooray 실계정에서 검색·본문/첨부·슬라이드/문서 읽기와 공식 API 파일 스트림(메모리)·미리보기를 확인했다(2.4는 quick 요약의 파일 수 표시만 다름). `--yes` 저장·게시·업로드는 검증하지 않았다. 버전·연결 방식에 따른 차이는 따로 표시한다.
 
 ## 1. 설치 구조 (Codex)
 **설치 폴더부터 묻는다**: 기본 `C:\kiki`(Windows) / `~/kiki`(macOS/Linux) 또는 사용자 지정 경로. 선택한 `kiki_root`에 패키지를 확보하고 그 폴더에서 진행한다(git 불요: ZIP/동료 폴더 가능). 원본 `skills/`를 아래 Codex 경로에 복사한다. 배포본 `install.ps1`·`install.sh`는 Claude 경로용이므로 Codex 설치에는 아래 복사 예를 쓴다.
@@ -138,7 +138,7 @@ s.textContent = `[id*="_form_modalPopDiv"], [id*="modalPopDivScrollableInnerCont
 ```js
 () => {
   const c = localStorage.getItem('kk.dry.core') || '';
-  if (c.includes('kk-dry-ops/2.11')) return (0, eval)(c);
+  if (c.includes('kk-dry-ops/2.12')) return (0, eval)(c);
   document.body.innerHTML = '';
   const i = document.createElement('input');
   i.type = 'file'; i.id = 'kkcore'; i.setAttribute('aria-label', 'kk core file');
@@ -147,14 +147,14 @@ s.textContent = `[id*="_form_modalPopDiv"], [id*="modalPopDivScrollableInnerCont
 }
 ```
 
-`NEED_UPLOAD`이면 `take_snapshot({pageId})`에서 **최신** 파일 입력의 `uid`를 얻어 `upload_file({pageId, uid, filePaths:["<설치본>/scripts/kk_dry_ops.min.js의 절대경로"]})`를 호출한다. 이어서 아래 함수를 `evaluate_script({pageId, function:"async () => { ... }"})`로 실행하고 `kk-dry-ops/2.11 =^.^=` 반환을 확인한다. 파일 경로가 도구의 workspace 검사에서 거부되면 §5처럼 **코어 파일만** OS 임시폴더에 복사해 업로드한다. 새로고침 뒤에는 저장된 코어의 버전을 확인해 다시 주입한다. 전역은 `window.kkDry`이며 `window.kkDooray`는 구 이름 별칭이다.
+`NEED_UPLOAD`이면 `take_snapshot({pageId})`에서 **최신** 파일 입력의 `uid`를 얻어 `upload_file({pageId, uid, filePaths:["<설치본>/scripts/kk_dry_ops.min.js의 절대경로"]})`를 호출한다. 이어서 아래 함수를 `evaluate_script({pageId, function:"async () => { ... }"})`로 실행하고 `kk-dry-ops/2.12 =^.^=` 반환을 확인한다. 파일 경로가 도구의 workspace 검사에서 거부되면 §5처럼 **코어 파일만** OS 임시폴더에 복사해 업로드한다. 새로고침 뒤에는 저장된 코어의 버전을 확인해 다시 주입한다. 전역은 `window.kkDry`이며 `window.kkDooray`는 구 이름 별칭이다.
 
 ```js
 async () => {
   const f = document.getElementById('kkcore')?.files?.[0];
   if (!f) return 'ERR 코어 파일 없음';
   const c = await f.text();
-  if (!c.includes('kk-dry-ops/2.11')) return 'ERR 코어 버전 다름';
+  if (!c.includes('kk-dry-ops/2.12')) return 'ERR 코어 버전 다름';
   localStorage.setItem('kk.dry.core', c);
   return (0, eval)(c);
 }

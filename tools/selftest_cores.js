@@ -521,7 +521,7 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
       return J({ header: { isSuccessful: true }, result: [T1, T2], totalCount: 2, references: TREFS });
     }
     if (url.startsWith('/wapi/task/v1/tasks/')) return J({ header: { isSuccessful: true }, result: Object.assign({}, T1, { fileIdList: ['F1', 'F2'], body: { mimeType: 'text/x-markdown', content: '## 할 일\n**초안** 작성 [양식](https://example.org/x?a=1&b=2) ![그림](/files/9)\n마감 9/30' } }), references: { fileMap: { F1: { id: 'F1', name: '보고서_초안.hwp', size: 4096, createdAt: '2026-09-02T10:00:00+09:00', downloadUrl: '/files/F1', creator: { type: 'member', member: { name: '김키키' } } }, F2: { id: 'F2', name: '보고서_수정.docx', size: 9000, createdAt: '2026-09-19T09:00:00+09:00', downloadUrl: '/files/F2' } } } });   // 댓글 첨부(F2)도 업무 첨부 목록에 함께 온다(실측)
-    if (url.includes('/events?')) return J({ header: { isSuccessful: true }, totalCount: 2, result: [{ createdAt: '2026-09-19T09:00:00+09:00', creator: { type: 'member', member: { name: '이키키' } }, body: { mimeType: 'text/x-markdown', content: '수정본 올렸습니다' }, fileIdList: ['F2'] }, { createdAt: '2026-09-10T09:00:00+09:00', creator: { type: 'member', member: { name: '김키키' } }, body: { mimeType: 'text/html', content: '<p>검토 부탁</p>' } }], references: { fileMap: { F2: { id: 'F2', name: '보고서_수정.docx', size: 9000, createdAt: '2026-09-19T09:00:00+09:00', downloadUrl: '/files/F2' } } } });
+    if (url.includes('/events?')) return J({ header: { isSuccessful: true }, totalCount: 2, result: [{ id: '4400000000000000001', createdAt: '2026-09-19T09:00:00+09:00', creator: { type: 'member', member: { name: '이키키' } }, body: { mimeType: 'text/x-markdown', content: '수정본 올렸습니다' }, fileIdList: ['F2'] }, { createdAt: '2026-09-10T09:00:00+09:00', creator: { type: 'member', member: { name: '김키키' } }, body: { mimeType: 'text/html', content: '<p>검토 부탁</p>' } }], references: { fileMap: { F2: { id: 'F2', name: '보고서_수정.docx', size: 9000, createdAt: '2026-09-19T09:00:00+09:00', downloadUrl: '/files/F2' } } } });
     if (url.startsWith('/v2/wapi/drives/search')) {
       if (dmode === 'driveReject') return J({ header: { isSuccessful: false, resultMessage: 'search failed' } });
       if (dmode === 'unsorted') return J({ header: { isSuccessful: true }, result: { totalCount: 2, contents: [DC('5100000000000000008', '2025', 'folder', '2025-01-01T12:00:00+09:00'), DC('5100000000000000009', '260610_○○_발표.pptx', 'file', '2026-06-10T12:00:00+09:00')], references: DREFS } });
@@ -530,7 +530,7 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
     if (url.startsWith('/v2/wapi/drives/D1/files/')) return J({ header: { isSuccessful: true }, result: { content: { parentFile: { id: '5100000000000000002', path: 'root/2026/2026-06' } } } });
     return { ok: false, status: 404, text: async () => '{}' };
   };
-  ok('dry inject 2.11', load('kk-dry/scripts/kk_dry_ops.min.js') === 'kk-dry-ops/2.11 =^.^=');
+  ok('dry inject 2.12', load('kk-dry/scripts/kk_dry_ops.min.js') === 'kk-dry-ops/2.12 =^.^=');
   const DR = window.kkDry;
   const noQ = (s) => !/=/.test(s) && !/\w=\w*&/.test(s);
   window.__d = null; DR.find([['가나다'], ['가나다', '보고서']], { since: '2026-04-01' }).then(r => window.__d = r, e => window.__d = { error: String(e) });
@@ -607,6 +607,35 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
       a1.startsWith('OK 링크 1개') && a2.startsWith('✗') && a2.includes('✗ 1줄') && a3.includes('? 1줄') && a4.includes('최상위') && a5.startsWith('OK') && a6.startsWith('ERR'), [a1, a2, a3, a4, a5, a6].join(' // '));
     ok('dooray checkLinks: 이름이 비슷한 두 파일(260623 줄에 260713 주소)도 ✗ / 맞으면 OK, 출력에 주소·= 없음',
       a7.startsWith('✗') && a7.includes('260713') && a7.includes('260623') && a8.startsWith('OK 링크 2개') && !/https?:|=/.test(a7) && a9.startsWith('✗'), a7 + ' // ' + a8 + ' // ' + a9); }
+  { // 댓글(답글)에 단 첨부는 그 댓글을 가리키는 주소로(2026-09-30 사용자 요청 — 업무 전체가 아니라 첨부가 있는 글로)
+    const L = DR.last(), t0 = L.tasks.items[0], NL = String.fromCharCode(10), CU = 'https://kist.gov-dooray.com/project/tasks/' + t0.id + '#comment-4400000000000000001';
+    const fs = DR.filesOf(t0), fB = fs.find(f => f.name === '보고서_초안.hwp'), fC = fs.find(f => f.name === '보고서_수정.docx');
+    const lk = await DR.linkOf('보고서_수정');
+    const c1 = DR.checkLinks([`**보고서_수정.docx** — [열기](${CU})`]), c2 = DR.checkLinks([`**보고서_초안.hwp** — [열기](${CU})`]);
+    const c3 = DR.checkLinks([`**보고서_수정.docx** — [열기](${t0.url})`]), c4 = DR.checkLinks([`**보고서_초안.hwp** — [열기](${t0.url})`]);   // 댓글 첨부에 업무 주소 △ · 본문 첨부에 업무 주소 OK
+    DR.showFiles(0);
+    ok('dooray 댓글 첨부: filesOf 에 댓글 id · linkOf 는 그 댓글 주소 · 본문 첨부는 업무 주소 · checkLinks 댓글 주소 OK/다른 파일 ✗ · showFiles 줄에 댓글 주소',
+      fC && fC.cid === '4400000000000000001' && /^댓글/.test(fC.where) && fB && !fB.cid && fB.where === '본문'
+      && lk.split(NL).some(l => l.includes('보고서_수정.docx') && l.endsWith(CU)) && c1.startsWith('OK') && c2.startsWith('✗') && c3.startsWith('✗') && c3.includes('댓글에 단 파일') && c4.startsWith('OK')
+      && shownText.split(NL).some(l => l.includes('보고서_수정.docx') && l.includes(CU)) && !shownText.split(NL).some(l => l.includes('보고서_초안.hwp') && l.includes('#comment-')),
+      [JSON.stringify(fC), lk, c1, c2, c3, c4].join(' // ')); }
+  { // quick 처럼 댓글을 안 읽어도(comments:0) 첨부가 있으면 첨부 → 댓글을 맞추고, 검색 항목이면 업무 조회와 동시에 받는다
+    const bfC = global.fetch, calls = [];
+    global.fetch = async (url) => {
+      const s = String(url); calls.push(s.includes('/events?') ? 'ev' : 'task');
+      if (s.startsWith('/wapi/task/v1/tasks/')) return J({ header: { isSuccessful: true }, result: Object.assign({}, T1, { fileIdList: ['F1', 'F2'] }), references: { fileMap: { F1: { id: 'F1', name: 'a.hwp', size: 1, createdAt: '2026-09-02T10:00:00+09:00', downloadUrl: '/files/F1' }, F2: { id: 'F2', name: 'b.hwp', size: 1, createdAt: '2026-09-03T10:00:00+09:00', downloadUrl: '/files/F2' } } } });
+      if (s.includes('/events?')) return J({ header: { isSuccessful: true }, totalCount: 1, result: [{ id: '4400000000000000009', createdAt: '2026-09-03T10:00:00+09:00', fileIdList: ['F2'], body: { mimeType: 'text/x-markdown', content: 'x' } }], references: {} });
+      return { ok: false, status: 404, text: async () => '{}' };
+    };
+    const q0 = await DR.getTask({ id: T1.id, projectId: T1.projectId, number: T1.number, files: 2 }, { comments: 0 });
+    global.fetch = async (url) => String(url).includes('/events?') ? { ok: false, status: 500, text: async () => '{}' } : J({ header: { isSuccessful: true }, result: Object.assign({}, T1, { fileIdList: ['F1'] }), references: { fileMap: { F1: { id: 'F1', name: 'a.hwp', size: 1, createdAt: '2026-09-02T10:00:00+09:00', downloadUrl: '/files/F1' } } } });
+    const q1 = await DR.getTask({ id: T1.id }, { comments: 0 });   // 댓글 목록 실패 → 어느 글인지 모름(본문·댓글), 링크는 업무
+    global.fetch = bfC;
+    const g = DR.filesOf(q0), g1 = DR.filesOf(q1);
+    ok('dooray comments:0 첨부 → 댓글 대응: 댓글 첨부만 cid · 동시 요청(업무·댓글 둘 다 첫 요청 전에 시작) · 실패하면 본문·댓글(링크 업무)',
+      g.find(f => f.name === 'b.hwp').cid === '4400000000000000009' && g.find(f => f.name === 'a.hwp').where === '본문' && q0.detail.comments.length === 0 && calls.slice(0, 2).sort().join() === 'ev,task'
+      && !g1[0].cid && g1[0].where === '본문·댓글' && !q1.detail.commentError,
+      JSON.stringify([g, g1, calls])); }
   ok('dooray showItems(only 결과) 줄 제한 없이', DR.showItems(DR.only(DR.last().tasks, { who: '이키키' })).startsWith('shown') && shownText.startsWith('■ 목록 3건'), shownText.slice(0, 80));
   // 결과가 5만 자를 넘지 않게 스스로 줄이기 + 첨부 전체 목록(showFiles) — 2026-09-29 실사용 결함(10.7만 자 → get_page_text 5만 자 잘림)
   await DR.report([['가나다']]);   // 작은 결과는 그대로(줄임 없음·첨부 이름 전부)

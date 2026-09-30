@@ -99,6 +99,11 @@
       url: `${BASE}/task/${t.projectId}/${t.id}`,
     };
   }
+  // 댓글(답글) 하나를 가리키는 주소 — Dooray 댓글의 '링크 복사'와 같은 꼴(2026-09-30 실측). 열면 그 업무가 뜨고 그 댓글로 스크롤된다.
+  //   Dooray 화면은 최근 댓글 10개만 먼저 그리므로 더 오래된 댓글이면 Dooray 가 '더보기 버튼을 눌러 댓글을 확인해주세요' 안내를 띄운다(실측).
+  const cmtUrl = (taskId, cid) => `${BASE}/project/tasks/${taskId}#comment-${cid}`;
+  // 업무 첨부 파일의 링크: 댓글에 단 파일이면 그 댓글, 본문 첨부면 그 업무
+  const attUrl = (it, f) => f && f.cid ? cmtUrl(f.taskId || it.id, f.cid) : it.url;
   // 한 프로젝트만: opt.projectId → /projects/!{id}/tasks (번호 앞 '!' 필수 — 없으면 SERVICE_RESOURCE_PROJECT_NOT_FOUND, 2026-09-29 실측).
   //   이때는 검색어 없이도 된다 → 그 프로젝트 업무 전체 목록(이름 검색은 글 속 이름만 찾으므로, 찾은 업무의 프로젝트를 통째로 볼 때).
   async function searchTasks(terms, opt = {}) {
@@ -254,6 +259,9 @@
   }
   async function getTask(x, { comments = 20, bodyChars = 200000 } = {}) {   // 본문·댓글은 끝까지(20만·5만 자 넘을 때만 자르고 textCut·cut 로 표시 — Codex 검토 M4)
     const id = String(x && x.id ? x.id : x).replace(/-/g, '');
+    const evUrl = (pid, num, size) => `/wapi/task/v1/projects/!${pid}/tasks/${num}/events?size=${size}&order=-createdAt&fields=me&direction=%3A&eventType=comment`;
+    const early = x && x.projectId && x.number != null && (comments > 0 || x.files)
+      ? dfetch(evUrl(x.projectId, x.number, comments > 0 ? comments : 100)).catch(e => ({ __err: e })) : null;   // 업무 조회와 동시에
     const d = await dfetch(`/wapi/task/v1/tasks/${id}?fields=me%2Cbody`);
     const t = d.result;
     if (apiErr(d) || !t || !t.id) throw new Error('DOORAY 업무 조회 실패: ' + (apiErr(d) || 'no result'));
@@ -262,15 +270,29 @@
     const fullText = bodyText(t.body), text = fullText.slice(0, bodyChars);
     const withTask = (f) => Object.assign(fileOf(f), { taskId: String(t.id) });   // 첨부 미리보기(서버 변환)에 업무 번호가 필요
     const det = { text, textLen: text.length, textFull: fullText.length, textCut: fullText.length > text.length, fileList: (t.fileIdList || []).map(fid => fm[fid]).filter(Boolean).map(withTask), comments: [], commentTotal: 0 };
-    if (comments > 0 && t.number != null) {
+    // 첨부가 어느 댓글에 달렸는지(det.fileCmt: 첨부 id → {cid, date}) — 링크를 그 댓글로 주려고. comments:0(quick) 이어도 첨부가 있으면 최근 100개를 한 번 받아 맞춘다.
+    //   검색 항목에 프로젝트·번호가 있으면(find·report 결과) 업무 조회와 동시에 받아 시간을 늘리지 않는다.
+    det.fileCmt = {}; det.fileCmtAll = !det.fileList.length;
+    if (t.number != null && (comments > 0 || det.fileList.length)) {
       try {
-        const c = await dfetch(`/wapi/task/v1/projects/!${t.projectId}/tasks/${t.number}/events?size=${comments}&order=-createdAt&fields=me&direction=%3A&eventType=comment`);
+        const c = early ? await early : await dfetch(evUrl(t.projectId, t.number, comments > 0 ? comments : 100));
+        if (c && c.__err) throw c.__err;
         if (!Array.isArray(c.result)) throw new Error(apiErr(c) || 'no result');
         const cfm = (c.references && c.references.fileMap) || {};
-        det.commentTotal = c.totalCount != null ? c.totalCount : c.result.length;
-        det.comments = c.result.map(e => ({ date: e.createdAt || '', who: nameOf(e.creator), text: bodyText(e.body).slice(0, 50000), cut: bodyText(e.body).length > 50000,
-          files: (e.fileIdList || []).map(fid => cfm[fid]).filter(Boolean).map(withTask) }));
-      } catch (e) { det.commentError = 'DOORAY 댓글 조회 실패: ' + errText(e); }
+        const total = c.totalCount != null ? c.totalCount : c.result.length;
+        const mapOf = (list) => list.forEach(e => { if (e.id) (e.fileIdList || []).forEach(fid => { if (!det.fileCmt[fid]) det.fileCmt[fid] = { cid: String(e.id), date: e.createdAt || '' }; }); });
+        mapOf(c.result);
+        let all = c.result.length >= total;
+        if (comments > 0) {
+          det.commentTotal = total;
+          det.comments = c.result.map(e => ({ cid: e.id ? String(e.id) : '', date: e.createdAt || '', who: nameOf(e.creator), text: bodyText(e.body).slice(0, 50000), cut: bodyText(e.body).length > 50000,
+            files: (e.fileIdList || []).map(fid => cfm[fid]).filter(Boolean).map(withTask).map(f => e.id ? Object.assign(f, { cid: String(e.id) }) : f) }));
+          if (!all && det.fileList.length && c.result.length < 100) {   // 받은 댓글보다 오래된 댓글의 첨부도 맞추려고 한 번 더(최근 100개)
+            try { const c2 = await dfetch(evUrl(t.projectId, t.number, 100)); if (Array.isArray(c2.result)) { mapOf(c2.result); all = c2.result.length >= total; } } catch (e) { /* 맞춘 만큼만 */ }
+          }
+        }
+        det.fileCmtAll = all;
+      } catch (e) { if (comments > 0) det.commentError = 'DOORAY 댓글 조회 실패: ' + errText(e); }
     }
     it.detail = det;
     return it;
@@ -921,7 +943,7 @@
   function scanList(x) {
     const out = [], seen = new Set();
     listOf(x).forEach(it => {
-      if (it && it.kind === 'task') filesOf(it).forEach(f => { if (f.id && seen.has(f.id)) return; if (f.id) seen.add(f.id); out.push(Object.assign({}, f, { url: it.url, updated: f.created, via: it.subject, taskId: f.taskId || it.id })); });
+      if (it && it.kind === 'task') filesOf(it).forEach(f => { if (f.id && seen.has(f.id)) return; if (f.id) seen.add(f.id); out.push(Object.assign({}, f, { url: attUrl(it, f), updated: f.created, via: it.subject, taskId: f.taskId || it.id })); });
       else if (it) out.push(it);
     });
     return out;
@@ -1108,7 +1130,7 @@
     let used = H.join('\n').length;
     for (let i = 0; i < hitF.length; i++) {
       const v = hitF[i];
-      const B = [`== [F${v.k}] ${ymd(v.f.updated || v.f.created)} | ${v.f.name} | ${kb(v.f.size)}${v.f.via ? ' | 업무 ' + v.f.via : ''} | ${v.unit} ${v.n}(그림·차트·표 있는 곳 ${v.figs}) | 걸림 ${v.hits.length} | ${(v.ms / 1000).toFixed(1)}초` + partNote(v) + (v.f.url ? ' → ' + v.f.url : '')];
+      const B = [`== [F${v.k}] ${ymd(v.f.updated || v.f.created)} | ${v.f.name} | ${kb(v.f.size)}${v.f.via ? ' | ' + whereOf(v.f) : ''} | ${v.unit} ${v.n}(그림·차트·표 있는 곳 ${v.figs}) | 걸림 ${v.hits.length} | ${(v.ms / 1000).toFixed(1)}초` + partNote(v) + (v.f.url ? ' → ' + v.f.url : '')];
       v.hits.slice(0, perFile).forEach(u => B.push('  ' + [labOf(v, u), figTag(u), clip(u.text.replace(/\s+/g, ' '), chars)].filter(Boolean).join(' ')
         + (u.chart.length ? ' {' + u.chart.map(chartStr).join(' | ').slice(0, 300) + '}' : '') + (u.alt.length ? ' {그림 설명 ' + u.alt.slice(0, 3).join(' | ').slice(0, 120) + '}' : '')
         + (u.ctx ? ' {다음 문단 ' + clip(u.ctx, 120) + '}' : '') + (u.note ? ' {메모 ' + clip(u.note, 120) + '}' : '')));
@@ -1187,7 +1209,7 @@
     dropBlobs();
     progress = '그림 준비 중';
     const head = FIG_CSS + `<h2>${esc(opt.title || 'kk-dry 결과 — 찾은 그림')}</h2>` + (opt.intro || '')
-      + '<p class="meta">Chrome 안에서만 만든 화면입니다 — 파일로 저장되지 않고, 이 탭을 닫으면 사라집니다. 그림을 누르면 크게 보입니다. "Dooray 에서 열기"는 그 파일이 선택된 드라이브 폴더(업무 첨부는 그 업무)를 엽니다.</p>';
+      + '<p class="meta">Chrome 안에서만 만든 화면입니다 — 파일로 저장되지 않고, 이 탭을 닫으면 사라집니다. 그림을 누르면 크게 보입니다. "Dooray 에서 열기"는 그 파일이 선택된 드라이브 폴더를 엽니다(업무 첨부는 그 파일이 달린 글 — 댓글에 단 파일은 그 댓글로).</p>';
     const parts = [], waitTxt = (i) => `⏳ 그림 준비 중 … 파일 ${i}/${P.length} — 준비된 것부터 위에 붙습니다`;
     const box = () => (typeof document.getElementById === 'function' && document.getElementById('kkres')) || null;
     const paint = (i, tail) => { document.body.innerHTML = head + `<div id="kkres">${parts.join('')}</div>` + (tail != null ? tail : `<p id="kkwait" class="wait">${esc(waitTxt(i))}</p>`); };
@@ -1301,7 +1323,7 @@
       }
       await waitOnce();
       ns += secs.filter(s => !s.err).length;
-      const meta = [ymd(it.updated || it.created), it.by, it.via ? '업무 ' + it.via : '', (it.drive || '') + (it.path ? ' ' + it.path : ''), kb(it.size)].filter(Boolean).join(' · ');
+      const meta = [ymd(it.updated || it.created), it.by, it.via ? whereOf(it) : '', (it.drive || '') + (it.path ? ' ' + it.path : ''), kb(it.size)].filter(Boolean).join(' · ');
       emit(`<section class="file" data-id="${esc(String(it.id || ''))}"><h3>${NUM[pi] || '(' + (pi + 1) + ')'} ${esc(it.name)}${p.note ? ` <span class="meta">— ${esc(p.note)}</span>` : ''}</h3>`
         + (p.memo ? `<div class="memo">${esc(p.memo)}</div>` : '')
         + `<div class="meta">${esc(meta)}` + (it.url ? ` · <a href="${esc(it.url)}" target="_blank">Dooray 에서 열기 ↗</a>` : '') + '</div>'
@@ -1546,7 +1568,7 @@
     const st = Math.max(0, Math.min(at - Math.floor(n / 3), t.length - n));
     return (st > 0 ? '…' : '') + t.slice(st, st + n) + (st + n < t.length ? '…' : '');
   }
-  const whereOf = (f) => f.via ? '업무 ' + f.via : [f.drive, f.path].filter(Boolean).join(' ');
+  const whereOf = (f) => f.via ? '업무 ' + f.via + (f.cid && f.where ? ' · ' + f.where : '') : [f.drive, f.path].filter(Boolean).join(' ');
   // 곳 이름 — 슬라이드 S3·문단 ¶12·쪽 p4, 엑셀은 실제 행 번호(R100, 시트가 여럿이면 '시트!R100')
   const labOf = (v, u) => (u && u.lab) || (v.tag + (u ? u.n : '?'));
   const unitByN = (v, n) => { if (!v._um) v._um = new Map(((v.doc && v.doc.units) || []).map(u => [u.n, u])); return v._um.get(n); };
@@ -1795,7 +1817,7 @@
       if (!fs.length) continue;
       fs.sort((a, b) => (c.sort === 'new' ? -1 : 1) * (tsOf(a.created) - tsOf(b.created)));
       const block = [`[T${k}] ${ymd(t.updated)} | ${t.project} #${t.number} | ${t.subject} | ${t.url}`]
-        .concat(fs.map(f => `   ${f.name} | ${kb(f.size)} | ${f.by || '?'} | ${ymd(f.created)} | ${f.where}` + (c.ids ? ' | id ' + f.id : '')));
+        .concat(fs.map(f => `   ${f.name} | ${kb(f.size)} | ${f.by || '?'} | ${ymd(f.created)} | ${f.where}` + (c.ids ? ' | id ' + f.id : '') + (f.cid ? ' → ' + attUrl(t, f) : '')));
       const len = block.join('\n').length + 1;
       if (used + len > BUDGET - 1500) { cut = true; break; }
       used += len; hit += fs.length; out.push(...block);
@@ -2018,8 +2040,13 @@
   function filesOf(it) {
     const d = (it && it.detail) || {};
     const fromC = [].concat(...(d.comments || []).map(c => c.files.map(f => Object.assign({ where: '댓글 ' + String(c.date).slice(2, 10) }, f))));
-    const seen = new Set(fromC.map(f => f.id).filter(Boolean));
-    return (d.fileList || []).filter(f => !f.id || !seen.has(f.id)).map(f => Object.assign({ where: '본문' }, f)).concat(fromC);
+    const seen = new Set(fromC.map(f => f.id).filter(Boolean)), fc = d.fileCmt || {};
+    // 댓글 목록에 안 보인 첨부: 첨부→댓글 대응(fileCmt)에 있으면 그 댓글, 댓글을 다 맞춰 봤는데 없으면 본문, 다 못 봤으면 '본문·댓글'(어느 쪽인지 모름 — 링크는 업무)
+    const rest = (d.fileList || []).filter(f => !f.id || !seen.has(f.id)).map(f => {
+      const m = f.id && fc[f.id];
+      return m ? Object.assign({ where: '댓글 ' + String(m.date).slice(2, 10) }, f, { cid: m.cid }) : Object.assign({ where: d.fileCmtAll === false ? '본문·댓글' : '본문' }, f);
+    });
+    return rest.filter(f => !f.cid).concat(fromC, rest.filter(f => f.cid));
   }
   // {ids:true} 면 줄 끝에 첨부 id — 받기(dooray_io.py task-download <업무 링크> --file <id>)에 그대로 넘긴다
   function fmtFiles(it, from = 0, to = 15, { ids = false } = {}) {
@@ -2062,7 +2089,8 @@
       if (S) S.files.forEach(v => { if (hit(v.f.name)) add(`[F${v.k}]`, v.f, v.f.name); });
       if (R) {
         ((R.drive && R.drive.items) || []).forEach((it, k) => { if (hit(it.name)) add(`[F${k}]`, it, it.name); });
-        ((R.tasks && R.tasks.items) || []).forEach((it, k) => { if (hit(it.subject)) add(`[T${k}]`, it, it.subject); });
+        ((R.tasks && R.tasks.items) || []).forEach((it, k) => { if (hit(it.subject)) add(`[T${k}]`, it, it.subject);
+          if (it.detail && !it.detail.error) filesOf(it).forEach(f => { if (hit(f.name)) add(`[T${k}]`, Object.assign({}, f, { url: attUrl(it, f), via: it.subject, updated: f.created }), f.name); }); });
       }
     }
     if (!picks.length) return 'ERR 결과에 그 파일이 없습니다 — ' + sanitize(String(x)) + ' (이름을 확인하거나 먼저 quick·report 로 찾기)';
@@ -2077,16 +2105,16 @@
   // checkLinks(답) — 링크가 든 답을 보내기 전에 한 번: 답의 Dooray 주소마다 같은 줄(이름이 없으면 바로 위 두 줄)의 파일·업무 이름이 그 주소의 것인지 결정적으로 대조한다.
   //   2026-09-30 실수(줄에는 260623, 주소는 260713) 뒤 추가. x = 답 글(여러 줄) · 줄 배열 · [이름, 주소] 쌍 배열.
   //   대조 대상 = 이 탭의 마지막 quick·scanFiles·report·find 결과(업무 링크는 그 업무 제목과 첨부 이름 모두 인정).
-  //   결과 첫 줄 'OK …' = 통과. '✗' = 다른 항목의 주소(linkOf 로 다시 받아 고침) · '?' = 찾은 결과에 없는 주소 · '△' = 줄에 이름이 없거나 최상위 폴더로 열리는 주소.
+  //   결과 첫 줄 'OK …' = 통과. '✗' = 다른 항목의 주소(linkOf 로 다시 받아 고침) · '?' = 찾은 결과에 없는 주소 · '△' = 줄에 이름이 없거나 최상위 폴더로 열리는 주소, 댓글에 단 파일에 업무 전체 주소.
   function checkLinks(x) {
     const lines = Array.isArray(x) ? x.map(v => Array.isArray(v) ? v.join(' ') : String(v == null ? '' : v)) : String(x == null ? '' : x).split(/\r?\n/);
     const known = new Map();   // 항목 id → [{tag, name}]
-    const put = (url, tag, name) => { const id = idOfUrl(url); if (!id || !name) return; if (!known.has(id)) known.set(id, []); const a = known.get(id); if (!a.some(e => e.name === name)) a.push({ tag, name: String(name) }); };
+    const put = (url, tag, name, cmt) => { const id = idOfUrl(url); if (!id || !name) return; if (!known.has(id)) known.set(id, []); const a = known.get(id); if (!a.some(e => e.name === name)) a.push({ tag, name: String(name), cmt: !!cmt }); };
     const S = (lastQuick && lastQuick.S) || lastScan, R = lastReport && !lastReport.error ? lastReport : null;
     if (S) S.files.forEach(v => { put(v.f.url, `[F${v.k}]`, v.f.name); if (v.f.via) put(v.f.url, `[F${v.k}]`, v.f.via); });
     if (R) {
       ((R.drive && R.drive.items) || []).forEach((it, k) => put(it.url, `[F${k}]`, it.name));
-      ((R.tasks && R.tasks.items) || []).forEach((it, k) => { put(it.url, `[T${k}]`, it.subject); filesOf(it).forEach(f => put(it.url, `[T${k}]`, f.name)); });
+      ((R.tasks && R.tasks.items) || []).forEach((it, k) => { put(it.url, `[T${k}]`, it.subject); filesOf(it).forEach(f => { put(it.url, `[T${k}]`, f.name, !!f.cid); if (f.cid) { put(attUrl(it, f), `[T${k}]`, f.name); put(attUrl(it, f), `[T${k}]`, it.subject); } }); });
     }
     if (!known.size) return 'ERR 대조할 찾기 결과가 없습니다 — 이 작업 탭에서 quick·report·find 로 찾은 뒤 부르세요(탭을 새로 열었으면 결과가 없어짐)';
     const toks = (s) => [...new Set(NF(s).toLowerCase().replace(/\.(pptx?|docx?|xlsx?|hwpx?|pdf|txt|csv|md|zip|png|jpe?g)\b/g, ' ').split(/[^\p{L}\p{N}]+/u).filter(t => t.length >= 2))];
@@ -2103,7 +2131,7 @@
       const own = present.filter(c => c.id === id).sort((a, b) => b.hit.length - a.hit.length)[0], oth = present.filter(c => c.id !== id && c.hit.some(strong)).sort((a, b) => b.hit.length - a.hit.length);
       if (!own) return { v: 'other', o: oth[0] };
       const rivals = oth.filter(c => !c.t.every(w => own.t.includes(w)));   // 내 이름의 일부일 뿐인 이름(report ⊂ report_v2)은 경쟁자가 아님
-      if (!rivals.length) return { v: 'ok' };
+      if (!rivals.length) return { v: 'ok', cmt: present.find(c => c.id === id && c.e.cmt) };
       const sup = rivals.find(c => own.t.every(w => c.t.includes(w)));      // 내 이름을 다 품은 더 긴 이름(report_v2 ⊃ report) → 그쪽 이름을 쓴 줄
       return sup ? { v: 'other', o: sup } : { v: 'two', o: rivals[0] };
     };
@@ -2126,6 +2154,7 @@
         if (!r) { out.push(`△ ${where}: 줄에 ${nm(es[0])} 의 이름이 없음 — 이름과 링크를 한 줄에`); bad++; }
         else if (r.v === 'other') { out.push(`✗ ${where}: 주소는 ${nm(es[0])} 의 것 — 줄의 이름은 ${nm(r.o.e)} → linkOf 로 다시`); bad++; }
         else if (r.v === 'two') { out.push(`△ ${where}: 링크 앞에 이름이 둘(${nm(es[0])} · ${nm(r.o.e)}) — 어느 파일 링크인지 모호, 이름과 링크를 한 줄에 하나씩`); bad++; }
+        else if (r.cmt) { out.push(`△ ${where}: ${nm(r.cmt.e)} 는 댓글에 단 파일 — 업무 전체 주소 말고 그 댓글 주소로(linkOf)`); bad++; }   // 사용자 요청 2026-09-30: 첨부가 있는 글을 정확히
       });
     });
     if (!n) return 'ERR 답에 Dooray 링크가 없습니다 — 링크가 든 줄을 넘기세요';
@@ -2134,7 +2163,8 @@
   }
   function idOfUrl(u) {
     u = String(u || '');
-    let m = u.match(/\/views\/(\d+)/); if (m) return m[1];
+    let m = u.match(/\/project\/tasks\/(\d+)#comment-(\d+)/); if (m) return m[1] + '#' + m[2];   // 댓글 주소 = 업무#댓글
+    m = u.match(/\/views\/(\d+)/); if (m) return m[1];
     m = u.match(/\/task\/\d+\/(\d+)/); if (m) return m[1];
     m = u.match(/\/drive\/\d+\/(\d+)/); if (m) return m[1];
     return '';
@@ -2155,7 +2185,7 @@
     find, report, last, show, showItems, showFiles, showText, only, filesOf, readFile, readBytes, saveFile,
     scanFiles, scanned, showFigures, showPages, quick, more, done, goto, _tableMd: tableMd, _tmo: TMO, previewOf, pageText, pageTexts, unitsOf, driveUrl, _inflate: inflateJS,
     fmtFind, fmtTasks, fmtDrive, fmtTask, fmtComments, fmtFiles, fmtLinks, linkOf, checkLinks, fmtText, fmtSaved, sanitize, hyId,
-    _version: 'kk-dry-ops/2.11',
+    _version: 'kk-dry-ops/2.12',
   };
   window.kkDooray = window.kkDry;   // 옛 이름(2026-09-29 kk-dooray → kk-dry 개명 전) — 같은 객체
   return window.kkDry._version + ' =^.^=';
