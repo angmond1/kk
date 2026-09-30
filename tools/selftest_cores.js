@@ -9,7 +9,10 @@ const tick = (ms = 30) => new Promise(r => setTimeout(r, ms));
 let clicked = [];
 function dom() {
   global.window = { application: { authTk: 'TK' } };
-  global.document = { getElementById: () => null, createElement: () => ({ style: {}, remove() {}, click() { clicked.push(this.download); } }), body: { appendChild() {} }, documentElement: {} };
+  // 작은 DOM 흉내 — appendChild 한 자식들의 글을 textContent 로 이어 준다(kk-dry show() 가 결과를 칸 나눠 붙임, 2026-09-30)
+  const mkEl = () => ({ style: {}, kids: [], _t: null, remove() {}, click() { clicked.push(this.download); }, appendChild(c) { this.kids.push(c); return c; },
+    get textContent() { return this._t != null ? this._t : this.kids.map(k => k.textContent).join(''); }, set textContent(v) { this._t = String(v); } });
+  global.document = { getElementById: () => null, createElement: mkEl, createTextNode: (t) => ({ textContent: String(t) }), body: { appendChild() {} }, documentElement: {} };
   global.URL = { createObjectURL: () => 'blob:x', revokeObjectURL() {} };
   global.Blob = class { constructor(p) { this.text = p.join(''); } };
 }
@@ -134,7 +137,7 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
     if (url.startsWith('/v2/wapi/mails/report-spam')) { global.__spamBody = JSON.parse(opts.body); return { ok: true, status: 200, text: async () => JSON.stringify({ header: { isSuccessful: true } }) }; }
     return { ok: true, status: 200, text: async () => '' };
   };
-  ok('mail inject 1.12', load('kk-mail/scripts/kk_mail_ops.min.js') === 'kk-mail-ops/1.12 =^.^=');
+  ok('mail inject 1.13', load('kk-mail/scripts/kk_mail_ops.min.js') === 'kk-mail-ops/1.13 =^.^=');
   const K = window.kkMail;
   ok('mail 점수 규칙 제거', typeof K.spamHints === 'undefined' && typeof K.fmtSpam === 'undefined');
   const inbox = await K.listInbox({ days: 3650 });
@@ -291,7 +294,7 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
   ok('mail checkSent: 초안 번호가 다른 같은 제목 메일은 성공이 아님', c1b.found === false && !K.fmtSent(c1b).includes('✓'), K.fmtSent(c1b));
   sentList = [sentMail('4432000000000000010', '회의 일정', kstNow), sentMail('4432000000000000001', '회의 일정', kstNow)];
   const c2 = await K.checkSent(sr), fs2 = K.fmtSent(c2);
-  ok('mail checkSent: 초안 번호의 메일만 + 받는 사람·참조·숨은 참조·제목·본문이 확인받은 내용과 같음', c2.found && c2.ok && c2.mail.id === '4432000000000000001' && fs2.startsWith('보낸 메일함 확인 ✓') && fs2.includes('받는 사람·참조·숨은 참조·제목·본문이 확인받은 내용과 같음') && fs2.includes('4432-0000-0000-0000-001') && !/=/.test(fs2), fs2);
+  ok('mail checkSent: 초안 번호의 메일만 + 받는 사람·참조·숨은 참조·제목·본문·링크 주소가 확인받은 내용과 같음', c2.found && c2.ok && c2.mail.id === '4432000000000000001' && fs2.startsWith('보낸 메일함 확인 ✓') && fs2.includes('받는 사람·참조·숨은 참조·제목·본문·링크 주소가 확인받은 내용과 같음') && fs2.includes('4432-0000-0000-0000-001') && !/=/.test(fs2), fs2);
   const c3 = await K.checkSent(Object.assign({}, sr, { approved: Object.assign({}, sr.approved, { to: sr.approved.to.concat('park@kist.re.kr').sort() }) }));
   ok('mail checkSent: 빠진 받는 사람이 있으면 ⚠', c3.found && !c3.ok && K.fmtSent(c3).includes('받는 사람 빠짐: park@kist.re.kr') && !K.fmtSent(c3).includes('✓'), K.fmtSent(c3));
   const keep1 = JSON.parse(JSON.stringify(srvDrafts['4432000000000000001']));
@@ -305,6 +308,32 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
   const c5 = await K.checkSent(sr);
   ok('mail checkSent: 보낸 메일에 숨은 참조 칸이 없으면 대조 못 함이라고 적음(나머지는 확인)', c5.ok && c5.bccUnknown && K.fmtSent(c5).includes('숨은 참조는 보낸 메일에 안 보여 대조 못 함'), K.fmtSent(c5));
   srvDrafts['4432000000000000001'] = keep1;
+  // Codex 검토(v0.7.8) 1: 초안의 링크 주소만 바꾸고 보이는 글자는 그대로 — 미리보기에 실제 주소, 보내기 직전 대조·보낸 메일함 확인에서 잡는다(가짜 서버, 실제 발송 없음)
+  {
+    const chunks = (p) => { let off = 0, all = ''; for (let i = 0; i < 20; i++) { const t = K.fmtPrepared(p, 900, off); all += t + '\n'; const mk = /▶ 다음 조각 fmtPrepared\(p, 900, (\d+)\)/.exec(t); if (!mk) break; off = +mk[1]; } return all; };
+    const LH = '<div>자료는 <a href="https://files.example.org/report.pdf?id=7&amp;v=2">여기</a>에 있습니다.</div><div><a href="https://www.kist.re.kr/">https://www.kist.re.kr</a></div>';
+    mcalls.length = 0;
+    const pl = await K.prepareMail({ to: ['kiki@kist.re.kr'], subject: '링크 시험', html: LH, signature: false });
+    const fpl = chunks(pl);
+    ok('mail fmtPrepared: 링크는 보이는 글자와 실제로 열리는 주소를 함께(본문 끝 목록, = 는 ＝)', fpl.includes('링크 2개 — 보이는 글자와 실제로 열리는 주소는 본문 끝 목록에서 확인') && fpl.includes('1) 여기 → https://files.example.org/report.pdf?id＝7&v＝2') && fpl.includes('2) https://www.kist.re.kr → https://www.kist.re.kr/') && !fpl.includes('⚠ 글자') && !/=/.test(fpl), fpl);
+    const pw = await K.prepareMail({ to: ['kiki@kist.re.kr'], subject: '피싱 모양', html: '<a href="https://evil.example.net/login">https://www.kist.re.kr/login</a>', signature: false });
+    ok('mail fmtPrepared: 글자에 보이는 주소와 실제 주소의 도메인이 다르면 ⚠', chunks(pw).includes('⚠ 글자와 주소의 도메인이 다른 링크 1개') && chunks(pw).includes('⚠ 글자에 보이는 주소와 실제 주소가 다름'), chunks(pw));
+    const slk = await K.saveDraft(pl.key), lid = slk.draftId;
+    srvDrafts[lid].body.content = srvDrafts[lid].body.content.replace('https://files.example.org/report.pdf?id=7&amp;v=2', 'https://evil.example.net/report.pdf');   // 글자 '여기' 는 그대로, 주소만
+    mcalls.length = 0;
+    let elk = null; try { await K.sendPrepared(pl.key); } catch (e) { elk = e; }
+    ok('mail sendPrepared: 링크 주소만 바뀐 초안(글자 같음)도 보내지 않음 — 바뀐 주소를 알림, 보내기 호출 없음', elk && elk.changed && elk.changed.length === 1 && /^링크 주소 다름/.test(elk.changed[0]) && elk.changed[0].includes('evil.example.net') && !mcalls.some(c => /mails\/send/.test(c[1])), elk && elk.message);
+    const rfl = await K.refreshPrepared(pl.key), frl = chunks(rfl);
+    ok('mail refreshPrepared: 바뀐 링크 주소를 미리보기에 다시(확인받은 뒤에만 보냄)', frl.includes('1) 여기 → https://evil.example.net/report.pdf') && frl.includes('임시 보관함의 지금 내용(다시 확인 필요)'), frl);
+    mcalls.length = 0;
+    const slr = await K.sendPrepared(pl.key);
+    ok('mail sendPrepared: 다시 확인한 뒤에는 그 초안을 보냄(가짜 서버)', slr.ok && mcalls.some(c => /mails\/send/.test(c[1])) && slr.approved.links[0] === 'https://evil.example.net/report.pdf', JSON.stringify(slr.approved));
+    sentList = [sentMail(lid, '링크 시험', kstNow)];
+    const cl1 = await K.checkSent(slr);
+    srvDrafts[lid].body.content = srvDrafts[lid].body.content.replace('https://evil.example.net/report.pdf', 'https://other.example.com/x');   // 보낸 메일의 링크가 확인받은 것과 다르면
+    const cl2 = await K.checkSent(slr), fcl2 = K.fmtSent(cl2);
+    ok('mail checkSent: 링크 주소까지 확인받은 내용과 같으면 ✓ / 주소만 달라도 ⚠', cl1.ok && K.fmtSent(cl1).includes('본문·링크 주소가 확인받은 내용과 같음') && !cl2.ok && fcl2.includes('링크 주소 다름') && fcl2.includes('other.example.com') && !fcl2.includes('✓') && !/=/.test(fcl2), K.fmtSent(cl1) + ' // ' + fcl2);
+  }
   // 답장(2026-09-30) — 답장 안 한 메일 찾기 → 답장 미리보기(서버에 안 씀) → 임시 보관함 저장(원래 메일과 연결) → 그 초안 보내기 → 보낸 메일함·답장함 표시 확인
   const RID = '4432000000000000077', RID2 = '4432000000000000078', RDRAFT = '4432000000000000055';
   const rcalls = []; let rInbox = [], rSent = [], rDraft = null;
@@ -501,7 +530,7 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
     if (url.startsWith('/v2/wapi/drives/D1/files/')) return J({ header: { isSuccessful: true }, result: { content: { parentFile: { id: '5100000000000000002', path: 'root/2026/2026-06' } } } });
     return { ok: false, status: 404, text: async () => '{}' };
   };
-  ok('dry inject 2.9', load('kk-dry/scripts/kk_dry_ops.min.js') === 'kk-dry-ops/2.9 =^.^=');
+  ok('dry inject 2.11', load('kk-dry/scripts/kk_dry_ops.min.js') === 'kk-dry-ops/2.11 =^.^=');
   const DR = window.kkDry;
   const noQ = (s) => !/=/.test(s) && !/\w=\w*&/.test(s);
   window.__d = null; DR.find([['가나다'], ['가나다', '보고서']], { since: '2026-04-01' }).then(r => window.__d = r, e => window.__d = { error: String(e) });
@@ -562,7 +591,18 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
     const a7 = DR.checkLinks([`**260623 - PEOR_Kiki.pptx, 슬라이드 9** — [Dooray 에서 열기](${A.url})`]);
     const a8 = DR.checkLinks([`**260623 - PEOR_Kiki.pptx, 슬라이드 9** — [Dooray 에서 열기](${B.url})`, `260713 - PEOR_Kiki.pptx 에는 없음 — [열기](${A.url})`]);
     const a9 = DR.checkLinks([`**260623 - PEOR_Kiki.pptx** — [열기](https://kist.gov-dooray.com/drive/3300000000000000009/views/5100000000000000077?query=all%3D260713%26all%3DPEOR_Kiki.pptx)`]);   // 실측 실수: 주소 속 ?query= 의 이름에 속지 않기
-    L.drive.items.splice(L.drive.items.indexOf(A), 2);
+    // Codex 검토(v0.7.8): 한 줄에 비슷한 이름이 둘 — 줄 전체로 보면 틀린 링크도 OK 였다
+    const C = { kind: 'file', id: '5100000000000000079', projectId: '3300000000000000009', name: 'report.pptx', url: 'https://kist.gov-dooray.com/drive/3300000000000000009/5100000000000000002/views/5100000000000000079' };
+    const D = { kind: 'file', id: '5100000000000000080', projectId: '3300000000000000009', name: 'report_v2.pptx', url: 'https://kist.gov-dooray.com/drive/3300000000000000009/5100000000000000002/views/5100000000000000080' };
+    L.drive.items.push(C, D);
+    const b1 = DR.checkLinks([`**260623 - PEOR_Kiki.pptx** (260713 - PEOR_Kiki.pptx 와 비교) — [열기](${A.url})`]);   // 이름 둘 + 한쪽 주소 → OK 아님
+    const b2 = DR.checkLinks([`**report_v2.pptx** — [열기](${C.url})`]);                                            // 긴 이름 줄에 짧은 이름(report) 주소 → ✗
+    const b3 = DR.checkLinks([`**report_v2.pptx** — [열기](${D.url})`, `**report.pptx** — [열기](${C.url})`]);       // 맞으면 OK(짧은 이름은 긴 이름의 일부)
+    const b4 = DR.checkLinks([`260623 - PEOR_Kiki.pptx → ${B.url} · 260713 - PEOR_Kiki.pptx → ${A.url}`]);            // 한 줄에 둘, 각자 링크 → OK
+    const b5 = DR.checkLinks([`260623 - PEOR_Kiki.pptx → ${A.url} · 260713 - PEOR_Kiki.pptx → ${B.url}`]);            // 한 줄에 둘, 링크가 서로 바뀜 → ✗ 2곳
+    L.drive.items.splice(L.drive.items.indexOf(A), 4);
+    ok('dooray checkLinks(Codex v0.7.8): 한 줄에 비슷한 이름 둘 — 모호하면 OK 아님 · 긴 이름 줄의 짧은 이름 주소 ✗ · 맞으면 OK · 한 줄 두 링크도 링크마다 앞 이름으로',
+      !b1.startsWith('OK') && b1.includes('이름이 둘') && b2.startsWith('✗') && b2.includes('report_v2') && b3.startsWith('OK 링크 2개') && b4.startsWith('OK 링크 2개') && b5.startsWith('✗ 링크 2개 중 2곳'), [b1, b2, b3, b4, b5].join(' // '));
     ok('dooray checkLinks: 맞는 링크 OK · 다른 항목 주소 ✗ · 모르는 주소 ? · 최상위 주소 △ · 이름이 윗줄이면 OK · 링크 없으면 ERR',
       a1.startsWith('OK 링크 1개') && a2.startsWith('✗') && a2.includes('✗ 1줄') && a3.includes('? 1줄') && a4.includes('최상위') && a5.startsWith('OK') && a6.startsWith('ERR'), [a1, a2, a3, a4, a5, a6].join(' // '));
     ok('dooray checkLinks: 이름이 비슷한 두 파일(260623 줄에 260713 주소)도 ✗ / 맞으면 OK, 출력에 주소·= 없음',
@@ -783,6 +823,10 @@ const clean = (s) => !/\d{8}/.test(s) && !/[=&?;]/.test(s);
     const dn = await DR.done(5);
     ok('dooray done: 끝난 quick 의 요약을 바로 · 카드에 data-id·data-n · goto 없는 번호 ERR', dn === qk.summary && QH.includes('<section class="file" data-id="5300000000000000001">') && QH.includes('<div class="unit" data-n="1">')
       && DR.goto(99).startsWith('ERR 결과에 그 파일이 없습니다'), dn + ' // ' + DR.goto(99)); }
+  ok('dooray 결과 화면 여백: 파일 카드(테두리·아래 여백)·곳마다 점선·목록은 항목마다 칸', /section\{border:1px solid [^}]*margin:0 0 28px/.test(QH) && QH.includes('.unit{margin-top:18px')
+    && QH.includes('<h3>■ 파일 목록</h3><div class="blks"><div class="blk') && !QH.includes('<pre>'), QH.slice(QH.indexOf('<h3>■ 파일'), QH.indexOf('<h3>■ 파일') + 200));
+  { const T = '머리 줄\n⚠ 경고\n\n[T0] 업무 가\n  본문\n\n[T1] 업무 나\n     https://x\n■ 드라이브\n[F0] 파일'; DR.show(T);
+    ok('dooray show 칸 나누기: 글(textContent)은 원래와 한 글자도 같음', shownText === T, JSON.stringify(shownText)); }
   const mo = await DR.more(), MH = document.body.innerHTML;
   ok('dooray more: 다음 순위 곳만(발표 S3) — 파일은 다시 받지 않음', /^■ kk-dry more — .* Chrome 화면 파일 1개 1곳 · 채팅 글 파일 0개 0곳 \| shown 1 units, 1 images/.test(mo.summary) && qDl === 2 && MH.includes('<h4>슬라이드 3</h4>') && !MH.includes('<h4>슬라이드 1</h4>')
     && MH.includes('이번 S3 (Chrome 화면) · 남은 0') && document.title === '👉 kk-dry 결과 — 1곳', mo.summary + ' // ' + MH.slice(MH.indexOf('<h3>'), MH.indexOf('<h3>') + 300));

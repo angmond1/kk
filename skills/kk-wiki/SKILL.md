@@ -1,15 +1,14 @@
 ---
 name: kk-wiki
 description: |
-  KIST Wiki 2.0(Dooray 위키)의 규정·지침·안내를 자연어로 찾아 관련 조항을 빠짐없이 정리해 주는 skill (kiki 패키지).
-  위키 전체 본문을 각자 PC 에 스냅샷으로 두고 로컬에서 검색·판독한 뒤, 인용할 페이지만 위키 API 로 최신 여부를 확인해 링크와 함께 답한다.
-  위키 첨부 문서(고시·비목표·길라잡이·행정원 지침서 등 pdf/hwp)도 절 단위 글로 풀어 같이 검색하고, 낡은 문서의 값은 현행 위키·포탈 공지 값을 앞세워 답한다.
-  트리거: "규정 찾아줘", "지침에 뭐라고 돼 있어", "위키에서 ~~ 찾아줘", "출장비 한도가 얼마야", "회의비 규정", "법인카드 사용 기준",
-  "구매 절차", "이거 담당자가 누구야", "어느 팀에 물어봐야 해", "KIST 위키", "kk-wiki", "위키 스냅샷 갱신", "담당자표 갱신" 등 KIST 내부 규정·업무 절차·담당자 질문 시 활성.
-  KIST 구성원 누구나 본인 계정으로 사용(Dooray 로그인 세션 또는 본인 토큰). 위키 내용은 각자 PC 에만 저장한다.
+  키키(KIST 행정 도우미)의 규정·지침 질문 기능 — "키키야", "김키키", "김키키씨"로 불러도 된다(문장 앞 부르는 말은 요청에서 빼고 읽는다).
+  KIST Wiki 2.0(Dooray 위키)과 위키 첨부 규정 문서(고시·비목표·길라잡이·행정원 지침서 등)·포탈 공지를 각자 PC 스냅샷에서 찾아 관련 조항을 빠짐없이 정리하고, 인용 페이지는 최신 여부를 확인해 링크·담당자와 함께 답한다. 옛 문서 값은 현행 위키·포탈 공지 값을 앞세운다.
+  트리거: "김키키씨 궁금한 게 있어, 휴가 규정이 어떻게 돼?", "~ 규정 알려줘", "지침에 뭐라고 돼 있어", "출장비 한도가 얼마야", "회의비 규정", "구매요구서 결재선은?", "이거 담당자가 누구야", "어느 팀에 물어봐야 해", "위키에서 ~ 찾아줘", "KIST 위키", "kk-wiki", "위키 스냅샷 갱신", "담당자표 갱신" 등 KIST 내부 규정·업무 절차·담당자 질문. 위키 내용은 각자 PC 에만 저장.
 ---
 
 # kk-wiki — KIST Wiki 2.0 규정·지침 찾기
+
+> 🐱 **부르는 말**: "키키야 …"·"김키키 …"·"김키키씨 …" 로 시작하는 요청도 이 skill 로 처리한다. 문장 맨 앞의 부르는 말은 요청에서 빼고 읽는다 — 사람 이름·검색어·발신자로 쓰지 않는다(문장 중간 '김키키와·김키키가'처럼 요청의 대상인 이름은 사람). 이 skill 일이 아니면 [`../_shared/kiki_call.md`](../_shared/kiki_call.md) 표에서 맞는 kk skill 로 넘긴다.
 
 ## 핵심 한 줄
 **1 규정 찾기(자연어 → 관련 조항 전부 + 링크 + 최신 확인 + 담당자)** · **2 스냅샷 만들기·갱신**(전체 본문 로컬 저장 + **첨부 문서를 절 단위 글로 풀어 같이 검색**) · **3 담당자표 갱신**(포탈 게시판 "부서별업무분장표" 부서별 최신 글) · **4 포탈 공지 캡처**(위키보다 먼저 뜨는 개정 안내를 날짜 붙여 현행 계층에). 조회 전용 — 위키·게시판에 쓰는 일은 없다.
@@ -61,7 +60,7 @@ description: |
 
 **⚡ 빠른 길 (기본 — 도구 호출 1번, 2026-09-30 사용자 지적 "간단한 답인데 너무 오래 걸린다")**: 느린 원인은 스크립트(검색 0.7초·최신 확인 1초)가 아니라 검색 → 본문 Read → fresh → 담당자를 **따로 부르던 왕복 4번**이었다. 그래서 먼저 **한 번만**:
 `python scripts/wiki_ask.py <검색어…> --staff <담당 업무 낱말>` (예: `wiki_ask.py 숙박비 "국외|해외" "등급|급지|리버모어" --staff 출장`)
-→ 1.5초에 ① 후보 목록(계층·기준일·링크) ② 상위 문서마다 **검색어가 든 절만**(목차 덩어리 제외, 표 통째) ③ 최신 확인 SAME/CHANGED(병렬) ④ 담당자 줄이 한꺼번에 나온다(6~8천 자). **이 출력만으로 답을 쓴다** — 아래 2~4단계를 따로 하지 않는다. 현행 결과가 2건 미만이면 스스로 첨부·구버전까지 넓힌다. 규정 원문이 첨부에만 있을 법하면 `--scope all`, 발췌가 모자라면 `--chars 12000` 이나 `--pages 5` 로 **한 번 더**(그래도 모자라면 그때 아래 단계). CHANGED 가 나오면 `wiki_snapshot.py fresh <id> --update` 후 다시 한 번. 검색어는 처음부터 동의어를 `|` 로 넉넉히(한 번에 끝내는 게 목표).
+→ 1.5초에 ① 후보 목록(계층·기준일·링크) ② 상위 문서마다 **검색어가 든 절만**(목차 덩어리 제외. 길면 줄 경계에서 줄이고, 표는 행을 자르지 않되 긴 표는 머리 행 + 검색어 든 행만 남기고 `(표 N행 중 M행만)` 을 적는다 — 나머지 행이 필요하면 그 문서를 Read) ③ 최신 확인 SAME/CHANGED(병렬, 토큰 경로) ④ 담당자 줄이 한꺼번에 나온다(6~8천 자). **이 출력만으로 답을 쓴다** — 아래 2~4단계를 따로 하지 않는다. 현행 결과가 2건 미만이면 스스로 첨부·구버전까지 넓힌다. 규정 원문이 첨부에만 있을 법하면 `--scope all`, 발췌가 모자라면 `--chars 12000` 이나 `--pages 5` 로 **한 번 더**(그래도 모자라면 그때 아래 단계). CHANGED 가 나오면 `wiki_snapshot.py fresh <id> --update` 후 다시 한 번. **토큰이 없으면** ③ 자리에 붙여 넣을 브라우저 호출이 나온다(`window.kkWiki.checkFresh({'<id>': <로컬 version>, …})…` — 로컬 version 까지 채워져 있음) → Dooray 탭에 `kk_wiki_ops.min.js` 를 주입한 뒤 그 줄을 그대로 실행하고 2~3초 뒤 `window.kkWiki.fmtFresh()` 로 SAME/CHANGED 를 읽는다(아래 4단계와 같은 2-스텝). CHANGED 면 토큰 없이 다시 받을 수 없으니 링크를 주고 바뀐 조항은 사용자가 원문 확인. 검색어는 처음부터 동의어를 `|` 로 넉넉히(한 번에 끝내는 게 목표).
 아래 1~4 는 빠른 길로 부족할 때의 자세한 절차다.
 1. **질문 분해** — 주제어와 **동의어·약어·행정 용어**를 넓게 잡는다(예: 회의비 → 회의비|식대|다과|간담회, 출장 → 출장|여비|일비|숙박). 대상 본부·팀이 짐작되면 경로 힌트(재무팀·인사경영팀·구매·자산팀·정보경영실 …)도.
 2. **후보 수집** — `python scripts/wiki_search.py "회의비|식대" 한도 --top 30` 처럼 AND/OR 로 2~3번 돌려 후보를 넓게 뽑는다. 결과의 `pages/…` 경로와 발췌, 첨부 유무를 본다. 필요하면 `--list 재무팀` 으로 그 팀 페이지 목록을 통째로 훑는다(목록은 `index.md`).
@@ -82,7 +81,7 @@ description: |
 - **증분**: `fresh <id…> --update` 는 인용 시점에 자동. 큰 갱신은 전체 수집이 단순하고 안전하다.
 - **첨부 → 절 단위 글(토큰만, 2026-09-30)**: `python scripts/wiki_snapshot.py attach`(212건 ≈ 365MB, 60MB 초과 zip 은 건너뜀; `attach <pageId>` 로 한 페이지만) → `python scripts/wiki_extract.py run`(pdf·hwp·hwpx·docx·pptx·xlsx·xls·doc·zip 안 파일을 `attachments_text/<pageId>/<파일>/NN_<절>.md` 로 — 절마다 tier·section_kind·doc_date·pages·superseded_by(같은 내용을 옮겨 적은 위키 페이지, 본문 겹침으로 자동 판정 + manifest)·stale_values(변경표의 옛 값). 3~4분, 이미 푼 파일은 건너뜀, 다시 풀려면 `--force`) → `python scripts/wiki_extract.py status`(파일·절 수, 실패 목록: 이미지 PDF·글자 깨진 PDF·양식 hwp 는 목록에만 남고 답에서는 링크로). 준비물: `pip install pyhwp`(hwp → hwp5txt), `xlrd`(xls); doc 은 Word 가 있을 때만. 개인정보 꼴(메일·휴대전화·주민번호)은 추출 때 지운다.
   - **위키에 없는 외부 문서**(예: 정부수탁 기본안내서 2022 PDF)는 `{kiki_root}/wiki/docs/` 에 넣고 `assets/docs_manifest.json`(또는 스냅샷 폴더 `docs_manifest.json`, 같은 `match` 는 덮어씀)에 기준일·제외 쪽(표지·목차·연락처·명단)·대체 위키 페이지·kind 를 적은 뒤 `run --only <파일 이름 일부>`. 4건(길라잡이 2024·행정원 지침서 2021·정부수탁 안내서 2022·종합생활안내 2019)의 규칙은 이미 들어 있다.
-  - 위키가 바뀌어 첨부가 늘면 `crawl` 뒤 `attach` + `run`. 규정 개정을 알게 되면 `../_shared/rule_changes.md` 에 한 행(옛 값·현행 값·시행일·근거·검색 패턴) 더하고 `run --force` 로 `⚠ 구값` 표시를 다시 만든다(사용자 확인 후).
+  - 위키가 바뀌어 첨부가 늘면 `crawl` 뒤 `attach` + `run`. 규정 개정을 알게 되면 `../_shared/rule_changes.md` 에 한 행(옛 값·현행 값·시행일·근거·검색 패턴) 더하고 `python scripts/wiki_extract.py restale` 로 `⚠ 구값` 표시만 다시 매긴다(몇 초, 다시 추출하지 않음 — 사용자 확인 후). 표 칸 안의 `|` 는 `\|` 로(그냥 쓰면 그 행이 조용히 빠진다). **지급 유형·거주 구분·부처마다 값이 다른 규정(원천세 8%·20%, 야근식대 3만·5만원 등)은 '바뀌었다'고 적지 않고** 변경표 아래 '헷갈리기 쉬운 현행 값' 절에.
 
 ### 3. 담당자표 갱신 (포탈 게시판 "부서별업무분장표" → `{kiki_root}\wiki\staff\`)
 담당자 정보는 위키가 아니라 **KIST 포탈 > 게시판 > 부서별업무분장표**(그룹웨어 xClick 게시판 `FC_BBS224`)에 부서별 게시글로 올라온다. 부서마다 여러 글이 있어도 **가장 최근 글이 현재 담당**이다. 상세 경로·API 는 `references/staff_board.md`.
@@ -132,5 +131,5 @@ description: |
 - `references/staff_board.md` — 포탈 게시판 "부서별업무분장표"(그룹웨어 FC_BBS224) 진입 경로·목록/글 열람 방식·덤프 형식·실측 제약(팝업, iframe 교차출처, POST 흉내 실패, 이미지 게시글).
 - `assets/docs_manifest.json` — 첨부·외부 문서 선별 규칙(파일별 기준일·제외 쪽·쪽 구간별 tier/kind/대체 위키 페이지). 4 문서(길라잡이 2024·행정원 지침서 2021·정부수탁 안내서 2022·종합생활안내 2019) 규칙 포함.
 - `../_shared/rule_changes.md` — 규정 변경표(옛 값 → 현행 값, 시행일, 근거, 검색 패턴). kk-pay·kk-meet 와 공용.
-- scripts: `wiki_ask.py`(⚡ 한 번에 답 재료: 검색+관련 절 발췌+최신 확인+담당자) · `wiki_snapshot.py`(crawl/import[--from-downloads]/build/fresh/attach/status) · `wiki_extract.py`(첨부·문서 → 절 단위 글: run[--force|--only]/status/show) · `wiki_search.py`(AND/OR 검색·발췌·목록, `--scope current|attach|all` `--kind` `--tier`) · `wiki_staff.py`(담당자표 import[--from-downloads]/find/team/status/known) · `kk_wiki_ops.js`(브라우저 코어: 위키 수집·최신 확인 + 담당자표 수집·덤프·다운로드; 주입은 `.min.js`).
+- scripts: `wiki_ask.py`(⚡ 한 번에 답 재료: 검색+관련 절 발췌+최신 확인+담당자) · `wiki_snapshot.py`(crawl/import[--from-downloads]/build/fresh/attach/status) · `wiki_extract.py`(첨부·문서 → 절 단위 글: run[--force|--only|--ext]/status/show/restale) · `wiki_search.py`(AND/OR 검색·발췌·목록, `--scope current|attach|all` `--kind` `--tier`) · `wiki_staff.py`(담당자표 import[--from-downloads]/find/team/status/known) · `kk_wiki_ops.js`(브라우저 코어: 위키 수집·최신 확인 + 담당자표 수집·덤프·다운로드; 주입은 `.min.js`).
 - 관련: kk-mail(Dooray 메일 찾기 — 같은 출력 제약·2-스텝), `../_shared/dooray_api_guide.md`(토큰 발급).

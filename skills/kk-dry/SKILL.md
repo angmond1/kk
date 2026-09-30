@@ -1,20 +1,14 @@
 ---
 name: kk-dry
 description: |
-  KIST Dooray 업무·드라이브 skill (kiki 패키지). 어디 있는지 못 찾겠는 업무 글·첨부·드라이브 파일을 자연어 설명
-  (기간·사람·과제·주제)으로 찾아 주고 — Dooray 검색창과 같은 서버 검색을 여러 표현으로 한 번에 돌려 본문·댓글·첨부·폴더 경로까지
-  읽어 링크와 함께 정리 — 찾기에 필요하면 여러 파일 속(pptx·docx·hwpx·hwp·xlsx)까지 브라우저 안에서 읽어 해당 슬라이드·문단을
-  찾고(한 번의 호출로 파일마다 주요 2~3곳 먼저, 더 원하면 다음 순위) — 슬라이드는 찾은 그림을 Chrome 작업 탭에, 한글·워드·엑셀 등
-  문서는 찾은 문구·표를 채팅에 바로 보여 준다. 사용자 확인 후에는
-  업무 첨부·드라이브 파일을 PC 로 내려받고, 업무 글·댓글을 쓰고, 업무 첨부·드라이브에 파일을 올린다(공식 API·토큰).
-  트리거: "두레이 업무에서 ~ 찾아줘", "~ 보고서 작성하던 업무 어디 있지", "드라이브에 있는 ~ 발표 슬라이드 찾아줘",
-  "~ 발표에서 ~ 그래프가 있는 슬라이드 찾아줘", "~ 파일 어느 폴더에 있어", "그 파일에 ~ 얘기 있는지 봐줘", "그 첨부 내려받아줘", "드라이브에서 ~ 받아줘",
-  "이 파일 ~ 폴더에 올려줘", "그 업무에 댓글 달아줘", "~ 프로젝트에 업무 올려줘", "kk-dry", "kk-dooray"(옛 이름) 등
-  Dooray 업무·드라이브 요청 시 활성. (메일은 kk-mail, KIST 위키 규정은 kk-wiki.)
-  KIST 구성원 누구나 본인 계정으로 사용 — 찾기·읽기는 토큰·설정 불필요(본인 브라우저 세션), 받기·쓰기·올리기는 개인 토큰(token.txt).
+  키키(KIST 행정 도우미)의 Dooray 업무·드라이브 기능 — "키키야", "김키키", "김키키씨"로 불러도 된다(문장 앞 부르는 말은 요청에서 빼고 읽는다).
+  어디 있는지 못 찾는 업무 글·첨부·드라이브 파일을 자연어(기간·사람·과제·주제)로 찾아 본문·댓글·첨부·폴더 경로와 링크로 정리하고(Dooray 검색창과 같은 서버 검색을 여러 표현으로 한 번에), 필요하면 파일 속(pptx·docx·hwpx·hwp·xlsx)까지 읽어 해당 슬라이드·문단을 보여 준다. 사용자 확인 후 첨부·드라이브 파일 내려받기, 업무 글·댓글 쓰기, 파일 올리기(공식 API·토큰).
+  트리거: "키키야 두레이 드라이브에서 ~ 파일 찾아줘", "두레이 업무에서 ~ 찾아줘", "~ 보고서 작성하던 업무 어디 있지", "~ 발표에서 ~ 그래프 있는 슬라이드 찾아줘", "~ 파일 어느 폴더에 있어", "그 파일에 ~ 얘기 있는지 봐줘", "그 첨부 내려받아줘", "이 파일 ~ 폴더에 올려줘", "그 업무에 댓글 달아줘", "~ 프로젝트에 업무 올려줘", "kk-dry", "kk-dooray"(옛 이름). 메일은 kk-mail, 위키 규정은 kk-wiki. 찾기·읽기는 본인 브라우저 세션, 받기·쓰기·올리기는 개인 토큰.
 ---
 
 # kk-dry — KIST Dooray 업무·드라이브
+
+> 🐱 **부르는 말**: "키키야 …"·"김키키 …"·"김키키씨 …" 로 시작하는 요청도 이 skill 로 처리한다. 문장 맨 앞의 부르는 말은 요청에서 빼고 읽는다 — 사람 이름·검색어·발신자로 쓰지 않는다(문장 중간 '김키키와·김키키가'처럼 요청의 대상인 이름은 사람). 이 skill 일이 아니면 [`../_shared/kiki_call.md`](../_shared/kiki_call.md) 표에서 맞는 kk skill 로 넘긴다.
 
 ## 핵심 한 줄
 **1 찾기**(업무+드라이브를 한 번에, 서버 검색) · **2 자세히**(본문·댓글·첨부·폴더 경로) · **3 파일 속 찾기·그림 보기**(찾기에 필요하면 묻지 않고, 브라우저 메모리에서만 — 여러 파일 속에서 슬라이드·문단을 찾고 그림을 작업 탭에 띄움) · **4 내려받기**(업무 첨부·드라이브 → PC, 허락 후) · **5 쓰기·올리기**(업무 글·댓글·첨부, 드라이브 — 미리보기 → 사용자 확인 → 실행).
@@ -53,7 +47,7 @@ description: |
 | Dooray 화면 동작(링크를 누르면 어떻게 열리는지 등) | 이 문서·references 에 실측으로 적힌 것 | 확인 안 한 동작을 사실처럼 |
 | 이름·폴더의 뜻(오타·판·누가 만든 판) | 사용자가 말했거나 파일 속에 적힌 것 | 짐작을 사실처럼("오타예요") — 사실만("폴더 이름이 2023-06-23 으로 돼 있어요") |
 
-- 링크는 코어의 한 줄(이름 → 주소)에서 **이름과 함께** 옮기고, 답에서도 **파일 이름과 링크를 한 줄에** 쓴다. 이러면 대조 호출이 필요 없다. 여러 줄에서 따로 골라 붙였거나 손으로 고쳤을 때만 `kkDry.checkLinks([답의 링크 줄들])` 한 번(1초) — 첫 줄이 `OK` 가 아니면(`✗` 다른 항목의 주소 · `?` 찾은 결과에 없는 주소 · `△` 줄에 이름이 없거나 최상위 폴더 주소) 그 줄을 `linkOf` 로 고친다.
+- 링크는 코어의 한 줄(이름 → 주소)에서 **이름과 함께** 옮기고, 답에서도 **파일 이름과 링크를 한 줄에** 쓴다. 이러면 대조 호출이 필요 없다. 여러 줄에서 따로 골라 붙였거나 손으로 고쳤을 때만 `kkDry.checkLinks([답의 링크 줄들])` 한 번(1초) — 첫 줄이 `OK` 가 아니면(`✗` 다른 항목의 주소 · `?` 찾은 결과에 없는 주소 · `△` 줄에 이름이 없거나, 링크 앞에 서로 다른 이름이 둘이라 모호하거나, 최상위 폴더 주소) 그 줄을 `linkOf` 로 고친다. 코어 2.11 부터 링크마다 **그 링크 바로 앞 조각의 이름**으로 대조한다(한 줄에 비슷한 이름이 둘이어도 섞지 않음 — Codex 검토 v0.7.8).
 - 결과는 `done` 이 끝났다고 돌려준 뒤의 화면으로 답한다(`⏳ 아직` 인 화면으로 답하지 않는다).
 - 사용자가 "틀렸다·안 보인다·그게 아니다"라고 하면 추측을 새로 내놓기 전에 원인부터 확인(`linkOf`·`checkLinks`·그 파일 열기)하고, `🙀` 로 무엇이 틀렸는지 한 줄 + 고친 것만 준다.
 - 파일 속 글은 원문 그대로 인용한다(번역·요약은 인용 밖에, 요약이라고 밝혀서).
@@ -95,7 +89,7 @@ description: |
 
 1. **작업 탭 + 코어** — 한 번의 `browser_batch`:
    - `tabs_context_mcp` → 주소가 `https://kist.gov-dooray.com/robots.txt` 인 탭이 있으면 그 탭, 없으면 `tabs_create_mcp` → `navigate` 그 주소. **이 작업 탭만 쓴다**(쓰던 Dooray 화면은 건드리지 않는다. 같은 origin 이라 로그인 세션으로 조회된다. 로그인이 풀려 있으면 Dooray 에 로그인해 달라고 안내). 일이 끝나면 작업 탭을 닫는다 — **단 기능 3 의 결과 화면(그림)을 띄웠으면 열어 둔다**(사용자가 본다).
-   - `javascript_tool`: `(function(){ var c = localStorage.getItem('kk.dry.core') || ''; if (c.indexOf("kk-dry-ops/2.9'") > 0) return (0, eval)(c); document.body.innerHTML=''; var i=document.createElement('input'); i.type='file'; i.id='kkcore'; i.setAttribute('aria-label','kk core file'); document.body.appendChild(i); return 'NEED_UPLOAD'; })()` + (같은 batch) `find` "kk core file input" → `kk-dry-ops/2.9 =^.^=` 면 준비 끝.
+   - `javascript_tool`: `(function(){ var c = localStorage.getItem('kk.dry.core') || ''; if (c.indexOf("kk-dry-ops/2.11'") > 0) return (0, eval)(c); document.body.innerHTML=''; var i=document.createElement('input'); i.type='file'; i.id='kkcore'; i.setAttribute('aria-label','kk core file'); document.body.appendChild(i); return 'NEED_UPLOAD'; })()` + (같은 batch) `find` "kk core file input" → `kk-dry-ops/2.11 =^.^=` 면 준비 끝.
    - `NEED_UPLOAD`(이 PC 처음·새 버전) → 파일로 올린다(대화창에 붙여넣지 않음): `file_upload`(paths=[**이 skill 폴더**`/scripts/kk_dry_ops.min.js` 절대경로], ref=find 결과) → `javascript_tool` `const t = await document.getElementById('kkcore').files[0].text(); localStorage.setItem('kk.dry.core', t); (0, eval)(t)` → 버전 문자열(top-level await 로 한 번에, 2026-09-29 실측). 이어서 같은 batch 로 2 또는 2-B 를 시작해도 된다. `file_upload` 가 막히면 옛 방식(min.js 를 Read → `javascript_tool` 에 붙여넣기).
 2. **한 번에 찾고 읽기** — 한 번의 `browser_batch`: `javascript_tool` `kkDry.report([['…'],['…','…']], {since:'…'}); 'started'` → `javascript_tool` `await kkDry.done(35)`(끝나는 즉시 요약 한 줄 — 고정 wait 없이) → `get_page_text`. `⏳ 아직` 이면 `await kkDry.done(35)` → `get_page_text` 를 한 번 더.
    - 결과 글: 머리줄(검색어·건수·시간·⚠ 오류·잘림) → 업무마다 `[T번호] 수정일 | 프로젝트 #번호 | 제목 | 작성→담당 | 상태 | 링크 | 본문 | 첨부(이름·크기·누가·언제·본문/댓글) | 댓글 전부(오래된 순)` → 드라이브 `[F번호] 수정일 | 종류 | 드라이브 경로 | 이름 | 크기 | 올린 사람 | 링크`.

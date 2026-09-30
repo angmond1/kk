@@ -13,8 +13,9 @@
   --scope current|attach|all  (기본 current = 위키 본문·판독본·공지. 결과가 적으면 자동으로 첨부까지 넓힘)
   --pages N     발췌할 상위 문서 수(기본 3) · --chars N  전체 발췌 글자 상한(기본 7000)
   --staff 단어  담당자표 검색어(`|` OR, 여러 개면 AND). 안 주면 첫 검색어로.  --no-staff 로 끔
-  --no-fresh    최신 확인(API, 토큰) 건너뜀 — 토큰이 없으면 자동으로 건너뛰고 표시
-출력: ① 후보 목록(계층·기준일·링크) ② 문서별로 **검색어가 든 절만**(마크다운 머리글 단위, 표는 통째) ③ 최신 확인 SAME/CHANGED ④ 담당자 표 줄.
+  --no-fresh    최신 확인(API, 토큰) 건너뜀 — 토큰이 없으면 브라우저 checkFresh 호출(로컬 version 포함)을 대신 적는다
+출력: ① 후보 목록(계층·기준일·링크) ② 문서별로 **검색어가 든 절만**(마크다운 머리글 단위. 길면 줄 경계에서 줄이고, 표는 행을 자르지 않되 긴 표는
+      머리 행 + 검색어 든 행만 남기고 '(표 N행 중 M행만)' 을 적는다) ③ 최신 확인 SAME/CHANGED(토큰이 없으면 붙여 넣을 브라우저 checkFresh 호출) ④ 담당자 표 줄.
 """
 from __future__ import annotations
 import argparse, io, json, os, re, sys, threading
@@ -62,8 +63,48 @@ def is_toc(b: str) -> bool:
     return q / len(lines) >= 0.6 or (b.lstrip().startswith("```") and q / len(lines) >= 0.4)
 
 
+TABLE_LINE = re.compile(r"^\s*\|")
+SEP_LINE = re.compile(r"^\s*\|?\s*:?-{2,}")
+
+
+def trim_block(c: str, pats: list, limit: int) -> str:
+    """limit 을 넘는 덩어리 줄이기 — 줄 경계에서만 자르고 **표 행은 가운데서 자르지 않는다**(Codex 검토 v0.7.8: 행 중간에서 잘라 놓고
+    '표 통째'라고 안내했다). 긴 표는 머리 행 + 검색어 든 행만 남기고 '(표 N행 중 M행만)' 을 적는다. 남은 줄이 있으면 몇 줄 줄였는지 적는다."""
+    if len(c) <= limit:
+        return c
+    lines, out, i = c.split("\n"), [], 0
+    while i < len(lines):
+        if not TABLE_LINE.match(lines[i]):
+            out.append(lines[i]); i += 1; continue
+        j = i
+        while j < len(lines) and TABLE_LINE.match(lines[j]):
+            j += 1
+        rows = lines[i:j]
+        if len(rows) > 4 and sum(len(r) + 1 for r in rows) > limit // 2:
+            nh = 2 if len(rows) > 1 and SEP_LINE.match(rows[1]) else 1
+            body = rows[nh:]
+            hit = [r for r in body if any(p.search(r) for p in pats)]
+            out += rows[:nh] + hit[:40]
+            out.append(f"(표 {len(body)}행 중 검색어 든 {min(len(hit), 40)}행만 — 나머지 행은 원문 Read)" if hit else f"(표 {len(body)}행 — 검색어 든 행 없음, 머리 행만. 원문 Read)")
+        else:
+            out += rows
+        i = j
+    res, used = [], 0
+    for k, ln in enumerate(out):
+        if used + len(ln) + 1 > limit:
+            if not res and not TABLE_LINE.match(ln):   # 한 줄이 통째로 너무 길면 그 줄만 글자 경계에서
+                res.append(ln[:limit] + " …(줄임)"); k += 1
+            left = len(out) - k
+            if left > 0:
+                res.append(f"…(줄임 — 뒤 {left}줄은 원문 Read 또는 --chars 를 늘려 다시)")
+            break
+        res.append(ln); used += len(ln) + 1
+    return "\n".join(res)
+
+
 def pick_blocks(body: str, pats: list, limit: int) -> str:
-    """검색어가 든 덩어리만, 많이 걸린 순 → 원래 순서로 되돌려 limit 글자까지. 목차 덩어리는 뺀다. 같은 덩어리 안 표는 자르지 않는다."""
+    """검색어가 든 덩어리만, 많이 걸린 순 → 원래 순서로 되돌려 limit 글자까지. 목차 덩어리는 뺀다.
+    한 덩어리가 limit 을 넘으면 trim_block — 줄 경계에서, 표는 행 단위(긴 표는 머리 행 + 검색어 든 행만)."""
     bl = blocks(body)
     scored = []
     for i, b in enumerate(bl):
@@ -82,8 +123,7 @@ def pick_blocks(body: str, pats: list, limit: int) -> str:
         c = clean(b)
         if used + len(c) > limit and keep:
             continue
-        if len(c) > limit:
-            c = c[:limit] + " …(줄임)"
+        c = trim_block(c, pats, limit)
         keep.append((i, c)); used += len(c)
         if used >= limit:
             break
@@ -92,16 +132,21 @@ def pick_blocks(body: str, pats: list, limit: int) -> str:
 
 
 def fresh_check(root: str, ids: list, out: dict) -> None:
+    idx = {p["id"]: p for p in json.load(open(os.path.join(root, "index.json"), encoding="utf-8")).get("pages", [])}
     try:
         import wiki_snapshot as sn
         sn.load_token()   # 토큰 없으면 SystemExit
     except SystemExit:
-        out["err"] = "토큰 없음 — 최신 확인 못 함(브라우저 checkFresh 로)"; return
+        # 토큰이 없으면 브라우저(Dooray 로그인 탭, kk_wiki_ops 주입)로 — 붙여 넣을 호출을 그대로 준다(로컬 version 포함, id 는 19자리라 따옴표 문자열)
+        vers = ", ".join(f"'{pid}': {int((idx.get(pid) or {}).get('version') or 0)}" for pid in ids)
+        out["err"] = "토큰 없음 — 최신 확인을 못 했습니다. 브라우저(Dooray 탭에 kk_wiki_ops 주입)로 확인:"
+        out["browser"] = [f"window.kkWiki.checkFresh({{{vers}}}).catch(e=>window.__f={{error:String(e)}}); 'go'",
+                          "2~3초 뒤: window.kkWiki.fmtFresh()   ← 줄마다 SAME / CHANGED. CHANGED 면 링크를 주고 바뀐 조항은 사용자가 원문 확인"]
+        return
     except Exception as e:
         out["err"] = str(e)[:80]; return
     cfg = sn._skill_config()
     wiki = cfg.get("space_id") or sn.DEFAULT_WIKI
-    idx = {p["id"]: p for p in json.load(open(os.path.join(root, "index.json"), encoding="utf-8")).get("pages", [])}
     res = {}
 
     def one(pid):
@@ -229,6 +274,8 @@ def main(argv=None):
         print("(건너뜀 --no-fresh)")
     elif fr.get("err"):
         print("⚠ " + fr["err"])
+        for ln in fr.get("browser", []):
+            print("   " + ln)
     elif not ids:
         print("(위키 페이지 없음)")
     else:

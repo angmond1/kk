@@ -1128,13 +1128,35 @@
   const chartHtml = (c) => `<table class="ch"><caption>${esc(chartStr(c).slice(0, 240))}</caption>`
     + (c.series.length ? `<tr><th></th>${(c.series[0].cats || []).slice(0, 14).map(x => `<th>${esc(x)}</th>`).join('')}</tr>` + c.series.slice(0, 8).map(s => `<tr><th>${esc(s.name)}</th>${s.vals.slice(0, 14).map(v => `<td>${esc(v)}</td>`).join('')}</tr>`).join('') : '') + '</table>';
   const NUM = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳';
+  // 글 화면을 결과 한 건씩 칸으로 나눈다(2026-09-30 여백 요청). 새 칸 = [T번호]·[F번호]·== [F번호]·①~⑳·"— " 로 시작하는 줄.
+  // 칸 사이에 '\n' 글자를 남겨 textContent·get_page_text 로 읽는 글은 나누기 전과 같다.
+  const BLK_START = /^(\[[TF]\d+\]|== \[F\d+\]|[①-⑳]|\(\d+\) |— |■ )/;
+  const BLK_CSS = '.blks{white-space:normal}.blk{white-space:pre-wrap;overflow-wrap:anywhere;font:16px/1.6 "Malgun Gothic",-apple-system,sans-serif;color:#222;background:#fff;'
+    + 'border:1px solid #d0d5dd;border-radius:8px;padding:10px 14px;margin:0 0 16px}.blk.hd{background:#f6f8fa;border-style:dashed}'
+    + '.blk.sh{background:none;border:0;font-weight:bold;font-size:19px;padding:6px 2px 0;margin:22px 0 8px}';
+  function blockChunks(text) {
+    const out = [];
+    let cur = [];
+    String(text).split('\n').forEach(l => {
+      if (BLK_START.test(l) && cur.some(x => x.trim())) { out.push(cur); cur = []; }
+      cur.push(l);
+    });
+    if (cur.length) out.push(cur);
+    return out.map(c => c.join('\n'));   // 빈 줄도 그대로 — 칸들을 '\n' 으로 이으면 원래 글과 한 글자도 다르지 않다
+  }
+  const blkClass = (c, i) => 'blk' + (/^\n*■ /.test(c) ? ' sh' : (i === 0 && !BLK_START.test(c) ? ' hd' : ''));   // ■ 줄 = 구분 제목, 첫 칸 = 머리줄
+  const blocksHtml = (text) => blockChunks(text).map((c, i) => `<div class="${blkClass(c, i)}">${esc(c.replace(/^\n+|\n+$/g, '') || ' ')}</div>`).join('\n');
   // 글자 크기는 크게(사용자 지시 2026-09-30 "너무 작아 잘 안 보인다") — 본문 18px, 슬라이드 글·목록 16px, 제목 26px
   const FIG_CSS = '<style>body{font:18px/1.6 "Malgun Gothic",-apple-system,sans-serif;margin:14px 20px;color:#111;background:#fff}h2{font-size:26px;margin:6px 0}'
     + '.meta{color:#444;font-size:16px;font-weight:normal}section{border-top:1px solid #ddd;padding:12px 0}h3{font-size:21px;margin:0 0 4px}h4{font-size:18px;margin:12px 0 4px;color:#222}.memo{background:#fff4c2;padding:2px 8px;margin:2px 0;display:inline-block}'
     + '.txt{color:#222;font-size:16px;margin:6px 0;white-space:pre-wrap}.imgs{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}.imgs img{max-width:640px;max-height:520px;border:1px solid #bbb}'
     + '.ph{border:1px dashed #999;padding:10px;color:#555;font-size:16px}table.ch{border-collapse:collapse;margin:8px 0;font-size:15px}.ch td,.ch th{border:1px solid #ccc;padding:2px 8px}.ch caption{text-align:left;color:#444}.err{color:#b00}a{color:#0b57d0}'
     + '.imgs a.pg img{max-width:100%;width:1100px;max-height:none}.lead{font-size:18px;margin:8px 0;padding:8px 12px;background:#eef4ff;border-left:5px solid #0b57d0}'
-    + '.wait{font-size:18px;color:#7a4b00;background:#fff4c2;padding:8px 12px;margin:10px 0}.sum pre{white-space:pre-wrap;overflow-wrap:anywhere;font:16px/1.6 "Malgun Gothic",-apple-system,sans-serif;color:#222;background:#f6f6f6;padding:10px 12px;margin:6px 0}</style>';
+    + '.wait{font-size:18px;color:#7a4b00;background:#fff4c2;padding:8px 12px;margin:10px 0}.sum pre{white-space:pre-wrap;overflow-wrap:anywhere;font:16px/1.6 "Malgun Gothic",-apple-system,sans-serif;color:#222;background:#f6f6f6;padding:10px 12px;margin:6px 0}'
+    // 결과 사이 여백(사용자 지시 2026-09-30 "다닥다닥 붙어 있어 구분이 안 된다") — 파일마다 카드, 슬라이드·쪽마다 점선 구분, 글 결과·목록은 항목마다 칸
+    + 'body{background:#f2f4f7}section{border:1px solid #d0d5dd;border-radius:10px;background:#fff;padding:16px 20px;margin:0 0 28px;box-shadow:0 1px 3px rgba(0,0,0,.08)}'
+    + '.unit{margin-top:18px;padding-top:14px;border-top:1px dashed #c8ccd2}'
+    + BLK_CSS + '</style>';
   // 탭 제목 — 결과 탭이 뒤에 있으면(사용자가 다른 탭을 보는 중) 그 탭을 볼 때까지 제목을 깜박여 알린다(최대 2분). quiet = 깜박이지 않음.
   let blinkT = null;
   function titleAlert(t, quiet) {
@@ -1549,7 +1571,7 @@
         }
       });
     });
-    return `<section class="sum"><h3>■ 글 결과</h3><pre>${esc(L.join('\n'))}</pre></section>`;
+    return `<section class="sum"><h3>■ 글 결과</h3><div class="blks">${blocksHtml(L.join('\n'))}</div></section>`;
   }
   // more(x, opt) — quick 뒤 '더 보여줘': 이미 보인 곳 다음 순위 곳을 띄운다(파일은 다시 받지 않는다).
   //   x: F번호 · [F번호…] · 'all'(기본 — 보인 파일 먼저, 그다음 아직 안 보인 걸린 파일) / opt: { top·files(기본 quick 과 같음), title, view:'chrome'|'chat'(그 파일들을 한쪽으로) }
@@ -1657,7 +1679,7 @@
     if (first && noneF.length) L.push('', `— 걸린 곳 없음 ${noneF.length}개: ` + noneF.slice(0, 40).map(v => v.f.name + partNote(v)).join(' · ') + (noneF.length > 40 ? ' …' : ''));
     if (first && badF.length) L.push('', '⚠ 못 읽음(없음이 아님): ' + badF.map(v => `[F${v.k}] ${v.f.name} — ${v.error || v.unsupported}`).join(' / '));
     if (first && S.skip.length) L.push('', `※ 읽을 수 없는 형식 ${S.skip.length}개(안 봄): ` + S.skip.slice(0, 15).map(v => `${v.f.name}(${v.why})`).join(' · ') + (S.skip.length > 15 ? ' …' : ''));
-    return `<section class="sum"><h3>■ 파일 목록</h3><pre>${esc(L.join('\n'))}</pre></section>`;
+    return `<section class="sum"><h3>■ 파일 목록</h3><div class="blks">${blocksHtml(L.join('\n'))}</div></section>`;
   }
 
   // ---------- 6. 브라우저로 내려받기 (토큰이 없을 때만 — ⚠️ 파일마다 사용자 허락 후: 이름·크기·출처를 먼저 알린다) ----------
@@ -1694,11 +1716,23 @@
     dropBlobs();   // 앞서 띄운 그림(showFigures)의 메모리 반납
     titleAlert('kk-dry 결과', true);
     document.body.innerHTML = '';
-    const pre = document.createElement('pre');
-    pre.style.whiteSpace = 'pre-wrap';
-    pre.style.cssText += ';overflow-wrap:anywhere;font:16px/1.6 "Malgun Gothic",-apple-system,sans-serif;margin:14px 20px';   // 글자 크게(2026-09-30)
-    pre.textContent = String(text);
-    document.body.appendChild(pre);
+    // 업무·드라이브 한 건씩 칸으로(2026-09-30 여백 요청). 칸 밖 빈 줄·칸 사이 '\n' 은 글자로만 남겨(화면엔 안 보임) textContent 가 원래 글과 같다.
+    const box = document.createElement('div');
+    box.style.cssText = 'white-space:normal;margin:14px 20px';
+    const st = document.createElement('style');
+    st.textContent = 'body{background:#f2f4f7}' + BLK_CSS;
+    (document.head || document.body).appendChild(st);   // 상자 밖에 — 상자의 글(textContent)에 CSS 가 섞이지 않게
+    blockChunks(String(text)).forEach((c, i) => {
+      if (i) box.appendChild(document.createTextNode('\n'));
+      const m = c.match(/^(\n*)([\s\S]*?)(\n*)$/);
+      if (m[1]) box.appendChild(document.createTextNode(m[1]));
+      const d = document.createElement('div');
+      d.className = blkClass(m[2], i);
+      d.textContent = m[2];
+      box.appendChild(d);
+      if (m[3]) box.appendChild(document.createTextNode(m[3]));
+    });
+    document.body.appendChild(box);
     return 'shown ' + String(text).length;
   }
   const clip = (s, n) => { s = String(s || ''); return s.length > n ? s.slice(0, n) + ` …(+${s.length - n}자)` : s; };
@@ -2056,24 +2090,42 @@
     }
     if (!known.size) return 'ERR 대조할 찾기 결과가 없습니다 — 이 작업 탭에서 quick·report·find 로 찾은 뒤 부르세요(탭을 새로 열었으면 결과가 없어짐)';
     const toks = (s) => [...new Set(NF(s).toLowerCase().replace(/\.(pptx?|docx?|xlsx?|hwpx?|pdf|txt|csv|md|zip|png|jpe?g)\b/g, ' ').split(/[^\p{L}\p{N}]+/u).filter(t => t.length >= 2))];
-    const score = (name, ctx) => { const t = toks(name); return t.length ? t.filter(w => ctx.includes(w)).length / t.length : 0; };
-    const best = (ctx, skipId) => { let b = { s: 0 }; known.forEach((es, id) => { if (id === skipId) return; es.forEach(e => { const s = score(e.name, ctx); if (s > b.s) b = { s, e }; }); }); return b; };
+    const bare = (t) => NF(String(t).replace(/https?:\/\/\S+/g, ' ')).toLowerCase();   // 주소 속 ?query= 에 파일 이름이 들어 있어 주소는 빼고 본다
+    // 한 조각(그 링크 바로 앞 글 — 앞 링크 뒤부터) 안에 '있는' 이름 판정(Codex 검토 2026-09-30: 한 줄에 비슷한 이름이 둘이면 줄 전체로 보면 틀린 링크도 OK 였다).
+    //   이름이 있다 = 낱말이 다 있거나(60% 이상 + 그 이름에만 있는 낱말이 있음). 낱말 일부만 겹치는 비슷한 이름(260623 과 260713 의 PEOR_Kiki)은 '있다'가 아니다.
+    const judge = (seg, id) => {
+      const ctx = bare(seg), cands = [];
+      known.forEach((list, kid) => list.forEach(e => { const t = toks(e.name); if (!t.length) return; const hit = t.filter(w => ctx.includes(w)); if (hit.length / t.length >= 0.6) cands.push({ id: kid, e, t, hit }); }));
+      const present = cands.filter(c => c.hit.length === c.t.length || c.t.some(w => ctx.includes(w) && !cands.some(o => o !== c && o.id !== c.id && o.t.includes(w))));
+      if (!present.length) return null;   // 이 조각엔 아는 이름이 없음
+      // 다른 이름으로 치려면 글자가 든 낱말이나 5자리 이상 숫자(yymmdd 등)가 맞아야 한다 — '2026-06' 같은 폴더 이름이 윗줄 날짜 (2026-06-10) 에 걸려 이름으로 잡히지 않게
+      const strong = (w) => /\p{L}/u.test(w) || w.length >= 5;
+      const own = present.filter(c => c.id === id).sort((a, b) => b.hit.length - a.hit.length)[0], oth = present.filter(c => c.id !== id && c.hit.some(strong)).sort((a, b) => b.hit.length - a.hit.length);
+      if (!own) return { v: 'other', o: oth[0] };
+      const rivals = oth.filter(c => !c.t.every(w => own.t.includes(w)));   // 내 이름의 일부일 뿐인 이름(report ⊂ report_v2)은 경쟁자가 아님
+      if (!rivals.length) return { v: 'ok' };
+      const sup = rivals.find(c => own.t.every(w => c.t.includes(w)));      // 내 이름을 다 품은 더 긴 이름(report_v2 ⊃ report) → 그쪽 이름을 쓴 줄
+      return sup ? { v: 'other', o: sup } : { v: 'two', o: rivals[0] };
+    };
     const out = []; let n = 0, bad = 0;
     lines.forEach((line, li) => {
-      const urls = String(line).match(/https:\/\/kist\.gov-dooray\.com\/[^\s)\]>"'`]+/g) || [];
-      urls.forEach(u => {
+      const L0 = String(line), re = /https:\/\/kist\.gov-dooray\.com\/[^\s)\]>"'`]+/g, found = [];
+      let mm; while ((mm = re.exec(L0))) found.push({ u: mm[0], at: mm.index, end: mm.index + mm[0].length });
+      found.forEach((f, fi) => {
+        const u = f.u;
         n++;
-        const id = idOfUrl(u), where = `${li + 1}줄 '${sanitize(String(line).replace(/https?:\/\/\S+/g, '').replace(/[*[\]()]/g, '').trim().slice(0, 36))}'`;
+        const id = idOfUrl(u), where = `${li + 1}줄 '${sanitize(L0.replace(/https?:\/\/\S+/g, '').replace(/[*[\]()]/g, '').trim().slice(0, 36))}'`;
         if (/\/drive\/\d+\/views\/\d+\/?$/.test(u)) { out.push(`△ ${where}: 드라이브 최상위가 열리는 주소(파일이 안 보임) — linkOf 의 주소로`); bad++; }
         const es = known.get(id);
         if (!es) { out.push(`? ${where}: 찾은 결과에 없는 주소 — linkOf 로 받은 주소인지 확인`); bad++; return; }
-        const bare = (t) => NF(String(t).replace(/https?:\/\/\S+/g, ' ')).toLowerCase();   // 주소 속 ?query= 에 파일 이름이 들어 있어 주소는 빼고 본다
-        let ctx = bare(line), mine = Math.max(...es.map(e => score(e.name, ctx))), other = best(ctx, id);
-        if (mine < 0.6 && other.s < 0.6) {   // 줄에 이름이 없으면 바로 위 두 줄까지
-          ctx = bare(lines.slice(Math.max(0, li - 2), li + 1).join(' ')); mine = Math.max(...es.map(e => score(e.name, ctx))); other = best(ctx, id);
-        }
-        if (other.s > mine && other.s >= 0.6) { out.push(`✗ ${where}: 주소는 ${es[0].tag} ${sanitize(es[0].name.slice(0, 40))} 의 것 — 줄의 이름은 ${other.e.tag} ${sanitize(other.e.name.slice(0, 40))} → linkOf 로 다시`); bad++; }
-        else if (mine < 0.6) { out.push(`△ ${where}: 줄에 ${es[0].tag} ${sanitize(es[0].name.slice(0, 40))} 의 이름이 없음 — 이름과 링크를 한 줄에`); bad++; }
+        // 그 링크의 이름 = 링크 바로 앞 조각(앞 링크 뒤부터) → 없으면 링크 뒤 조각(다음 링크 전까지) → 없으면 바로 위 두 줄 + 앞 조각
+        const r = judge(L0.slice(fi ? found[fi - 1].end : 0, f.at), id)
+          || judge(L0.slice(f.end, fi + 1 < found.length ? found[fi + 1].at : L0.length), id)
+          || judge(lines.slice(Math.max(0, li - 2), li).join(' ') + ' ' + L0.slice(0, f.at), id);
+        const nm = (e) => `${e.tag} ${sanitize(e.name.slice(0, 40))}`;
+        if (!r) { out.push(`△ ${where}: 줄에 ${nm(es[0])} 의 이름이 없음 — 이름과 링크를 한 줄에`); bad++; }
+        else if (r.v === 'other') { out.push(`✗ ${where}: 주소는 ${nm(es[0])} 의 것 — 줄의 이름은 ${nm(r.o.e)} → linkOf 로 다시`); bad++; }
+        else if (r.v === 'two') { out.push(`△ ${where}: 링크 앞에 이름이 둘(${nm(es[0])} · ${nm(r.o.e)}) — 어느 파일 링크인지 모호, 이름과 링크를 한 줄에 하나씩`); bad++; }
       });
     });
     if (!n) return 'ERR 답에 Dooray 링크가 없습니다 — 링크가 든 줄을 넘기세요';
@@ -2103,7 +2155,7 @@
     find, report, last, show, showItems, showFiles, showText, only, filesOf, readFile, readBytes, saveFile,
     scanFiles, scanned, showFigures, showPages, quick, more, done, goto, _tableMd: tableMd, _tmo: TMO, previewOf, pageText, pageTexts, unitsOf, driveUrl, _inflate: inflateJS,
     fmtFind, fmtTasks, fmtDrive, fmtTask, fmtComments, fmtFiles, fmtLinks, linkOf, checkLinks, fmtText, fmtSaved, sanitize, hyId,
-    _version: 'kk-dry-ops/2.9',
+    _version: 'kk-dry-ops/2.11',
   };
   window.kkDooray = window.kkDry;   // 옛 이름(2026-09-29 kk-dooray → kk-dry 개명 전) — 같은 객체
   return window.kkDry._version + ' =^.^=';

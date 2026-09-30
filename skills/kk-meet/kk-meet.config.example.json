@@ -1,6 +1,6 @@
 {
   "_comment": "kk-meet 고유 설정만. 실제 파일은 ~/.claude/kiki/kk-meet.config.json (repo 밖).",
-  "_common": "이름·사번·카드책임자·참여과제(분류코드 code 포함)는 공통 ~/.claude/kiki/kiki.config.json 에서 읽는다. 토큰은 <kiki_root>/token.txt (Dooray token: 다음 줄). 사전결재 면제·회의비 비목은 과제 분류코드(code)로 자동 판정(project_code.md) — 과제별로 저장하지 않음. 상세 ../_shared/personal_config.md.",
+  "_common": "이름·사번·카드책임자·참여과제(분류코드 code 포함)는 공통 ~/.claude/kiki/kiki.config.json 에서 읽는다. 토큰은 <kiki_root>/token.txt (Dooray token: 다음 줄). 사전 내부결재 필요 여부(2026-08-01 사용분부터 기본 불필요)·회의비 비목은 과제 분류코드(code)로 판정(project_code.md) — 과제별로 저장하지 않음. 상세 ../_shared/personal_config.md.",
   "log_format": "xlsx_only",
   "log_root": "{kiki_root}/meeting/meeting_log",
   "_log_root": "회의록 엑셀·hwpx 폴더(한 폴더, 월별 {yymm}_회의록.xlsx + 건별 hwpx). 클라우드 동기화 폴더로 바꿔도 됨.",
@@ -12,6 +12,7 @@
   "project_report_dir": "{kiki_root}/meeting/project_report",
   "_project_report_dir": "근거자료(과제제안서·보고서) 폴더 — 부트스트랩에서 사용자에게 복사를 요청. 파일명에 과제번호 포함 권장.",
   "_notes": {
+    "_pre_approval_note": "원래 면제 코드. 2026-08-01 사용분부터는 폐지 대상 부처 과제·주요사업(E)도 사전 내부결재 불필요 — project_code.md",
     "pre_approval_exempt_codes": [
       "I",
       "S",

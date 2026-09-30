@@ -167,6 +167,30 @@
     return out;
   }
 
+  // 링크 = 보이는 글자 → 실제로 열리는 주소. Codex 검토(v0.7.8): 글자는 그대로 두고 href 만 바꾼 초안이 승인본 대조(글자만 비교)를 통과했다 →
+  //   미리보기·보내기 직전 대조·보낸 메일함 확인에 링크 주소를 넣는다. DOM 없이 정규식으로(브라우저·시험이 같은 결과). <a href>·<area href> 만(그림 src 는 서버가 바꿀 수 있어 대조하지 않음).
+  //   주소는 &amp; 같은 글자 참조를 풀고 탭·줄바꿈·앞뒤 빈칸을 뺀다(브라우저가 여는 주소와 같게).
+  const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+  const deEnt = (s) => String(s).replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => {
+    if (e[0] === '#') { const n = /^#x/i.test(e) ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10); return n > 0 && n < 0x110000 ? String.fromCodePoint(n) : m; }
+    const v = ENT[e.toLowerCase()]; return v != null ? v : m;
+  });
+  const hrefIn = (attrs) => { const m = /(?:^|[\s"'/])href\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/i.exec(attrs || ''); return m ? deEnt(m[1] != null ? m[1] : m[2] != null ? m[2] : m[3]).replace(/[\t\n\r]/g, '').trim() : null; };
+  function linksOf(html) {
+    const s = String(html || ''), low = s.toLowerCase(), out = [], re = /<(a|area)\b([^>]*)>/gi;
+    let m;
+    while ((m = re.exec(s))) {
+      const href = hrefIn(m[2]);
+      if (href == null) continue;   // 이름표(<a name>)만 있는 것
+      let text = '';
+      if (m[1].toLowerCase() === 'a') { const close = low.indexOf('</a', re.lastIndex); if (close >= 0) text = deEnt(s.slice(re.lastIndex, close).replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim(); }
+      out.push({ text, href });
+    }
+    return out;
+  }
+  // 글자에 주소(도메인)가 보이는데 실제 주소의 도메인과 다르면 ⚠(피싱 모양) — '여기'·'자료' 같은 글자는 비교하지 않는다
+  const hostOf = (u) => { const t = String(u || '').trim(); const m = /^[a-z][a-z0-9+.-]*:\/\/([^/?#:@\s]+)/i.exec(t) || /^(?:www\.)?((?:[a-z0-9-]+\.)+[a-z]{2,})(?:[/:?#\s]|$)/i.exec(t); return m ? m[1].toLowerCase().replace(/^www\./, '') : ''; };
+  const linkMismatch = (l) => { const a = hostOf(l.text), b = hostOf(l.href); return !!(a && b && a !== b); };
   // HTML 본문 → 읽기용 텍스트 (style/script 제거, 블록 요소 줄바꿈)
   function htmlToText(html) {
     if (!html) return '';
@@ -203,7 +227,7 @@
       restored = !restoreError;
     }
     const out = { id, subject: c.subject || '', date: (c.createdAt || '').slice(0, 16).replace('T', ' '), fromName: from.name || '', fromEmail: from.emailAddress || '',
-      to, cc, bcc, files, text, textLen: text.length, htmlLen: html.length, restoredUnread: restored };
+      to, cc, bcc, files, text, textLen: text.length, htmlLen: html.length, restoredUnread: restored, links: linksOf(html).map(l => l.href) };   // links = 실제로 열리는 주소(보낸 메일함 대조용)
     if (restoreError) {
       const e = new Error('DOORAY 안 읽음 복원 실패 — 이 메일은 읽음으로 바뀌었습니다: ' + restoreError);
       e.mail = Object.assign(out, { restoreError });
@@ -668,16 +692,26 @@
     const external = o.to.concat(o.cc, o.bcc).filter(a => !INTERNAL_MAIL.test(a.email.split('@')[1] || '')).map(a => a.email);
     // fullText = 실제로 나갈 본문 전체(서명·원문 인용 포함) — 확인 전에 끝까지 보여 준다(Codex 검토 2026-09-30)
     const p = { key, from: me.email, fromName: me.name, to: o.to, cc: o.cc, bcc: o.bcc, subject: o.subject, text: o.text, fullText: htmlToText(o.content), signature: o.signature, external };
+    setLinks(p, o.content, !!o.reply);
     if (o.reply) p.reply = o.reply;
     prepared[key] = { draft, p, sent: false, approved: snapOf({ to: o.to, cc: o.cc, bcc: o.bcc, subject: o.subject, html: o.content }) };
     return p;
   }
-  // 승인본 대조용 요약 — 주소는 소문자 정렬, 본문은 글만 남겨 빈칸을 모두 뺀다(HTML 모양·줄바꿈 차이는 같다고 보고 글자가 바뀌면 다르다고 본다)
+  // 미리보기에 보일 링크 — 내가 쓴 부분(답장이면 원문 인용 앞)은 전부, 원문 인용 안 링크는 개수만(원래 메일의 것). 대조는 둘 다 한다(snapOf).
+  function setLinks(p, html, isReply) {
+    const qi = isReply ? String(html || '').indexOf('-----Original Message-----') : -1;
+    p.links = linksOf(qi >= 0 ? html.slice(0, qi) : html);
+    p.quotedLinks = qi >= 0 ? linksOf(html.slice(qi)).length : 0;
+  }
+  // 승인본 대조용 요약 — 주소는 소문자 정렬, 본문은 글만 남겨 빈칸을 모두 뺀다(HTML 모양·줄바꿈 차이는 같다고 보고 글자가 바뀌면 다르다고 본다),
+  //   링크는 실제로 열리는 주소를 문서 순서대로(글자는 같고 주소만 바뀐 것도 다르다고 본다 — Codex 검토 v0.7.8)
   const flat = (html) => htmlToText(html).replace(/\s+/g, '');
   function snapOf(o) {
     const s = (a) => (a || []).map(x => String(x && x.email != null ? x.email : x).toLowerCase()).filter(Boolean).sort();
-    return { to: s(o.to), cc: s(o.cc), bcc: s(o.bcc), subject: String(o.subject || '').trim(), flat: o.flat != null ? o.flat : flat(o.html || '') };
+    return { to: s(o.to), cc: s(o.cc), bcc: s(o.bcc), subject: String(o.subject || '').trim(), flat: o.flat != null ? o.flat : flat(o.html || ''),
+      links: o.links != null ? o.links : linksOf(o.html || '').map(l => l.href) };
   }
+  const safeUrl = (u) => String(u).replace(/=/g, '＝').slice(0, 120);   // 출력 필터(a=b&c=d 꼴) 때문에 '=' 는 '＝' 로
   const KO3 = { to: '받는 사람', cc: '참조', bcc: '숨은 참조' };
   // a = 승인본, b = 지금 → 바뀐 것(주소는 빠진 것·더해진 것 모두). skip 에 든 칸(bcc 등)은 확인 불가라 비교하지 않는다.
   function diffSnap(a, b, skip = []) {
@@ -690,6 +724,12 @@
     }
     if (a.subject !== b.subject) out.push(`제목 다름: '${a.subject}' → '${b.subject}'`);
     if (a.flat !== b.flat) out.push('본문 다름');
+    const la = a.links || [], lb = b.links || [];
+    if (la.join('\n') !== lb.join('\n')) {
+      const miss = la.filter(x => !lb.includes(x)), add = lb.filter(x => !la.includes(x));
+      out.push('링크 주소 다름' + (miss.length ? ` — 확인받은 주소 빠짐: ${miss.slice(0, 3).map(safeUrl).join(', ')}` : '') + (add.length ? ` — 새 주소: ${add.slice(0, 3).map(safeUrl).join(', ')}` : '')
+        + (!miss.length && !add.length ? ` — 개수·순서 다름(${la.length}개 → ${lb.length}개)` : ''));
+    }
     return out;
   }
   // 임시 보관함 초안의 지금 내용(Dooray 에서 고쳤을 수 있다) — GET /v2/wapi/mails/{초안 id}(쓰기 화면 미리 보기도 이 호출, 2026-09-30 캡처)
@@ -747,10 +787,16 @@
   const who = (a) => (a.name ? `${a.name} <${a.email}>` : a.email);
   // 미리보기 글(사용자에게 그대로 보여 줄 것) — 본문은 실제로 나갈 전체(서명·원문 인용 포함)를 조각으로. ▶ 다음 조각이 없을 때까지 읽고 확인을 묻는다.
   //   첫 조각(offset 0)에 머리(보내는 사람·받는 사람·참조·숨은 참조·제목·서명·외부 주소)를 싣고, 1,000자 안에 들도록 본문 길이를 줄인다.
+  // 링크 목록(본문 끝에 이어 붙여 같은 조각 흐름으로 끝까지 보인다) — 보이는 글자 → 실제로 열리는 주소, 도메인이 다르면 ⚠
+  function linkListText(p) {
+    const ls = p.links || [];
+    if (!ls.length) return '';
+    return `\n\n[링크 ${ls.length}개 — 보이는 글자 → 실제로 열리는 주소]\n` + ls.map((l, i) => `${i + 1}) ${l.text || '(글자 없음 — 그림 등)'} → ${l.href}${linkMismatch(l) ? '  ⚠ 글자에 보이는 주소와 실제 주소가 다름' : ''}`).join('\n');
+  }
   function fmtPrepared(p, chars = 900, offset = 0) {
     if (p == null) return NOT_YET;
     if (p.error) return 'ERR ' + String(p.error).replace(/=/g, '＝');
-    const full = p.fullText != null ? p.fullText : p.text, N = full.length;
+    const lt = linkListText(p), full = (p.fullText != null ? p.fullText : p.text) + lt, N = full.length;
     const L = [];
     if (!offset) {
       L.push(`[${p.reply ? '답장' : '보낼 메일'} 미리보기 — 아직 보내지 않음${p.draftId ? ' · 임시 보관함에 저장됨' : ''}${p.refreshed ? ' · 임시 보관함의 지금 내용(다시 확인 필요)' : ''} | 키 ${p.key}]`);
@@ -762,11 +808,14 @@
       if (p.external.length) L.push(`⚠ 외부 주소 ${p.external.length}개(KIST 밖): ` + p.external.join(', '));
       if (p.draftId) L.push('임시 보관함 초안 id ' + hyId(p.draftId) + ' (Dooray 에서 고치면 보내기 전에 다시 확인받는다)');
       if (p.restoreError) L.push('⚠ 원래 메일 안 읽음 복원 실패(읽음으로 바뀜): ' + p.restoreError);
+      const mis = (p.links || []).filter(linkMismatch).length;
+      if ((p.links || []).length) L.push(`링크 ${p.links.length}개 — 보이는 글자와 실제로 열리는 주소는 본문 끝 목록에서 확인` + (mis ? ` ⚠ 글자와 주소의 도메인이 다른 링크 ${mis}개` : ''));
+      if (p.quotedLinks) L.push(`원문 인용 안 링크 ${p.quotedLinks}개(원래 메일의 것 — 보내기 직전 대조에는 모두 들어감)`);
     }
     const head = L.join('\n');
     const room = offset ? chars : Math.max(150, Math.min(chars, 940 - head.length - 90));
     const end = Math.min(N, offset + room);
-    L.push(`본문 전체(서명·원문 인용 포함) ${N}자 — ${offset}-${end}${end < N ? '' : ' 끝'}:`, full.slice(offset, end));
+    L.push(`본문 전체(서명·원문 인용 포함)${lt ? ' + 링크 목록' : ''} ${N}자 — ${offset}-${end}${end < N ? '' : ' 끝'}:`, full.slice(offset, end));
     if (end < N) L.push(`▶ 다음 조각 fmtPrepared(p, ${chars}, ${end})`);
     return L.join('\n').replace(/=/g, '＝');
   }
@@ -836,6 +885,7 @@
     const p = it.p;
     p.to = cur.to; p.cc = cur.cc; p.bcc = cur.bcc; p.subject = cur.subject;
     p.fullText = htmlToText(cur.html); p.text = p.fullText; p.refreshed = true;
+    setLinks(p, cur.html, !!p.reply);   // 링크도 서버 초안의 지금 주소로 다시 보여 준다
     p.external = cur.to.concat(cur.cc, cur.bcc).filter(a => !INTERNAL_MAIL.test(a.email.split('@')[1] || '')).map(a => a.email);
     it.currentHtml = cur.html;
     it.approved = snapOf(cur);
@@ -861,8 +911,8 @@
     const want = r && typeof r === 'object' ? (r.approved || (r.to ? snapOf({ to: r.to, cc: r.cc, bcc: r.bcc, subject: r.subject, flat: null, html: '' }) : null)) : null;
     if (!want) { out.unchecked = true; return out; }
     const skip = got.bcc == null ? ['bcc'] : [];
-    const now = snapOf({ to: got.to, cc: got.cc, bcc: got.bcc || [], subject: got.subject, flat: String(got.text || '').replace(/\s+/g, '') });
-    if (!r.approved) { now.flat = want.flat; }   // 본문 승인본이 없으면 본문은 대조하지 않는다
+    const now = snapOf({ to: got.to, cc: got.cc, bcc: got.bcc || [], subject: got.subject, flat: String(got.text || '').replace(/\s+/g, ''), links: got.links || [] });
+    if (!r.approved) { now.flat = want.flat; now.links = want.links; }   // 본문 승인본이 없으면 본문·링크는 대조하지 않는다
     out.problems = diffSnap(want, now, skip);
     out.ok = !out.problems.length;
     if (skip.length) out.bccUnknown = true;
@@ -877,7 +927,7 @@
     let head;
     if (c.error) head = `보낸 메일함에 있음(내용 확인 실패) ${tail}\n⚠ ${c.error}`;
     else if (c.unchecked) head = `보낸 메일함에 있음(대조할 승인본 없음 — 제목으로만 찾음) ${tail}\n${rec}`;
-    else if (c.ok) head = `보낸 메일함 확인 ✓ ${tail}\n${rec} | 받는 사람·참조${c.bccUnknown ? '' : '·숨은 참조'}·제목·본문이 확인받은 내용과 같음${c.bccUnknown ? ' (숨은 참조는 보낸 메일에 안 보여 대조 못 함)' : ''}`;
+    else if (c.ok) head = `보낸 메일함 확인 ✓ ${tail}\n${rec} | 받는 사람·참조${c.bccUnknown ? '' : '·숨은 참조'}·제목·본문·링크 주소가 확인받은 내용과 같음${c.bccUnknown ? ' (숨은 참조는 보낸 메일에 안 보여 대조 못 함)' : ''}`;
     else head = `⚠ 보낸 메일함에 있지만 확인받은 내용과 다름 ${tail}\n${rec}\n⚠ ${c.problems.join(' / ')}`;
     return head.replace(/=/g, '＝');
   }
@@ -977,7 +1027,7 @@
     externalOf, fmtExternal, fmtFolders, fmtRules, ruleTarget, overview, fmtOverview, apiErr,
     findAddress, onlyAddress, fmtAddress, mailSender, prepareMail, fmtPrepared, fmtPreparedHtml, sendPrepared, refreshPrepared, checkSent, fmtSent,
     prepareReply, saveDraft, unrepliedMails, fmtUnreplied, checkReplied,
-    _version: 'kk-mail-ops/1.12',
+    _version: 'kk-mail-ops/1.13',
   };
   return window.kkMail._version + ' =^.^=';
 })();

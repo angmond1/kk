@@ -83,7 +83,7 @@
   }
 
   // ---------- 수행/참여 과제 (rdm_2011 / doSearchMain) ----------
-  // 반환: [{acccd, name, pi, projCode(분류코드 1자), preApprovalExempt(I/S/K)}]
+  // 반환: [{acccd, name, pi, projCode(분류코드 1자), preApprovalExempt(I/S/B/F 원래 면제 코드 — 2026-08-01 사용분부터는 폐지 대상 부처 과제·주요사업도 사전결재 불필요, project_code.md)}]
   async function queryProjects() {
     var cols = ['SRCHKND', 'SRCHVAL', 'SRCHPROCESS'];
     var xml = await post('/mis/rdm/rdm2011/doSearchMain.do', nexBody('rdm_2011', 'doSearchMain', ds('ds_search', cols, { SRCHKND: 'anyThing', SRCHPROCESS: '0' })));
@@ -94,7 +94,7 @@
     });
   }
 
-  // ---------- 회의비 사전내부결재 (fam_0100 / getList @ getListByBonbu.do) ----------
+  // ---------- 회의비 사전내부결재 (fam_0100 / getList @ getListByBonbu.do) — 2026-08-01 사용분부터 남은 경우만 ----------
   // ⚠️ 본부 전체를 반환(발의자 서버필터 미적용) → 응답에서 acccd/date/발의자로 필터해야 함.
   //   opt: { fromDt, toDt, empName(발의자명), empno(발의자사번) }
   // 반환: [{date, purpose(회의목적=회의록제목), place, acccd, startTm, endTm, proposer(발의자), people}]

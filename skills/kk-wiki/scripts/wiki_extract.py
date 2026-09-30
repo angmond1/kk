@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 """kk-wiki 첨부·문서 텍스트 추출 — 위키 첨부(attachments/<pageId>/<파일>)와 외부 문서(docs/<파일>)를 절 단위 .md 로.
 
-  python wiki_extract.py run [--force] [--only 문자열]   # → attachments_text/<pageId|docs>/<파일>/NN_<절>.md + attachments_index.json/.md
+  python wiki_extract.py run [--force] [--only 문자열] [--ext hwp,zip]   # → attachments_text/<pageId|docs>/<파일>/NN_<절>.md + attachments_index.json/.md
   python wiki_extract.py status                          # 파일 수·절 수·추출 실패 목록
   python wiki_extract.py show <파일 문자열>               # 그 파일의 절 목록(제목·쪽·글자수·tier·대체 페이지)
+  python wiki_extract.py restale                         # 규정 변경표를 고친 뒤 '⚠ 구값' 표시만 다시(다시 추출하지 않음, 몇 초)
 
-형식: pdf(PyMuPDF) · hwp(hwp5txt, pyhwp) · hwpx/docx/pptx/xlsx/xls(zip·openpyxl·python-pptx·xlrd) · doc(Word COM, 있을 때만) · zip(안의 파일을 같은 규칙으로) ·
+형식: pdf(PyMuPDF) · hwp(hwp5html, pyhwp — 표 칸까지; 실패하면 hwp5txt) · hwpx/docx(문단·표를 문서 순서대로)/pptx/xlsx/xls(zip·python-docx·openpyxl·python-pptx·xlrd) ·
+doc(Word COM, 있을 때만) · zip(안의 파일을 안쪽 경로 그대로 식별해 같은 규칙으로 — a/같은이름, b/같은이름 도 따로) ·
 그림은 목록만. 폰트 인코딩 때문에 글자가 깨진 PDF 는 `garbled` 로 표시하고 같은 이름의 hwpx/docx 가 있으면 그쪽을 쓴다.
 
 절마다 frontmatter: tier(1 현행 / 2 첨부 / 3 구버전) · section_kind(rule/procedure/case/table/reference) · doc_date · pages · superseded_by(같은 내용을 옮겨 적은
@@ -173,14 +175,39 @@ def ext_hwpx(path: str) -> tuple[list, dict]:
     return ["\n".join(out)], {}
 
 
+W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+
 def ext_docx(path: str) -> tuple[list, dict]:
+    """본문을 **문서 순서대로** — 문단과 표가 섞인 그대로(Codex 검토 v0.7.8: 문단을 다 뽑고 표를 끝에 몰아 붙여 순서가 틀렸다).
+    가로로 병합된 칸은 한 번만, 내용 컨트롤(sdt, 목차 등) 안 문단도 읽는다."""
     import docx
+    from docx.table import Table
+    from docx.text.paragraph import Paragraph
     d = docx.Document(path)
-    lines = [p.text for p in d.paragraphs]
-    for t in d.tables:
-        lines.append("")
+    lines = []
+
+    def table_lines(t) -> list:
+        out = []
         for row in t.rows:
-            lines.append(" | ".join(c.text.strip().replace("\n", " ") for c in row.cells))
+            cells, prev = [], None
+            for c in row.cells:
+                if prev is not None and c._tc is prev:
+                    continue
+                prev = c._tc
+                cells.append(c.text.strip().replace("\n", " "))
+            out.append("| " + " | ".join(cells) + " |")
+        return out
+
+    for el in d.element.body.iterchildren():
+        tag = el.tag.rsplit("}", 1)[-1]
+        if tag == "p":
+            lines.append(Paragraph(el, d).text)
+        elif tag == "tbl":
+            lines += [""] + table_lines(Table(el, d)) + [""]
+        elif tag == "sdt":
+            for p in el.iter(W_NS + "p"):
+                lines.append("".join(t.text or "" for t in p.iter(W_NS + "t")))
     return ["\n".join(lines)], {}
 
 
@@ -512,25 +539,32 @@ def process_file(root: str, path: str, page: dict | None, manifest: dict, matche
     if ext in LIST_ONLY:
         return [dict(base, status="list_only", note="그림 파일 — 목록만")]
     if ext == "zip":
+        # ZIP 안 파일은 **안쪽 경로 그대로** 식별(a/same.txt 와 b/same.txt 가 같은 출력 폴더를 써 앞 것이 지워지던 결함 — Codex 검토 v0.7.8),
+        #   임시 파일도 항목마다 따로 폴더. 이름은 UTF-8 표시(flag 0x800)가 있으면 그대로, 없으면 한국 윈도우 압축(cp949)으로 읽어 본다.
         items = []
         try:
             with zipfile.ZipFile(path) as z:
-                names = [n for n in z.namelist() if not n.endswith("/")]
                 tmpd = tempfile.mkdtemp(prefix="kkwiki_zip_")
                 try:
-                    for n in names:
-                        iext = n.rsplit(".", 1)[-1].lower() if "." in n else ""
-                        if iext in SUPPORTED and iext != "zip":
+                    for k, zi in enumerate(z.infolist()):
+                        if zi.is_dir():
+                            continue
+                        inner = zi.filename
+                        if not (zi.flag_bits & 0x800):
                             try:
-                                inner = n.encode("cp437").decode("cp949")   # 한글 zip 이름
+                                inner = inner.encode("cp437").decode("cp949")
                             except Exception:
-                                inner = n
-                            dest = os.path.join(tmpd, safe_seg(os.path.basename(inner), 100))
-                            open(dest, "wb").write(z.read(n))
-                            items += process_file(root, dest, page, manifest, matcher, rules, out_root,
-                                                  nested=f"{fname}::{os.path.basename(inner)}")
+                                pass
+                        inner = inner.replace("\\", "/").lstrip("/")
+                        iext = inner.rsplit(".", 1)[-1].lower() if "." in os.path.basename(inner) else ""
+                        if iext in SUPPORTED and iext != "zip":
+                            sub = os.path.join(tmpd, f"{k:04d}")
+                            os.makedirs(sub, exist_ok=True)
+                            dest = os.path.join(sub, safe_seg(os.path.basename(inner), 100))
+                            open(dest, "wb").write(z.read(zi))
+                            items += process_file(root, dest, page, manifest, matcher, rules, out_root, nested=f"{fname}::{inner}")
                         else:
-                            items.append(dict(base, file=f"{fname}::{n}", ext=iext, status="list_only", note="zip 안 파일 — 목록만"))
+                            items.append(dict(base, file=f"{fname}::{inner}", ext=iext, status="list_only", note="zip 안 파일 — 목록만"))
                 finally:
                     shutil.rmtree(tmpd, ignore_errors=True)
         except Exception as e:
@@ -564,7 +598,10 @@ def process_file(root: str, path: str, page: dict | None, manifest: dict, matche
     doc_title = m.get("title") or re.sub(r"\.[^.]+$", "", fname.split("::")[-1])
     issuer = m.get("issuer", "")
     poff = m.get("print_offset", 0)
-    stem = safe_seg(re.sub(r"\.[^.]+$", "", fname.replace("::", "__")), 80)
+    # 출력 폴더 = 파일 이름 **확장자까지**(같은 페이지의 신청서.hwp 와 신청서.docx 가 한 폴더를 써서 나중 것이 앞 것을 지웠다 — 2026-09-30)
+    stem = safe_seg(fname.replace("::", "__").replace("/", "__"), 80)
+    if "::" in fname:   # ZIP 안 파일 — 긴 경로가 80자에서 잘려 같아지지 않게 전체 경로의 짧은 지문을 붙인다
+        stem = safe_seg(stem, 70) + "_" + hashlib.sha1(fname.encode("utf-8")).hexdigest()[:6]
     outdir = os.path.join(out_root, page_id, stem)
     if os.path.isdir(outdir):
         shutil.rmtree(outdir)
@@ -705,6 +742,37 @@ def status(root: str) -> None:
         log(f"  ✗ [{s['status']}] {s['page_path'][:45]} / {s['file'][:50]} — {s.get('note', '')[:60]}")
 
 
+def restale(root: str) -> None:
+    """규정 변경표(_shared/rule_changes.md)를 고친 뒤 '⚠ 구값' 표시만 다시 매긴다 — 다시 추출하지 않는다(몇 초).
+    절 파일의 stale_values 줄과 attachments_index.json/.md 를 고친다."""
+    ip = os.path.join(root, INDEX_JSON)
+    if not os.path.exists(ip):
+        log(f"[kk-wiki] 추출 결과 없음: {ip} — `run`"); return
+    d = json.load(io.open(ip, encoding="utf-8"))
+    rules = load_rule_changes()
+    n_ok = n_chg = n_miss = 0
+    for s in d.get("sections", []):
+        if s.get("status") != "ok":
+            continue
+        fp = os.path.join(root, s["rel"].replace("/", os.sep))
+        try:
+            txt = io.open(fp, encoding="utf-8").read()
+        except Exception:
+            n_miss += 1; continue
+        m = re.match(r"---\n.*?\n---\n", txt, re.S)
+        body = txt[m.end():] if m else txt
+        stale = [f"{r['item']}: 구 {r['old']} → 현행 {r['new']} ({r['since']})" for r in rules if r["re"].search(body)]
+        n_ok += 1
+        if stale != (s.get("stale_values") or []):
+            s["stale_values"] = stale; n_chg += 1
+            line = f"stale_values: {json.dumps(stale, ensure_ascii=False)}"
+            io.open(fp, "w", encoding="utf-8").write(re.sub(r"^stale_values: .*$", lambda _m: line, txt, count=1, flags=re.M))
+    io.open(ip, "w", encoding="utf-8").write(json.dumps(d, ensure_ascii=False, indent=0))
+    write_index_md(root, d.get("sections", []))
+    log(f"[kk-wiki] 구값 표시 다시: 변경표 {len(rules)}항목, 절 {n_ok}개 중 {n_chg}개 바뀜"
+        + (f", 파일 없음 {n_miss}(run 으로 다시 추출)" if n_miss else "") + f" — 지금 구값 표시 {sum(1 for s in d.get('sections', []) if s.get('stale_values'))}절")
+
+
 def show(root: str, pat: str) -> None:
     d = json.load(io.open(os.path.join(root, INDEX_JSON), encoding="utf-8"))
     for s in d.get("sections", []):
@@ -718,7 +786,7 @@ def show(root: str, pat: str) -> None:
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["run", "status", "show"])
+    ap.add_argument("cmd", choices=["run", "status", "show", "restale"])
     ap.add_argument("args", nargs="*")
     ap.add_argument("--root")
     ap.add_argument("--force", action="store_true", help="이미 추출한 파일도 다시")
@@ -730,6 +798,8 @@ def main(argv=None):
         run(root, a.force, a.only, {e.strip().lower().lstrip(".") for e in a.ext.split(",") if e.strip()} or None)
     elif a.cmd == "status":
         status(root)
+    elif a.cmd == "restale":
+        restale(root)
     else:
         if not a.args:
             raise SystemExit("show <파일 문자열>")

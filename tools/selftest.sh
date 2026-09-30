@@ -16,6 +16,11 @@ fail=0; n=0
 chk() { n=$((n+1)); if eval "$2"; then echo "PASS $1"; else echo "FAIL $1"; fail=$((fail+1)); fi; }
 trap 'rm -rf "$T"' EXIT
 
+echo "== 0. SKILL.md 머리 — 부르는 말(키키야·김키키)·설명 1024자·공용 호출 문서"
+out0="$($PY "$REPO/tools/check_skill_meta.py" 2>&1)"; rc0=$?
+echo "$out0" | grep "^FAIL" || true
+chk "SKILL.md 머리 점검 전부 통과(check_skill_meta.py: $(echo "$out0" | tail -1))" '[ $rc0 -eq 0 ]'
+
 echo "== 1. 브라우저 코어(.min.js) 결함 주입"
 if command -v node >/dev/null 2>&1; then
   node "$REPO/tools/selftest_cores.js" > "$T/cores.txt" 2>&1; rc=$?
@@ -63,6 +68,11 @@ EOF
 $WS import "$T/full.json" > "$T/w1" 2>&1; chk "위키 5쪽 가져오기" "$WS status | grep -q ': 5 페이지'"
 $WS import "$T/part.json" > "$T/w2" 2>&1
 chk "가지 실패·오류 페이지가 있으면 기존 페이지를 지우거나 덮지 않음" "grep -q '하위 목록을 못 받은 가지 1곳' '$T/w2' && $WS status | grep -q ': 5 페이지' && grep -q '본문 4' '$KIKI_ROOT/wiki/raw/4.json'"
+
+echo "== 2c. 위키 첨부 추출·한 번에 모으기(wiki_extract.py·wiki_ask.py) — ZIP 같은 이름·DOCX 순서·긴 표·규정 변경표·토큰 없음"
+"$PY" "$REPO/tools/selftest_wiki_extract.py" > "$T/wx.txt" 2>&1; rc=$?
+grep -E "^(FAIL|SKIP)" "$T/wx.txt"; tail -1 "$T/wx.txt"
+chk "위키 추출·모으기 시험 전부 통과" "[ $rc -eq 0 ]"
 
 echo "== 3. 예산 엑셀(make_report.py)"
 M="$PY $S/kk-budget/scripts/make_report.py"

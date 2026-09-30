@@ -162,8 +162,9 @@ def main(argv=None):
     a = ap.parse_intermixed_args(argv)
     root = snapshot_root(a.root)
     current = load_index(root) + load_md_folder(root, "ocr", "ocr", "transcribed") + load_md_folder(root, "notices", "notice", "dated")
-    sections = load_sections(root) if a.scope in ("attach", "all") or True else []
-    secs_in = [s for s in sections if s["tier"] <= a.tier and (not a.kind or s.get("kind") == a.kind)]
+    # 첨부·구버전 절은 필요할 때만 읽는다 — 범위가 attach·all 이거나, current 결과가 3건 미만이라 '첨부에 N건 더' 힌트를 셀 때
+    filt = lambda secs: [s for s in secs if s["tier"] <= a.tier and (not a.kind or s.get("kind") == a.kind)]
+    secs_in = filt(load_sections(root)) if a.scope in ("attach", "all") else []
     pool = (current if a.scope in ("current", "all") else []) + (secs_in if a.scope in ("attach", "all") else [])
     if a.list is not None:
         for p in pool:
@@ -189,7 +190,7 @@ def main(argv=None):
     hits.sort(key=lambda x: (-x[0], x[1].get("tier", 1)))
     n_sec = sum(1 for h in hits if h[1].get("section"))
     print(f"[kk-wiki] '{' AND '.join(a.terms)}' → {len(hits)}건 (상위 {min(a.top, len(hits))}건, 범위 {a.scope}, 스냅샷 {root})")
-    if a.scope == "current" and len(hits) < 3 and sections:
+    if a.scope == "current" and len(hits) < 3 and (secs_in := filt(load_sections(root))):
         extra = 0
         for p in secs_in:
             if a.path and a.path.lower() not in p["path"].lower():
