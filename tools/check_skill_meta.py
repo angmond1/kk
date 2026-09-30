@@ -54,6 +54,7 @@ def front(text):
     return fm, body
 
 
+CALLS = ["키키", "키키야", "키키씨", "김키키", "김키키씨", "김키키야", "네코짱", "네코쨩", "야옹이", "고양이", "냥이", "냥냥이"]
 names = sorted(d for d in os.listdir(SK) if d.startswith("kk-") and os.path.isfile(os.path.join(SK, d, "SKILL.md")))
 chk("kk skill 폴더를 찾음", len(names) >= 7, str(names))
 for name in names:
@@ -64,7 +65,7 @@ for name in names:
     d = str(fm.get("description") or "")
     chk(f"{name}: name 이 폴더 이름과 같음", fm.get("name") == name, str(fm.get("name")))
     chk(f"{name}: 설명 1~1024자", 0 < len(d) <= 1024, f"{len(d)}자")
-    chk(f"{name}: 설명 앞쪽에 부르는 말(키키야·김키키씨)", 0 <= d.find("키키야") < 80 and "김키키씨" in d, d[:80])
+    chk(f"{name}: 설명 앞쪽에 부르는 말(키키야·김키키씨·네코짱·냥냥이 등)", 0 <= d.find("키키야") < 80 and all(w in d for w in CALLS), d[:80])
     chk(f"{name}: 본문이 공용 호출 문서를 가리킴", "_shared/kiki_call.md" in body)
 call = os.path.join(SK, "_shared", "kiki_call.md")
 ct = io.open(call, encoding="utf-8").read() if os.path.exists(call) else ""

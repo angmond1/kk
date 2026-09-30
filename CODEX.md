@@ -2,7 +2,7 @@
 
 > kiki 의 skill 본문은 **Claude (Claude Code / Claude in Chrome)** 기준으로 쓰여 있다. 이 문서는 **Codex Desktop / Codex CLI** 의 도구 이름·설치 경로·환경 차이만 정리하는 **Codex 어댑터**다.
 > 정본은 [CLAUDE.md](CLAUDE.md)·[INSTALL.md](INSTALL.md)·[README](README.md)·[환경 점검](skills/_shared/environment_setup.md)과 각 skill 의 `SKILL.md`다. 상세 절차는 정본을 따르고, 여기서는 Codex 차이만 적용한다.
-> 문서 동기화: **2026-09-30, v0.7.12** ([변경 이력](docs/HISTORY.md)) — 현행 코어는 kk-dry 2.12·kk-mail 1.13. 아래의 Codex 브라우저 실측은 해당 날짜·버전 그대로 구분한다: 통합정보·메일 2026-09-27, kk-dry 큰 결과 반환 2026-09-29(격리 합성 페이지), kk-dry 2.3의 Dooray 실계정 읽기·공식 API 파일 스트림(메모리)·미리보기 2026-09-30. 코어 2.12·1.13의 변경은 저장소 시험으로 확인했으며 Codex 실계정에서 메일 발송·Dooray 쓰기·포털 제출은 재시험하지 않았다.
+> 문서 동기화: **2026-09-30, v0.7.13** ([변경 이력](docs/HISTORY.md)) — 현행 코어는 kk-dry 2.12·kk-mail 1.13. 아래의 Codex 브라우저 실측은 해당 날짜·버전 그대로 구분한다: 통합정보·메일 2026-09-27, kk-dry 큰 결과 반환 2026-09-29(격리 합성 페이지), kk-dry 2.3의 Dooray 실계정 읽기·공식 API 파일 스트림(메모리)·미리보기 2026-09-30. 코어 2.12·1.13의 변경은 저장소 시험으로 확인했으며 Codex 실계정에서 메일 발송·Dooray 쓰기·포털 제출은 재시험하지 않았다.
 
 ## 1. 설치 구조 (Codex)
 **설치 폴더부터 묻는다**: 기본 `C:\kiki`(Windows) / `~/kiki`(macOS/Linux) 또는 사용자 지정 경로. 선택한 `kiki_root`에 패키지를 확보하고 그 폴더에서 진행한다(git 불요: ZIP/동료 폴더 가능). 원본 `skills/`를 아래 Codex 경로에 복사한다. 배포본 `install.ps1`·`install.sh`는 Claude 경로용이므로 Codex 설치에는 아래 복사 예를 쓴다.
