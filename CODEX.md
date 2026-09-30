@@ -2,13 +2,14 @@
 
 > kiki 의 skill 본문은 **Claude (Claude Code / Claude in Chrome)** 기준으로 쓰여 있다. 이 문서는 **Codex Desktop / Codex CLI** 의 도구 이름·설치 경로·환경 차이만 정리하는 **Codex 어댑터**다.
 > 정본은 [CLAUDE.md](CLAUDE.md)·[INSTALL.md](INSTALL.md)·[README](README.md)·[환경 점검](skills/_shared/environment_setup.md)과 각 skill 의 `SKILL.md`다. 상세 절차는 정본을 따르고, 여기서는 Codex 차이만 적용한다.
-> 문서 동기화: **2026-09-30, v0.7.12** ([변경 이력](docs/HISTORY.md)) — 코어 kk-dry 2.12·kk-mail 1.13 기준(아래 Codex 실측 기록은 그 날짜·버전 그대로). 통합정보·메일의 Codex 브라우저 실측은 2026-09-27, kk-dry의 큰 결과 반환 실측은 2026-09-29 격리된 합성 페이지 기준이다. kk-dry 2.3은 2026-09-30 Dooray 실계정에서 검색·본문/첨부·슬라이드/문서 읽기와 공식 API 파일 스트림(메모리)·미리보기를 확인했다(2.4는 quick 요약의 파일 수 표시만 다름). `--yes` 저장·게시·업로드는 검증하지 않았다. 버전·연결 방식에 따른 차이는 따로 표시한다.
+> 문서 동기화: **2026-09-30, v0.7.12** ([변경 이력](docs/HISTORY.md)) — 현행 코어는 kk-dry 2.12·kk-mail 1.13. 아래의 Codex 브라우저 실측은 해당 날짜·버전 그대로 구분한다: 통합정보·메일 2026-09-27, kk-dry 큰 결과 반환 2026-09-29(격리 합성 페이지), kk-dry 2.3의 Dooray 실계정 읽기·공식 API 파일 스트림(메모리)·미리보기 2026-09-30. 코어 2.12·1.13의 변경은 저장소 시험으로 확인했으며 Codex 실계정에서 메일 발송·Dooray 쓰기·포털 제출은 재시험하지 않았다.
 
 ## 1. 설치 구조 (Codex)
 **설치 폴더부터 묻는다**: 기본 `C:\kiki`(Windows) / `~/kiki`(macOS/Linux) 또는 사용자 지정 경로. 선택한 `kiki_root`에 패키지를 확보하고 그 폴더에서 진행한다(git 불요: ZIP/동료 폴더 가능). 원본 `skills/`를 아래 Codex 경로에 복사한다. 배포본 `install.ps1`·`install.sh`는 Claude 경로용이므로 Codex 설치에는 아래 복사 예를 쓴다.
 
 - **설치 때 에이전트가 Python 3·Node.js 유무를 확인하고, 없으면 한 줄 안내 후 바로 설치를 시작한다**. 정본 [CLAUDE.md Step 0](CLAUDE.md)의 범위: 전체 설치 = 둘 다 / kk-mail만 = 둘 다 불필요 / kk-budget·kk-wiki = Python / kk-pay·kk-meet·kk-inspect = Python + Node.js. kk-dry의 브라우저 조회는 Python·토큰 없이 가능하고, 공식 API를 쓰는 받기·쓰기는 Python·개인 토큰이 필요하다. 브라우저 MCP를 새로 등록할 때 필요한 Node.js와 스킬 자체의 의존성은 구분한다. Python 패키지는 각 skill에서 필요할 때 확인·설치한다.
 - Windows: `python --version`·`node --version`·`npx --version` 확인. `python`이 없어도 `py -3 --version`이 되면 재설치하지 않고 그 인터프리터를 쓴다. **스크립트와 `-m pip`는 같은 Python으로 실행**한다. `python`과 `py -3`는 서로 다른 설치본일 수 있으므로 `python -c "import sys; print(sys.executable)"` 또는 `kiki_doctor.py` 첫 줄로 확인한다. Store 실행 별칭·설치 직후 PATH 미반영을 구분하고, 미설치 시 winget 및 UAC/수동 설치 안내는 Step 0을 따른다.
+- Windows 경로를 Python 코드(`open()`·openpyxl 저장/열기)나 Python 인자로 넘길 때는 `C:/kiki/...` 형식을 쓴다. Git Bash의 `/c/kiki/...`는 Bash 명령에만 해당하며 Windows Python에서는 경로가 아니다([환경 점검](skills/_shared/environment_setup.md)).
 - macOS/Linux 절차도 [CLAUDE.md Step 0](CLAUDE.md)·[INSTALL.md §6](INSTALL.md)을 따른다(실기기 미검증). macOS는 Python 미설치 시 Xcode 명령줄 도구, Node.js는 기존 Homebrew 또는 `.pkg`; Linux는 `python3` 확인 후 sudo가 필요한 명령은 사용자에게 안내하고, sudo 불가 시 사용자 경로 설치를 따른다. OS별 설치 절차를 이 문서에 중복 관리하지 않는다.
 
 | 구분 | Codex 설치 경로 | 비고 |
@@ -52,13 +53,14 @@ if (-not (Test-Path dining)) { New-Item -ItemType Directory -Force meeting | Out
 
 - Codex Desktop 은 시작 시 skill 목록을 로드 → **새 skill 설치 후 Codex 재시작**으로 인식 확인.
 - `~/.codex/kiki/kiki.config.json`의 `kiki_root`에 선택한 폴더의 절대경로를 기록한다. `token.txt`·기본 저장 폴더(`budget/ meeting/ inspect/ _tmp/`)는 이 경로를 기준으로 찾는다. 토큰 입력은 §3과 [CLAUDE.md Step 4](CLAUDE.md)를 따른다.
-- Codex의 브라우저 작업은 **chrome-devtools-mcp가 연결한 Chrome**에서 한다. 기본 실행은 새 창·별도 프로필이라 그 창에서 포탈 `e.kist.re.kr`·Dooray에 로그인한다. **`--autoConnect` 또는 `--browserUrl`은 기존 Chrome에 연결**하므로 해당 프로필의 로그인 세션을 사용한다. 2026-09-27 Codex 재시험은 `--autoConnect`로 평소 Chrome에 연결해 성공했다. 연결 방식·`list_pages` 결과를 확인하고, 필요한 경우 사용자가 Chrome의 원격 디버깅 허용을 승인한다. KIST 사내망/VPN과 정오 세션 리셋에 유의한다.
+- 이 문서의 **JS 코어 주입·NEXACRO fetch·파일첨부 예시는 Chrome DevTools MCP 경로**(`evaluate_script`·`upload_file`)다. 기본 실행은 새 창·별도 프로필이라 그 창에서 포탈 `e.kist.re.kr`·Dooray에 로그인한다. **`--autoConnect` 또는 `--browserUrl`은 기존 Chrome에 연결**하므로 해당 프로필의 로그인 세션을 사용한다. 2026-09-27 Codex 재시험은 `--autoConnect`로 평소 Chrome에 연결해 성공했다. 연결 방식·`list_pages` 결과를 확인하고, 필요한 경우 사용자가 Chrome의 원격 디버깅 허용을 승인한다. KIST 사내망/VPN과 정오 세션 리셋에 유의한다.
+- [Codex의 Chrome 확장·Computer Use](https://learn.chatgpt.com/docs/chrome-extension)는 **현재 Chrome 프로필의 화면을 읽고 조작하는 별도 경로**다. Codex 데스크톱 앱의 Settings > Computer Use에서 연결한 프로필을 선택한다. 이 경로의 화면 조작 도구를 아래 DevTools의 `evaluate_script`·`upload_file`과 같은 도구로 간주하지 않는다. kiki 코어 실행에는 해당 세션에 JS 실행 도구가 실제로 있는지 먼저 확인한다. [내장 Browser](https://learn.chatgpt.com/docs/browser)는 별도 프로필이며 파일 업로드도 지원하지 않으므로, 로그인된 Chrome 세션·NEXACRO 첨부 절차를 그대로 옮기지 않는다.
 - 브라우저 도구가 이미 준비돼 있으면 **kk-mail은 Dooray 로그인 세션만으로 동작하며 토큰·추가 설치가 없다**. `npx`로 MCP를 새로 등록할 때 필요한 Node.js는 메일 코어의 의존성과 구분한다. Codex의 MCP는 `~/.codex/config.toml`의 `[mcp_servers.<등록명>]` 또는 `codex mcp add`로 등록한다([공식 MCP 안내](https://developers.openai.com/codex/mcp)). 기존 연결을 중복 등록하지 않는다.
 - **권장 모델은 [README 「구성」](README.md#구성)을 참조**한다. 표의 Claude 모델을 Codex 모델에 임의 대응시키거나 Codex 권장 모델명을 추정하지 않는다.
 - (Claude 는 `~/.claude/skills/` + `~/.claude/kiki/`. 경로만 다르고 내용 동일.)
 
 ## 2. 도구 이름 어댑터 (핵심)
-skill 본문의 "Claude in Chrome" 도구를 Codex의 Chrome DevTools 도구로 치환해 읽는다. **도구는 짧은 이름으로 표기**하며, 실제 서버 접두어는 세션의 도구 목록에서 확인한다. 등록명·버전·설치 방식에 따른 차이는 [환경 점검](skills/_shared/environment_setup.md)의 "도구 이름 표기 규칙"을 따른다.
+아래 표는 **Chrome DevTools MCP가 연결된 세션**에서 skill 본문의 "Claude in Chrome" 도구를 옮겨 읽는 방법이다. Computer Use·Chrome 확장 도구의 이름표가 아니다. **도구는 짧은 이름으로 표기**하며, 실제 서버 접두어는 세션의 도구 목록에서 확인한다. 등록명·버전·설치 방식에 따른 차이는 [환경 점검](skills/_shared/environment_setup.md)의 "도구 이름 표기 규칙"을 따른다.
 
 | skill 본문(Claude) 의도 | Codex 도구 |
 |---|---|
@@ -70,7 +72,8 @@ skill 본문의 "Claude in Chrome" 도구를 Codex의 Chrome DevTools 도구로 
 | 클릭/입력/업로드 fallback | `click` / `fill` / `press_key` / `upload_file` |
 
 - **현재 스키마에서는 `evaluate_script`·`navigate_page`·`take_snapshot`·`upload_file` 등에 `pageId`가 필수**다. `select_page`만 호출한 뒤 대상 인자를 생략하지 않는다. 별도 팝업은 `list_pages`로 새 ID를 확인한다. 다른 버전에서는 인자 이름이 달라질 수 있으므로 세션에 노출된 스키마가 우선이다.
-- **JS 코어 주입·호출은 `evaluate_script`**: 각 skill의 `scripts/*.min.js`를 읽어 대상 탭에 주입 → `window.kkPay.*` / `window.kkBudget.*` / `window.kkmeet.*` / `window.kkMail.*` / `window.kkWiki.*` / `window.kkDry.*` 함수 호출(environment_setup.md §1의 "Claude in Chrome 미연결이면 중단"은 Codex에서는 `list_pages`로 연결 확인으로 읽는다). 원본 `.js`는 검토용이며, 메일은 [kk_mail_ops.js](skills/kk-mail/scripts/kk_mail_ops.js)의 코어 **1.12**와 같은 내용의 `.min.js`를 쓴다.
+- **JS 코어 주입·호출은 `evaluate_script`**: 각 skill의 `scripts/*.min.js`를 읽어 대상 탭에 주입 → `window.kkPay.*` / `window.kkBudget.*` / `window.kkmeet.*` / `window.kkMail.*` / `window.kkWiki.*` / `window.kkDry.*` 함수 호출(environment_setup.md §1의 "Claude in Chrome 미연결이면 중단"은 이 경로에서는 `list_pages`로 연결 확인으로 읽는다). 원본 `.js`는 검토용이며, 메일은 [kk_mail_ops.js](skills/kk-mail/scripts/kk_mail_ops.js)의 코어 **1.13**과 같은 내용의 `.min.js`를 쓴다.
+- **"키키야"·"김키키씨" 같은 문장 앞 부르는 말은 요청에서 빼고** [공통 연결표](skills/_shared/kiki_call.md)의 실제 요청 내용으로 일곱 skill 중 하나를 고른다. 문장 중간의 사람 이름은 검색·수신자 조건일 수 있다. Codex에서는 해당 skill의 `SKILL.md`를 읽고 따른다.
 - `evaluate_script`의 `function`에는 함수 선언 문자열을 넘긴다. **`async () => ...`의 resolve 결과를 직접 받을 수 있다**(2026-09-27 실측). 데이터 조회만 할 때는 현재 스키마의 `waitForStableDom:false`를 사용할 수 있다. 오래 걸리는 수집은 시작/상태 확인으로 나누고 실패도 저장한다. `dialogAction`의 기본값은 `accept`이므로 저장·상신 호출의 사용자 확인을 대신하지 않는다.
   예: `evaluate_script({pageId: <대상 ID>, function: "async () => ({count: (await kkPay.queryProjects()).length})", waitForStableDom: false})`. 객체·배열은 JSON으로 반환하고 토큰·사번·카드번호는 포함하지 않는다.
 - ⚠️ **페이지 새로고침 시 주입한 `window.*` 객체가 사라진다 → 재주입** 필요.
@@ -118,22 +121,24 @@ s.textContent = `[id*="_form_modalPopDiv"], [id*="modalPopDivScrollableInnerCont
 ## 6. skill 별 Codex 실전 노트 (요약)
 세부 절차·함정은 각 skill 본문이 1차. 아래는 Codex 이식 시 확인된 보강점.
 
-- **kk-budget**: 예실대비표 `bdg_2030` 좌표 없이 fetch 조회 → JSON 스냅샷 → `scripts/make_report.py` 엑셀. **조회 전용**(저장/제출/결재 안 함). 로그인 세션만 있으면 토큰 불요.
-- **kk-pay**: 카드 승인번호·과제·금액 fetch 조회 + 파일명 규칙 변환 + Dooray Drive 업로드(`DOORAY_TOKEN`). 세금계산서 직접작성의 계좌검증·첨부·상신 절차는 [fam_0702 안내](skills/kk-pay/references/tax_invoice_payment.md)에 정리돼 있다. 과거의 공휴일·주말 미가동 추정은 적용하지 않는다. **정본의 전체 흐름 실증과 Codex 이번 재시험 범위는 구분**한다: 이번에는 조회·검수 첨부 선택까지이며 계좌검증·저장·상신 전체는 재시험하지 않았다. `archive`는 사전검사·실패 시 되돌림의 요약을 확인하고 `실패`·`되돌리지 못함`이 있으면 완료로 보고하지 않는다.
+- **kk-budget**: 예실대비표 `bdg_2030` 좌표 없이 fetch 조회 → JSON 스냅샷 → `scripts/make_report.py` 엑셀. **조회 전용**(저장/제출/결재 안 함). 로그인 세션만 있으면 토큰 불요. 직접조회가 막혀 화면 방식으로 우회할 때는 계정칸에 과제번호를 입력해 진입하고, 재수집은 `collectMine` 전수·상세합 검산이 기본이다. 이전 스냅샷 재사용은 팝업이 아주 많을 때만 표시를 남기고 쓴다([예산 skill](skills/kk-budget/SKILL.md)).
+- **kk-pay**: 카드 승인번호·과제·금액 fetch 조회 + 파일명 규칙 변환 + Dooray Drive 업로드(`DOORAY_TOKEN`). 세금계산서 직접작성의 계좌검증·첨부·상신 절차는 [fam_0702 안내](skills/kk-pay/references/tax_invoice_payment.md)에 정리돼 있다. 과거의 공휴일·주말 미가동 추정은 적용하지 않는다. 사례비 원천세는 지급 유형·거주 구분에 따라 달라지므로 8%를 모두 구값, 20%를 모두 현행 값으로 치환하지 않는다([규정 변경표](skills/_shared/rule_changes.md)). **정본의 전체 흐름 실증과 Codex 이번 재시험 범위는 구분**한다: 이번에는 조회·검수 첨부 선택까지이며 계좌검증·저장·상신 전체는 재시험하지 않았다. `archive`는 사전검사·실패 시 되돌림의 요약을 확인하고 `실패`·`되돌리지 못함`이 있으면 완료로 보고하지 않는다.
 - **kk-inspect**: `mcs_0003` 필드맵·팝업 제어. 검수신청구분은 보통 **비자산** 선택 후 조회. **첨부는 건별 행 선택 후 해당 세금계산서·거래명세서 1개씩** (여러 건 한꺼번에 4개 X — 행 바꿔가며 해당 증빙만). 숨은 input 패턴으로 첨부 가능.
 - **kk-meet**: [SKILL](skills/kk-meet/SKILL.md) 기준으로 **회의 메모·녹취록·회의 자료 등 글을 먼저 한 번에 요청**한다. 녹음만 있으면 휴대폰 녹음 앱·클로바노트로 바꾼 글을 받는 흐름을 따르고, 외부 전송 여부는 정본 안내대로 확인한다. 녹음 파일을 그대로 주거나 그 방법이 어려울 때만 `transcribe.py check`의 **`[사용자 안내]` 한 줄**로 이 PC 음성 인식을 안내한다. 설치·실행은 [녹음 처리 안내](skills/kk-meet/references/meeting_transcribe.md)를 따른다. 글·녹음이 없으면 주제를 묻고 먼저 내용을 직접 적어 달라고 한다. 직접 적지 않는 경우에만 제안서·보고서를 근거로 채워도 되는지 확인한다. 이미 완성된 회의록은 그대로, 기록 요약·보완 초안은 사용자 확인 뒤 입력한다. 사전결재·시간·참석자 판단은 SKILL을 따른다. Codex도 `evaluate_script`로 제어하며, 계정/비목은 **`doDecision()` 콜백**, 통장표기는 **`common_onkillfocus` 동기화**를 사용한다.
+  회의비 사전 내부결재는 2026-08-01 사용분부터 대상 부처·주요사업에서 기본 폐지됐지만, **목록 밖 부처 과제와 휴일·근무지 밖 사용은 별도 확인**한다([현행 회의비 기준](skills/kk-meet/references/meeting_form.md)). 옛 문서의 "정산과제면 무조건 사전결재"를 적용하지 않는다.
   회의록 엑셀은 임시저장 직후 `{kiki_root}/meeting/meeting_log/{yymm}_회의록.xlsx`에 자동 기록한다(처리 연월별 1파일, 연월 하위폴더 없음). 회의록 파일은 **hwpx로 통일**하고 요청 시에만 [make_meetinglog_hwpx.py](skills/kk-meet/scripts/make_meetinglog_hwpx.py)로 같은 폴더에 `{yymmdd}_{과제번호}_{과제이름 간략}_회의록.hwpx`를 만든다(건당 1파일). 생성은 표준 라이브러리로 모든 OS에서 **아래아한글 없이** 가능하고, 열람은 한글 또는 HOP을 쓴다. 세부 저장·중복 검사 규칙은 [회의록 엑셀 안내](skills/kk-meet/references/meeting_log_excel.md)를 따른다.
-- **kk-mail**: [SKILL](skills/kk-mail/SKILL.md)의 기능 번호는 **1 자연어로 메일 찾기(가장 많이 쓰는 기능) · 2 폴더 분류 · 3 자동분류 규칙 · 4 스팸 처리 · 5 메일 쓰기·보내기 · 6 답장**(미리보기 → 사용자 확인 → 보내기 → 보낸 메일함 확인, 답장 초안은 설정 `replyDrafts` — 기본 대화창 + 임시 보관함, 코어 1.12). 로그인 세션 쿠키로 동작하며 토큰·추가 설치는 불필요하다(§1의 Codex 브라우저 도구 준비 전제).
-  기능 1은 코어(1.12)의 **`searchMails`/`searchMany` → Dooray 검색 API `POST /v2/wapi/mails/search`** 경로가 기본이고, 검색어를 정하기 어려우면 **`listMails`로 목록 훑기** 경로를 쓴다. `end`(all/period/cap/error)·`truncated`·`error`를 확인하고, `searchMany`의 `truncatedGroups`나 `fmtList`의 잘림 경고를 전체 검색 완료로 바꾸어 보고하지 않는다. `getMail`은 조회 거절·안 읽음 복원 실패를 예외로 알리며, 복원 실패 시 `e.mail`에 본문이 남는다. `getMails`의 `restoreError`도 확인하고 읽음 상태 보존 성공으로 보고하지 않는다. 상세는 [SKILL](skills/kk-mail/SKILL.md)·[wapi 참조](skills/kk-mail/references/wapi_reference.md)를 따른다.
+- **kk-mail**: [SKILL](skills/kk-mail/SKILL.md)의 기능 번호는 **1 자연어로 메일 찾기(가장 많이 쓰는 기능) · 2 폴더 분류 · 3 자동분류 규칙 · 4 스팸 처리 · 5 메일 쓰기·보내기 · 6 답장**(미리보기 → 사용자 확인 → 보내기 → 보낸 메일함 확인, 답장 초안은 설정 `replyDrafts` — 기본 대화창 + 임시 보관함, 코어 1.13). 로그인 세션 쿠키로 동작하며 토큰·추가 설치는 불필요하다(§1의 Codex 브라우저 도구 준비 전제).
+  코어 1.13은 미리보기 끝에 **표시 글자 → 실제 링크 주소**를 보여 주고, 저장된 초안을 보내기 직전과 보낸편지함 확인 때 링크 주소까지 대조한다. 사용자가 링크 목록을 포함한 미리보기 전체를 확인하도록 하고, 주소만 바뀌어도 동일 본문으로 보고하지 않는다. 이 변경은 저장소 시험 결과이며 Codex 실계정 발송 검증은 아니다.
+  기능 1은 코어(1.13)의 **`searchMails`/`searchMany` → Dooray 검색 API `POST /v2/wapi/mails/search`** 경로가 기본이고, 검색어를 정하기 어려우면 **`listMails`로 목록 훑기** 경로를 쓴다. `end`(all/period/cap/error)·`truncated`·`error`를 확인하고, `searchMany`의 `truncatedGroups`나 `fmtList`의 잘림 경고를 전체 검색 완료로 바꾸어 보고하지 않는다. `getMail`은 조회 거절·안 읽음 복원 실패를 예외로 알리며, 복원 실패 시 `e.mail`에 본문이 남는다. `getMails`의 `restoreError`도 확인하고 읽음 상태 보존 성공으로 보고하지 않는다. 상세는 [SKILL](skills/kk-mail/SKILL.md)·[wapi 참조](skills/kk-mail/references/wapi_reference.md)를 따른다.
   첫 실행(`kk-mail 설정해줘`)은 **환경 점검 → 기존 폴더·규칙 파악 → 6가지 기능 안내로 종료**한다. 폴더 분류·권장 규칙 설정은 사용자가 원할 때만 진행한다. 기능 3의 기본 조건은 **발신 주소만**이며, 제목 조건은 사용자가 명시할 때만 추가한다.
   **도구별 검증 범위**: SKILL의 "출력 약 1,000자 잘림·`a=b` 필터"는 **Claude in Chrome의 `javascript_tool` 실측값**이다. 2026-09-27 이 Codex 세션의 `evaluate_script`에서는 가상 문자열 **19,210자**, `a=b`·URL·20자리 숫자를 온전히 반환했고 비동기 resolve 결과도 직접 받았다. 이를 출력 무제한이나 다른 도구·버전의 보장으로 해석하지 않는다. 실제 결과가 클 때는 필요한 필드만 반환하거나 분할하며, Claude용 필터 우회를 Codex 필수 조건으로 두지 않는다.
-- **kk-wiki**: [SKILL](skills/kk-wiki/SKILL.md). 위키 본문 스냅샷을 `{kiki_root}/wiki`에 두고 로컬 검색(`wiki_search.py`) → 인용 페이지만 `wiki_snapshot.py fresh`로 최신 확인. **토큰이 있으면 Python만으로**(브라우저 불요) 수집·최신 확인·첨부. 토큰이 없으면 chrome-devtools 창의 Dooray 탭에 코어 `kk_wiki_ops.js`를 주입 → `crawlAll()`(탭을 앞에 둘 것) → export JSON 다운로드 → `import`. 스냅샷은 KIST 내부 자료 — repo 밖에만.
+- **kk-wiki**: [SKILL](skills/kk-wiki/SKILL.md). 위키 본문 스냅샷을 `{kiki_root}/wiki`에 두고, 간단한 질문은 먼저 `scripts/wiki_ask.py <검색어…>`로 후보·관련 절·담당자·최신 확인 결과를 한 번에 받는다. 잘린 표는 일부 행만 보인 것이므로 필요한 행을 원문에서 읽고, `CHANGED`면 갱신 후 다시 읽는다. **토큰이 있으면 Python만으로**(브라우저 불요) 수집·최신 확인·첨부가 가능하다. 토큰이 없으면 `wiki_ask.py`가 출력하는 로컬 버전 포함 `checkFresh` 호출을 로그인된 Dooray 탭의 `kk_wiki_ops.min.js`로 실행해 결과를 확인한다. 토큰 없는 수집은 코어 `crawlAll()`(탭을 앞에 둘 것) → export JSON 다운로드 → `import`; 첨부는 받을 수 없다. 스냅샷은 KIST 내부 자료 — repo 밖에만. 규정 변경표의 구값 표시만 다시 계산할 때는 [첨부 추출 안내](skills/kk-wiki/SKILL.md)의 `wiki_extract.py restale`을 따른다.
 
 ### kk-dry (구 kk-dooray): Codex 브라우저 경로
 
 [SKILL](skills/kk-dry/SKILL.md)의 `browser_batch`·`javascript_tool`·`get_page_text`를 현재 세션에서는 `list_pages`/`new_page`·`evaluate_script`·`evaluate_script`의 DOM 읽기로 옮긴다. 아래 `pageId`는 `list_pages`나 `new_page`가 반환한 실제 숫자로 바꾼다. 브라우저 조회는 로그인된 Dooray와 같은 origin의 `https://kist.gov-dooray.com/robots.txt` 작업 탭에서 한다. 기존 작업 탭이 있으면 재사용하고, 없으면 `new_page({url:"https://kist.gov-dooray.com/robots.txt", background:true})`로 만든다. `take_snapshot({pageId})`으로 탭 URL과 본문이 나타난 것을 확인한 뒤 코어를 주입한다. `isolatedContext`를 지정하면 기존 로그인 세션과 분리되므로 이 용도로 쓰지 않는다. 결과 그림을 띄우지 않았다면 작업 뒤 만든 탭을 닫고, 그림을 띄웠다면 사용자가 보도록 남긴다.
 
-코어는 선택한 설치본의 [kk_dry_ops.min.js](skills/kk-dry/scripts/kk_dry_ops.min.js) **2.4**를 사용한다. 먼저 `evaluate_script`로 저장된 코어의 버전을 확인하고, 없거나 다르면 파일 입력을 만든다. `function` 인자 예:
+코어는 선택한 설치본의 [kk_dry_ops.min.js](skills/kk-dry/scripts/kk_dry_ops.min.js) **2.12**를 사용한다. 먼저 `evaluate_script`로 저장된 코어의 버전을 확인하고, 없거나 다르면 파일 입력을 만든다. `function` 인자 예:
 
 ```js
 () => {
@@ -175,6 +180,8 @@ async () => {
 
 큰 결과는 `evaluate_script`로 `({length:document.body.innerText.length, text:document.body.innerText.slice(10000,20000)})`처럼 **서로 다른 offset의 1만 자 구간**을 끝까지 읽는다. `take_snapshot`은 요소 `uid` 확인에 유용하지만 접근성 트리가 화면 글을 모두 담는다는 보장은 없다. 2026-09-29 격리된 `about:blank` 합성 페이지에서는 `evaluate_script`가 45,000자 문자열을 온전히 반환하고 `take_snapshot`도 45,000자 `<pre>`를 포함했다. 이는 실제 Dooray·다른 도구 버전의 출력 한도 보장이 아니다. SKILL의 `javascript_tool` 약 1,000자·`get_page_text` 5만 자 한도는 **Claude 실측**이며 Codex 한도로 옮겨 적지 않는다. 코어 자체가 `report` 화면을 4.5만 자 안팎으로 줄이므로 잘림 경고가 있으면 `showFiles`·`getTask` 등으로 해당 부분을 더 읽는다. 특히 `detail.textCut` 또는 댓글 `cut`이 있으면 `only({text:…})`의 0건은 뒷부분까지 확인한 결론이 아니다.
 
+파일 링크는 `report`·`showFiles` 또는 `await kkDry.linkOf(이름)`이 **이름과 주소를 같은 줄에 준 것**을 그대로 옮긴다. 코어 2.12의 업무 첨부는 파일이 달린 글로 연결되고, 댓글 첨부는 해당 댓글 주소로 연결된다. 서로 다른 줄에서 이름·주소를 조합했을 때만 `kkDry.checkLinks([답의 링크 줄])`로 대조하고 `OK`가 아니면 수정한다([kk-dry 링크 규칙](skills/kk-dry/SKILL.md)).
+
 받기·댓글·글쓰기·올리기는 [dooray_io.py](skills/kk-dry/scripts/dooray_io.py)의 개인 토큰·대상 미리보기·사용자 확인 절차를 따른다. 위 브라우저 읽기 경로와 쓰기 경로를 혼동하지 않는다. 이 절의 Codex 도구 대응과 합성 출력 시험에 더해 **2026-09-30 kk-dry 2.3을 Dooray 실계정에서 검색·본문/첨부·슬라이드/문서 읽기, 공식 API 파일 스트림(메모리)과 다운로드·댓글·새 업무 미리보기까지 확인했다. `--yes` 저장·게시·업로드는 검증하지 않았다.**
 
 ## 7. 안전 경계 (Claude·Codex 공통)
@@ -186,7 +193,7 @@ async () => {
 
 ## 8. 실행 체크리스트
 1. `kiki_root`·선택 skill에 필요한 런타임(§1)과 Codex skill 목록의 `kk-*` 인식 확인(없으면 Codex 재시작).
-2. MCP 연결 방식과 `pageId`를 확인하고, 필요한 통합정보·Dooray 로그인 세션을 확인한다(KIST 사내망/VPN, 통합정보는 포탈 먼저). kk-mail은 Dooray 로그인만 필요.
+2. 사용 가능한 브라우저 경로를 확인한다. 이 문서의 코어 예시는 DevTools MCP의 `pageId`·`evaluate_script`를 사용하며, Chrome 확장·Computer Use만 연결된 세션이면 같은 도구가 있는지 확인한다. 필요한 통합정보·Dooray 로그인 세션을 확인한다(KIST 사내망/VPN, 통합정보는 포탈 먼저). kk-mail은 Dooray 로그인만 필요.
 3. `kiki_doctor.py`로 실제 Python·설정 폴더·토큰 출처를 확인한다. Codex 공통 설정을 재사용하며, 위키 토큰 경로·Dooray Drive 작업 등 필요한 경우에만 토큰 유효성을 확인한다(값 출력·채팅 붙여넣기 금지). 깨진 설정이나 비정상 종료를 무시하지 않는다.
 4. 통합정보 조회는 **fetch 먼저**, 실패 시 화면 fallback (고정좌표 금지).
 5. 증빙을 OS 임시폴더에 복사하고 **`extUp._input_node`**(또는 별도 page의 실제 버튼)를 최신 snapshot의 `uid`로 지정한다 — `_shared/nexacro_file_upload.md`.
