@@ -143,7 +143,7 @@ skill-name/
 27. 🔴 **브라우저 도구가 여럿이면 '로그인이 있는 쪽'을 명시해서 쓴다** — 호스트 앱이 자체 내장 브라우저를 기본으로 붙여 주는 경우, 이름이 비슷한 도구(`navigate`/`browser_batch`/`computer`)가 두 서버에 동시에 있다. 사용자 세션(SSO)은 사용자 브라우저 확장 쪽에만 있으므로 skill 문서에 **서버를 못 박고**, 배치 도구도 같은 서버 것을 쓰라고 적는다. 섞으면 로그인 안 된 빈 창이 열리고 모호한 에러만 난다.
 28. ⭐ **재수집은 증분으로** — 비싼 드릴다운(팝업 N개)을 매번 전수로 돌리지 말고, 싼 요약값(비목별 총액·건수)을 직전 스냅샷과 먼저 비교해 **변한 곳만** 다시 연다. 재사용한 부분은 결과에 '재사용'으로 명시하고, 요약값이 같아도 내부가 바뀌는 경우(상쇄거래)는 caveat 로 남긴다. diff 수치는 반드시 두 스냅샷 파일에서 계산(대화 기억으로 쓰면 틀린다).
 29. **도구 출력 필터는 '값'이 아니라 '키 이름'도 본다** — `authTk`·`token`·`cookie` 같은 단어가 반환 객체의 키에 있으면 길이·불리언이어도 차단될 수 있다. 민감값 존재 확인은 중립적 이름(`ready`)의 불리언으로.
-30. **Windows 셸 함정 2종** — (a) `"C:\dir\"` 처럼 역슬래시로 끝나는 따옴표 경로는 bash 에서 `unexpected EOF` → `/c/dir/` 형식, (b) cp949 콘솔에서 python print 가 `—` 등으로 크래시 → 스크립트에 `sys.stdout.reconfigure(encoding='utf-8')` 를 기본 탑재.
+30. **Windows 셸 함정 2종** — (a) `"C:\dir\"` 처럼 역슬래시로 끝나는 따옴표 경로는 bash 에서 `unexpected EOF` → bash 명령엔 `/c/dir/` 형식(단 **python 코드·인자엔 `C:/dir/`** — Windows python 은 `/c/` 를 못 찾아 `FileNotFoundError`, 2026-09-30 재발; 둘 다 쓰는 경로는 `C:/` 하나로), (b) cp949 콘솔에서 python print 가 `—` 등으로 크래시 → 스크립트에 `sys.stdout.reconfigure(encoding='utf-8')` 를 기본 탑재.
 
 > KIST 사례 (2026-06-05): kk-meet v2 에서 **회의비 지급신청서(fam_0704_02) 완전자동작성·결재상신** 달성. 옛 "회의록 hwp 양산 → 두레이 업로드 → 행정원 수기" 폐기, 위 15-22 패턴 전부 적용. 11단계 자동화 JS = `skills/kk-meet/references/fam_0704_automation.md`, 엑셀 master 9컬럼 = `meeting_log_excel.md`. **이전 세션이 "반자동이 한계"라 결론낸 popBudgList 선택확인 콜백 미해결** → 본 가이드 17(opener 콜백 재현) + 18(killfocus 동기화) + 15(DOC_CLS frozen 회피) + 16(base64 우회) 조합으로 돌파.
 

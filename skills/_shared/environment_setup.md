@@ -75,6 +75,7 @@ kiki 는 Chrome 창 두 종류를 쓴다. **skill 마다 쓰는 창이 정해져
 - 재시작 안내 문구: Windows "트레이 아이콘 → Quit" / macOS "Dock 아이콘 → Quit(⌘Q), 창 닫기는 종료 아님". Linux 는 Claude Desktop 이 없으므로 CLI 세션 재시작.
 - 콘솔 한글: Windows PowerShell 5.1 은 BOM 없는 스크립트의 한국어를 깨뜨린다(`install.ps1` 은 BOM 포함). Python 출력은 `PYTHONIOENCODING=utf-8` 이 설정돼 있어 깨져 보여도 파일 내용은 정상.
 - Windows Git Bash: `"C:\kiki\budget\"` 처럼 **역슬래시로 끝나는 경로를 큰따옴표로 감싸면** 닫는 따옴표가 이스케이프돼 `unexpected EOF` → `/c/kiki/budget/` 형식을 쓴다.
+- 🔴 그 `/c/…` 형식은 **Bash 명령에서만** 통한다. python 코드 안(`open()`·openpyxl `save`/`load_workbook`)이나 python 에 넘기는 인자는 `C:/kiki/budget/…`(슬래시) — Windows python 은 `/c/…` 를 못 찾아 `FileNotFoundError`. Bash 도 `C:/…` 를 읽으므로 두 곳에 같은 경로를 쓸 땐 `C:/` 형식 하나로 (2026-09-30).
 - Windows 콘솔 cp949: python 이 `—`(em dash) 등 cp949 밖 문자를 print 하면 `UnicodeEncodeError` 로 **죽는다**(PYTHONIOENCODING 미설정 셸) → 스크립트 첫머리 `sys.stdout.reconfigure(encoding='utf-8')`, 한 줄 검증도 동일.
 - 상세 비교표 → repo 의 `INSTALL.md` §6(설치본에는 없음).
 

@@ -65,7 +65,8 @@ description: |
 5. **스냅샷 보관 + 엑셀 — 한 명령**: `python scripts/make_report.py --from-downloads --expect <run> --save-snapshot`(`downloadSnapshot()` 이 알려 준 run 의 `kiki_budget_*.json` 만 쓴다 — 다운로드가 늦으면 20초까지 기다리고, 끝내 없으면 **같은 날 이전 실행분을 쓰지 않고** 오류로 멈춘다. → 엑셀 `{kiki_root}/budget/yymmdd.xlsx` 를 만든 뒤 설정 폴더(Claude `~/.claude/kiki`, Codex `~/.codex/kiki`)의 `kk-budget/data/yymmdd.json` 에 보관; 다른 위치는 `--out <xlsx>`). 다운로드 폴더가 다르면 환경변수 `KIKI_DOWNLOADS`. 과제 0건 스냅샷은 엑셀·보관 모두 거부한다(그날 정상본을 덮지 않게). 개인집계(4)를 한 경우엔 `yymmdd_{과제번호}_person.json` 을 따로 적는다(비목별 총집행·건수·인물별 합·비고·caveats·diff).
    - 검증(openpyxl 으로 열어 셀 확인). Excel 이 그 파일을 열고 있으면 `PermissionError` → 닫아달라 안내 후 재시도.
    - 일부 과제·비목만 뽑을 땐 `collectAll({acccds:[…], categories:[…]})` 로 좁힌다(없는 비목은 `-` 로 표시).
-   - Windows Bash: 경로를 `"C:\...\"` 처럼 **역슬래시로 끝내 따옴표로 감싸면 `unexpected EOF`** → `/c/kiki/budget/` 형식.
+   - Windows Bash: 경로를 `"C:\...\"` 처럼 **역슬래시로 끝내 따옴표로 감싸면 `unexpected EOF`** → Bash 명령(`ls`·`cd`·`rm`)에는 `/c/kiki/budget/` 형식.
+   - 🔴 **python 에 넘기는 경로(코드 안 `open()`·`wb.save()`·`load_workbook()`, 명령 인자)는 `C:/kiki/budget/…`** — Windows python 은 `/c/…` 를 `C:\c\…` 로 읽어 `FileNotFoundError`(2026-09-30 개인집계 엑셀 저장에서 실제로 남). Bash 는 `C:/…` 도 읽으므로 **헷갈리면 어디서나 `C:/` 형식**.
 
 6. **보고 — 엑셀 + 채팅 표(항상)**: `references/budget_report_format.md` 양식.
    - 채팅 표 = **카테고리 잔액만 + 맨 우측 직접비(잔액/총액)** (백만원 약식).
