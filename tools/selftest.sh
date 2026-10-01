@@ -100,7 +100,7 @@ cat > "$T/items.json" <<J
 J
 $K apply "$T/items.json" > "$T/p1" 2>&1; chk "apply 2건" "grep -q '이름 변경 2건' '$T/p1'"
 $K apply "$T/items.json" > "$T/p2" 2>&1; chk "apply 다시 돌려도 안전" "grep -q '이미 적용됨 2건' '$T/p2'"
-$K archive "$T/items.json" --base "$T/r" > "$T/p3" 2>&1; chk "같은 items.json 으로 archive(바뀐 이름 추적)" "grep -q '이동 2건' '$T/p3' && ls '$T/r/신청완료/세금계산서/26N1111' | grep -q '장비 수리'"
+$K archive "$T/items.json" --base "$T/r" > "$T/p3" 2>&1; chk "같은 items.json 으로 archive(바뀐 이름 추적)·카드는 법인카드 폴더" "grep -q '이동 2건' '$T/p3' && ls '$T/r/신청완료/세금계산서/26N1111' | grep -q '장비 수리' && ls '$T/r/신청완료/법인카드/2E11111' | grep -q '시약 구입'"
 printf p > "$T/r/p1.jpg"; printf q > "$T/r/p2.jpg"; printf e > "$T/r/2E11111_15_330_87654321_김키키]둘째.jpg"
 cat > "$T/items3.json" <<J
 [{"file":"$T/r/p1.jpg","acccd":"2E11111","item":"15","bimok":"330","apprno":"11112222","holder":"김키키","desc":"첫째","kind":"card"},

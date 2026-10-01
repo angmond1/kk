@@ -3,7 +3,7 @@
 
   python kk_pay_files.py plan  <items.json>                 # 이름 계획표 출력(파일은 안 건드림) — 사용자 confirm 용
   python kk_pay_files.py apply <items.json>                 # 계획대로 같은 폴더에서 이름 변경(덮어쓰기 금지, 하나라도 막히면 아무것도 안 바꿈)
-  python kk_pay_files.py archive <items.json> --base <월 폴더> [--dry]   # 신청완료/{카드구분|세금계산서}/{과제}/ 로 파일 단위 이동
+  python kk_pay_files.py archive <items.json> --base <월 폴더> [--dry]   # 신청완료/{법인카드|연구비카드|세금계산서}/{과제}/ 로 파일 단위 이동
 
 items.json = [{ "file": "경로", "acccd": "2E11111", "item": "15", "bimok": "330", "apprno": "12345678",
                 "holder": "김키키", "desc": "○○ 시약 외 6건 구입", "kind": "card" | "tax", "group": "임의 묶음키",
@@ -12,7 +12,7 @@ items.json = [{ "file": "경로", "acccd": "2E11111", "item": "15", "bimok": "33
   - 같은 group(=같은 지급 건)에 파일이 여럿이면 끝에 ' (1)', ' (2)' … / bankbook=true 면 desc 뒤에 '_통장사본'
   - 80자 이내(확장자 제외, RPA 규칙) · 금지 문자 \\ / : * ? " < > | 는 '-' 로 · 확장자는 원본 그대로(jpg/pdf 만 업로드 가능 — 다른 형식은 convert.py 로 먼저 변환)
   - 경로는 C:/… 또는 C:\\… 로. Git Bash 꼴(/c/…)도 받는다.
-  - archive: card → {base}/신청완료/{card_kind}/{acccd}/, tax → {base}/신청완료/세금계산서/{acccd}/
+  - archive: card → {base}/신청완료/{card_kind}카드/{acccd}/ (법인카드·연구비카드), tax → {base}/신청완료/세금계산서/{acccd}/
     옮기기 전에 전부 검사한다(파일 · 과제번호 형식 · card_kind 는 법인|연구비 · 목적지가 신청완료 폴더 안 · 같은 파일 두 번) — 하나라도 걸리면
     아무것도 옮기지 않고, 옮기다 실패하면 이미 옮긴 것을 원래 자리로 되돌린다(2026-09-27 Codex 점검 반영).
     apply 로 이름을 바꾼 뒤에도 같은 items.json 을 그대로 쓰면 된다(원래 경로에 없으면 규칙상의 새 이름을 찾아 옮긴다).
@@ -30,7 +30,8 @@ for _s in (sys.stdout, sys.stderr):
 
 BAD = '\\/:*?"<>|'
 ACC_RE = r"[0-9][A-Za-z][0-9]{5}|[0-9]{2}[A-Za-z][0-9]{4}"   # 계정번호 2E11111 / 26N1111 두 형식(실제 계정번호는 둘 다 있음)
-CARD_KINDS = ("법인", "연구비")                                # archive 폴더 이름 — 이 둘만(경로 조각이 되므로 허용값으로 막는다)
+CARD_KINDS = ("법인", "연구비")                                # card_kind 허용값 — 이 둘만(경로 조각이 되므로 허용값으로 막는다)
+CARD_DIRS = {"법인": "법인카드", "연구비": "연구비카드"}           # archive 폴더 이름(2026-10-01 사용자: 신청완료\법인카드·연구비카드 — 2026.06 부터 실제 폴더 이름)
 OK_EXT = (".jpg", ".pdf")
 MAX_NAME = 80                      # RPA 파일명 규칙: 80자 이내(확장자 제외로 센다)
 
@@ -203,6 +204,8 @@ def cmd_archive(items, base, dry):
         sub = "세금계산서" if r["kind"] == "tax" else str(r.get("card_kind") or "법인").strip()
         if r["kind"] == "card" and sub not in CARD_KINDS:
             problems.append(f"{tag}: card_kind 는 법인 또는 연구비({sub})"); continue
+        if r["kind"] == "card":
+            sub = CARD_DIRS[sub]
         dest_dir = os.path.realpath(os.path.join(root, sub, acccd))
         if dest_dir == root or os.path.commonpath([root, dest_dir]) != root:
             problems.append(f"{tag}: 목적지가 신청완료 폴더 밖"); continue
