@@ -59,7 +59,7 @@ https://github.com/angmond1/kk 설치해줘
 <br>
 
 ### 4. chrome 브라우저로 KIST 포탈·Dooray 로그인 필요
-- kk-budget, kk-pay(카드결제건 RPA)는 KIST 포탈에, kk-mail, kk-dry, kk-wiki(토큰 없을 때)는 Dooray에 먼저 chrome 브라우저로 로그인해 둔 채로 진행  
+- kk-pay 카드결제건 RPA, kk-budget, kk-mail, kk-dry, kk-wiki는 먼저 chrome 브라우저로 KIST 포탈에 로그인해 둔 채로 진행  
 - 파일첨부 스킬 (kk-pay 세금계산서, kk-meet, kk-inspect)은 새 창에서 재 로그인을 요구함  
 
 <br>
