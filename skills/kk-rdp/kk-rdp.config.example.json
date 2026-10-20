@@ -1,0 +1,23 @@
+{
+  "_help": "kk-rdp 고유 설정. 실제 config 는 ~/.claude/kiki/kk-rdp.config.json (repo 밖). 첫 실행 때 지난 신청서에서 읽어 채우고 사용자 확인 후 저장한다.",
+  "_common": "이름·소속은 포탈이 신청서에 자동으로 채운다(입력 안 함). 공통 ~/.claude/kiki/kiki.config.json 의 kiki_root 만 쓴다.",
+
+  "use_time": "모든요일 00:00-24:00",
+  "rereq_reason": "과제수행 지속",
+  "reason": "○○ 연구의 장시간 연속 실행 작업을 업무 시간 외에도 상시 모니터링해야 하여 24시간 원격 접속을 신청합니다.",
+  "_reason": "신청사유 — 지난 신청서 문장을 그대로 쓰는 게 기본.",
+  "projects": "2E11111 ○○ 연구 / 2N12345 △△ 연구",
+  "_projects": "관련과제 칸에 들어가는 한 줄(과제번호 과제명 / …).",
+
+  "targets": [
+    {"place": "L0000", "os": "Windows11", "ip": "000.000.00.000", "port": "3389", "mac": "00-00-00-00-00-00"}
+  ],
+  "_targets": "접근대상정보 — 위치(방 번호)·운영체제·IP·포트·MAC. 여러 대면 여러 줄.",
+
+  "docs_dir": "{kiki_root}/rdp",
+  "_docs_dir": "보안서약서·증빙(과제 연구계획서)을 두는 폴더. {kiki_root} = kiki.config.json 의 kiki_root.",
+  "pledge_file": "보안서약서.hwp",
+  "_pledge_file": "docs_dir 안의 보안서약서(hwp/hwpx). 매번 서명 날짜만 오늘로 바꿔 올린다.",
+  "evidence_files": ["○○ 연구 연구계획서.hwp"],
+  "_evidence_files": "docs_dir 안의 증빙 — 관련과제의 연구계획서 등. 한 파일 10MB 미만이어야 확장으로 올라간다."
+}

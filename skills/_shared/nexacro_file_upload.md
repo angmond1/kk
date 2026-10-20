@@ -276,5 +276,6 @@ s.textContent = `[id*="_form_modalPopDiv"], [id*="modalPopDivScrollableInnerCont
 | fam_0704_02 | kk-meet | (A 또는 C) | §2 로 확인 | 부모탭 화면 — 실행 창은 chrome-devtools(첨부가 있으니 처음부터) | 🔵 미실증 |
 | **pop_fam_0703_02** | kk-meet | **C** | `fileDiv1`(서명록)/`fileDiv2`(증빙)/`fileDiv3`(사전결재) | RQST_NO=`CONFERENCENO + "-" + ds_param.CARDUSEMGRNO`, FLE_TP=`"02"`(증빙). 로컬 증빙은 **chrome-devtools `upload_file`**(노출한 `#kk_file_input` uid)로 — Claude in Chrome `file_upload` 는 채팅에 첨부한 파일만 | ✅ codex 실증 2026-06-07 |
 | mcs_0003_pop2 | kk-inspect | **B** | `fileDiv1` | 별도 chrome page (`window.open`) — **chrome-devtools-mcp 단일채널(§4-6) 권장**, `upload_file` 은 cwd workspace root 안 파일만(밖이면 복사) | ✅ codex 2026-06-07 / Claude(chrome-devtools) 2026-06-19 |
+| **etc_3030_pop** | kk-rdp | **C 변형**(별도 창) | `fileDiv1` → `_input_node` | 신청서가 별도 창이라 input 을 부모 탭 `document.body` 로 옮겨 노출 → Claude in Chrome `file_upload`(**로컬 경로 가능, 호출당 10MB 미만**, 2026-10-20 실측) → 원위치. 저장 때 서버 업로드(`gfn_upload` 불필요) | ✅ 2026-10-20 |
 
 새 화면에 적용할 때는 §1-1 (C 우선) → 안되면 §1-2 (A/B 판별) → §2 (컴포넌트명) 순으로 확인 후 이 표 갱신.
