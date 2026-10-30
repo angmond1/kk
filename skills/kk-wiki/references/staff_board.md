@@ -31,7 +31,7 @@
 ```
 - 가져오기(`import`)는 머리줄의 팀 수와 읽은 팀 수가 다르거나 `=== END ===` 가 없으면 잘린 덤프로 보고 저장하지 않는다(`--force` 로 무시). `--keep` 없이 기존 팀이 빠져도 저장하지 않는다(일부만 받은 덤프면 `--keep`).
 - `get_page_text` 는 3만 자 이상을 한 번에 돌려준다(실측) → `javascript_tool` 의 ~1,000자 제한을 우회하는 표준 반출 채널. 큰 결과는 문서를 `<pre>` 로 바꿔 읽고, 읽은 뒤 새로고침.
-- 저장 위치 `{kiki_root}/wiki/staff/`: `staff_dump_yymmdd.txt`(원본), `staff.json`, `staff.md`, 이전본 `_history/`. **이름·내선 = 내부 자료, 로컬만.**
+- 저장 위치 `{kiki_root}/wiki/staff/`: `staff_dump_yymmdd.txt`(원본), `staff.json`, `staff.md`, 이전본 `_history/`. 동봉본 `skills/kk-wiki/data/staff/`(staff.json·staff.md)도 함께 배포한다(사용자 결정 2026-10-30, KIST 웹사이트에도 공개된 정보) — 읽을 때는 수집 시각이 늦은 쪽, 갱신 뒤 `wiki_staff.py publish` 로 동봉본을 맞춘다. 원본 덤프·`_history/` 는 로컬만.
 
 ## 이미지 게시글 판독(OCR) — 보정 덤프 `_ocr.txt`
 1. 덤프에서 `(표 없음 — 이미지 게시글…)` 인 팀의 `url`(공유 주소)을 탭에 연다(그룹웨어 탭이면 그대로 navigate). 팝업 래퍼 `windowOpenMain.jsp` 안쪽 프레임에 글이 뜬다.

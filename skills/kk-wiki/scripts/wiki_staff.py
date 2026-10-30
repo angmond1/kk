@@ -8,8 +8,10 @@ Claude 가 `get_page_text` 로 읽은 덤프를 파일로 저장하면 이 스�
   python wiki_staff.py import <dump.txt>        # staffRender 덤프 → staff/staff.json + staff.md (이전본은 staff/_history/)
   python wiki_staff.py find 출장 여비            # 직무구분·직무내용에서 단어 AND 검색 → 팀 | 직무 | 담당 (내선) | 기준일
   python wiki_staff.py team 재무팀               # 한 팀의 표 전체
-  python wiki_staff.py status                   # 팀 수·수집일·표 없는(이미지) 팀
-스냅샷 위치: <kiki_root>/wiki/staff/ (내부 자료 — 각자 PC 에만).
+  python wiki_staff.py status                   # 팀 수·수집일·표 없는(이미지) 팀·어느 사본을 쓰는지
+  python wiki_staff.py publish                  # 로컬 담당자표를 패키지 동봉본(skills/kk-wiki/data/staff/)으로 복사(메인테이너: 그다음 커밋·푸시·설치본 반영)
+위치: 로컬 <kiki_root>/wiki/staff/ + 패키지 동봉본 skills/kk-wiki/data/staff/ (사용자 결정 2026-10-30 — KIST 웹사이트에도 공개된 정보라 배포본에 함께 싣는다).
+읽을 때는 둘 중 수집 시각(imported_at)이 늦은 쪽을 쓴다 — 새로 설치한 PC 는 수집 없이 동봉본으로 바로 답한다.
 """
 from __future__ import annotations
 import argparse, io, json, os, re, sys, time
@@ -22,6 +24,25 @@ for _stream in (sys.stdout, sys.stderr):
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from wiki_snapshot import snapshot_root, pick_download, downloads_dir  # noqa: E402
+
+
+BUNDLED_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "staff")
+
+
+def _read_json(p: str):
+    try:
+        return json.load(open(p, encoding="utf-8")) if os.path.exists(p) else None
+    except Exception:
+        return None
+
+
+def pick_staff(root: str):
+    """(데이터, 출처) — 로컬과 동봉본 중 수집 시각이 늦은 쪽. 둘 다 없으면 (None, '')."""
+    loc = _read_json(os.path.join(root, "staff", "staff.json"))
+    bun = _read_json(os.path.join(BUNDLED_DIR, "staff.json"))
+    if loc and bun:
+        return (bun, "동봉본") if str(bun.get("imported_at", "")) > str(loc.get("imported_at", "")) else (loc, "로컬")
+    return (loc, "로컬") if loc else ((bun, "동봉본") if bun else (None, ""))
 
 
 def staff_dir(root: str) -> str:
@@ -240,6 +261,8 @@ def cmd_import(root: str, paths: list, since: str = "2025-01-01", keep: bool = F
     d0 = staff_dir(root)
     jp = os.path.join(d0, "staff.json")
     prev = json.load(open(jp, encoding="utf-8")) if os.path.exists(jp) else None
+    if prev is None and keep:                     # 새 PC 의 첫 차분 갱신은 패키지 동봉본을 바탕으로
+        prev = _read_json(os.path.join(BUNDLED_DIR, "staff.json"))
     prev_by = {t["team"]: t for t in (prev or {}).get("teams", [])}
     new_teams, order, problems = {}, [], []
     meta = {}
@@ -342,10 +365,24 @@ def cmd_known(root: str) -> None:
 
 
 def load(root: str) -> dict:
-    jp = os.path.join(staff_dir(root), "staff.json")
-    if not os.path.exists(jp):
+    data, _src = pick_staff(root)
+    if not data:
         raise SystemExit("[kk-wiki] 담당자표가 없습니다 — 브라우저 코어로 수집 후 `wiki_staff.py import <dump.txt>`")
-    return json.load(open(jp, encoding="utf-8"))
+    return data
+
+
+def cmd_publish(root: str) -> None:
+    """로컬 staff.json·staff.md 를 패키지 동봉본으로 복사(메인테이너용). 그다음 커밋·푸시·설치본 반영."""
+    import shutil
+    src = os.path.join(root, "staff")
+    if not os.path.exists(os.path.join(src, "staff.json")):
+        raise SystemExit("[kk-wiki] 로컬 담당자표가 없습니다 — 먼저 import")
+    os.makedirs(BUNDLED_DIR, exist_ok=True)
+    for f in ("staff.json", "staff.md"):
+        if os.path.exists(os.path.join(src, f)):
+            shutil.copy2(os.path.join(src, f), os.path.join(BUNDLED_DIR, f))
+    d = _read_json(os.path.join(BUNDLED_DIR, "staff.json"))
+    print(f"[kk-wiki] 동봉본 갱신: {len(d['teams'])}팀, 수집 {d.get('imported_at', '')} → {os.path.abspath(BUNDLED_DIR)}")
 
 
 def cmd_find(root: str, terms: list, top: int) -> None:
@@ -381,9 +418,11 @@ def cmd_team(root: str, name: str) -> None:
 
 
 def cmd_status(root: str) -> None:
-    data = load(root)
+    data, src = pick_staff(root)
+    if not data:
+        raise SystemExit("[kk-wiki] 담당자표가 없습니다 — 브라우저 코어로 수집 후 `wiki_staff.py import <dump.txt>`")
     teams = data["teams"]
-    print(f"[kk-wiki] 담당자표: {len(teams)}팀, 수집 {data.get('imported_at', '')}, 표 있음 {sum(1 for t in teams if t['rows'])}, 기준 {data.get('since') or '전체'}~ 우선(⚠오래됨 = 그 이후 글 없음)")
+    print(f"[kk-wiki] 담당자표({src}): {len(teams)}팀, 수집 {data.get('imported_at', '')}, 표 있음 {sum(1 for t in teams if t['rows'])}, 기준 {data.get('since') or '전체'}~ 우선(⚠오래됨 = 그 이후 글 없음)")
     for t in teams:
         print(f"  {t['team']:14s} #{t.get('no', ''):6s} 기준 {t.get('asof') or t.get('date', ''):10s} {'표 ' + str(len(t['rows'])) + '행' if t['rows'] else '(이미지·본문만)'}{_old_mark(t)}")
 
@@ -394,7 +433,7 @@ def main(argv=None):
     except Exception:
         pass
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["import", "find", "team", "status", "known"])
+    ap.add_argument("cmd", choices=["import", "find", "team", "status", "known", "publish"])
     ap.add_argument("args", nargs="*")
     ap.add_argument("--root")
     ap.add_argument("--top", type=int, default=15)
@@ -433,6 +472,8 @@ def main(argv=None):
         cmd_status(root)
     elif a.cmd == "known":
         cmd_known(root)
+    elif a.cmd == "publish":
+        cmd_publish(root)
 
 
 if __name__ == "__main__":

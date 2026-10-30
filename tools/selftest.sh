@@ -32,6 +32,7 @@ fi
 
 echo "== 2. 담당자표 가져오기 보호(wiki_staff.py)"
 W="$PY $S/kk-wiki/scripts/wiki_staff.py"
+chk "새 PC(로컬 담당자표 없음)는 패키지 동봉본으로 답함" "$W status 2>&1 | grep -q '담당자표(동봉본)'"
 team() { printf '## 팀: %s | 글번호 %s | 게시일 2026-08-18 | 게시자 김키키 | 제목 %s 업무분장 | id A%s | url u%s\n%s\n\n' "$1" "$2" "$1" "$2" "$2" "$3"; }
 TBL=$'| 직무구분 | 직무 내용 | 담당 |\n| 팀장 | 총괄 | 김키키 (NNNN) |\n| 출장 | 여비 정산 | 이키키 (NNNN) |'
 { echo "=== KKWIKI-STAFF v1 | exported 2026-09-27T00:00:00Z | board FC_BBS224 | teams 3 | run aaaa ==="; team 재무팀 100 "$TBL"; team 구매팀 101 "$TBL"; team 총무팀 102 "$TBL"; echo "=== END ==="; } > "$T/d1.txt"
