@@ -168,17 +168,29 @@ C.rd_UseType_onitemchanged.call(C, rdUseType, {fromobject:rdUseType, postvalue:"
 ```
 
 #### 9-c) 참석자 (datagrid 행추가)
-- 내부 = `C.ds_datagrid1` (KORNM/PAYNO/DEPTNM) — ⚠️ **해당 계정의 참여연구원만 등록 가능** (2026-08-01~)
-- 외부/미참여자 = `C.ds_datagrid2` (OUTNAME/OUTCOMPANY/**`PROJJOINYN`**)
+- 내부 = `C.ds_datagrid1` (KORNM/PAYNO/DEPTNM) — ⭐ **KIST 직원 전원**(참여연구원 + 미참여자, 미참여자는 참여 여부 '미참여자') — 2026-11-10 신규 작성분부터
+- 외부 = `C.ds_datagrid2` (OUTNAME/OUTCOMPANY/**`PROJJOINYN`**) — 외부기관 소속만
+
+##### ⭐ 2026-11-10 변경 — KIST 미참여자는 내부란 (재무팀 안내 「'내부 미참여자' 입력 방식 변경」)
+- 현행: **KIST 직원 미참여자 → 내부란에 넣고 참여 여부에서 '미참여자' 선택**. 외부기관 미참여자는 기존과 같이 외부란. 사유: 내부 직원의 출장 식비 공제 확인. 적용: **2026-11-10 신규 작성 지급신청서부터**(작성일 기준).
+- ⚠️ **아직 실측 전** — 첫 작성 때 아래 정찰로 확인하고 이 절을 고친다(그 전까지 추측으로 컬럼을 채우지 않는다):
+  ```js
+  // 회의록 팝업 C 가 열린 상태에서: 내부 grid 컬럼과 코드표 데이터셋 찾기
+  const g=C.ds_datagrid1, cols=[]; for(let i=0;i<g.getColCount();i++) cols.push(g.getColID(i));
+  const codes=Object.keys(C).filter(k=>/^ds_code/i.test(k));
+  JSON.stringify({cols, codes})
+  ```
+  확인할 것: ① 참여 여부 칸 이름(외부의 `PROJJOINYN` 과 같은지)과 코드값 ② 미참여 직원을 KORNM 으로 등록할 때 예전 거부 메시지(`본 계정의 참여연구원이 아닙니다…`)가 아직 뜨는지·행이 지워지는지 ③ 저장 검증이 그 칸을 요구하는지. 화면이 예전 그대로(내부란 거부)면 사용자에게 알리고 재무팀 확인 — 옛 방식으로 몰래 돌아가지 않는다.
+- 옛 방식(2026-08-01~11-09 작성분) — 지금 쓰지 않는다: 미참여 KIST 직원은 내부에서 거부되어 외부란 회사명 `한국과학기술연구원` + `PROJJOINYN` N 으로 넣었다(아래 8/1 절의 거부·강등 설명은 그 시기 실측).
 
 ##### ⭐ 2026-08-01 규정변경 — 참여연구원 여부 (실증 2026-08-07)
-- 근거: 재무팀 공지 「국가연구개발사업 회의비 집행기준 완화 안내」(2026-08-04) — 모든 정산과제 과제 미참여자 1명 이상 필수, KIST 직원도 그 과제 미참여자면 외부, 타 기관 외부참여연구원은 내부로 간주(입력은 외부란 + `PROJJOINYN` Y). 사례표 → `meeting_form.md`.
+- 근거: 재무팀 공지 「국가연구개발사업 회의비 집행기준 완화 안내」(2026-08-04) — 모든 정산과제 과제 미참여자 1명 이상 필수, KIST 직원도 그 과제 미참여자면 미참여자로 센다(입력은 2026-11-10 작성분부터 내부란 + '미참여자', 위 절), 타 기관 외부참여연구원은 내부로 간주(입력은 외부란 + `PROJJOINYN` Y). 사례표 → `meeting_form.md`.
 - **KIST 소속이어도 해당 계정의 참여연구원이 아니면 내부에 넣을 수 없다.** 서버가 검증해 거부하며 행이 삭제된다.
   거부 메시지: `본 계정의 참여연구원이 아닙니다. 내부인원은 참여연구원만 등록 가능합니다.`
-- 참여연구원이 아닌 KIST 인원은 **외부/미참여자(`ds_datagrid2`)에 회사명 `한국과학기술연구원`** 으로 넣는다.
+- (옛 방식 — 11-09 이전 작성분) 참여연구원이 아닌 KIST 인원은 외부(`ds_datagrid2`)에 회사명 `한국과학기술연구원` 으로 넣었다. **현행은 위 11-10 절대로 내부란 + '미참여자'.**
 - `ds_datagrid2` 에 **`PROJJOINYN`(참여연구원 여부) 필수선택** 컬럼 신설. 코드표 = `C.ds_codeFAM006`
   (`""`=선택 / **`N`=N(미참여)** / `Y`=Y(참여)). 미지정이면 저장·상신 검증에서 막힌다.
-- 총원(**내부+외부 합계**)은 인원 하한 이상 — 사전결재를 연동하는 경우만 그 결재 인원과도 맞춘다(내부에서 빠진 인원을 외부로 옮기면 총원 유지).
+- 총원(**내부+외부 합계**)은 인원 하한 이상 — 사전결재를 연동하는 경우만 그 결재 인원과도 맞춘다(2026-11-10 작성분부터는 미참여 직원도 내부란에 그대로 두므로 총원 불변).
 
 ##### 내부 등록 (이름 → 사번 자동조회) — ⭐ 2026-09-24 재실측으로 정정
 `setColumn` 만으로는 조회가 돌지 않는다. 핸들러 소스는 `if(e.columnid=="KORNM") this.OpenInPeoplePopup();` 뿐이고,
@@ -191,7 +203,7 @@ const r = g.addRow(); g.setColumn(r, "KORNM", "김키키"); g.set_rowposition(r)
 C.ds_datagrid1_oncolumnchanged.call(C, g, {columnid:"KORNM", row:r});
 // ⏱ 3초. 결과는 세 갈래:
 //  (a) 검색결과 1명 → 팝업 없이 자동 반영: PAYNO·DEPTNM 채워짐
-//  (b) 참여연구원 아님 → gfn_msg "본 계정의 참여연구원이 아닙니다…" + 행은 이름만 남음(PAYNO 없음) → 그 행 삭제하고 외부로
+//  (b) 참여연구원 아님 → (11-09 이전 실측) gfn_msg "본 계정의 참여연구원이 아닙니다…" + 행은 이름만 남음 → 현행은 내부란에 두고 참여 여부 '미참여자'(11-10 절 정찰로 동작 확인)
 //  (c) 검색결과 여러 행 → popupframes.pop_fam_0703_02_4 열림. P.ds_datagrid1 (KORNM/PAYNO/DEPTNM/EMPLCLSNM/PARTIYN/DUPLICATE_EAT_YN)
 //      에서 고를 행을 set_rowposition → P.datagrid1_oncelldblclick.call(P,P.datagrid1,{}) (= gfn_popupClose(행객체))
 //      같은 사람이 여러 행(조인 중복)이면 아무 행이나, 동명 2인(예 학생연구원 PARTIYN Y / 별정직 N)이면 PARTIYN='Y' 쪽.
@@ -204,16 +216,16 @@ C.ds_datagrid1_oncolumnchanged.call(C, g, {columnid:"KORNM", row:r});
 (예 `사용시간 : 12:21 / 계정 : 2N11111 / 적요 : … / 목적: … / 인원: 김키키 외 N명`). gfn_msg 로 "…중복인 경우 제외바랍니다" 가 뜬다.
 → **저장하지 말고 사용자에게 그 내용을 그대로 보여주고 결정을 받는다**(제외 / 유지 / 중단). 발의자·카드책임자여도 제외될 수 있고, 제외하면 적요 `김키키 외 N명` 의 대표자를 남은 첫 참석자로 바꾼다.
 
-##### 외부/미참여자 등록
+##### 외부 등록 (외부기관 소속만)
 ```js
-[{nm:"이키키", org:"○○대학교"}, {nm:"박키키", org:"한국과학기술연구원"}].forEach(p=>{
+[{nm:"이키키", org:"○○대학교"}].forEach(p=>{
   const r2 = C.ds_datagrid2.addRow();
   C.ds_datagrid2.setColumn(r2,"OUTNAME",p.nm);
   C.ds_datagrid2.setColumn(r2,"OUTCOMPANY",p.org);
   C.ds_datagrid2.setColumn(r2,"PROJJOINYN","N");   // ★ 필수 (2026-08-01~)
 });
 ```
-> 💡 권장 흐름: 내부 후보를 하나씩 시도 → `PAYNO` 미해결이면 그 이름을 외부(`한국과학기술연구원`)로 자동 강등.
+> 💡 권장 흐름: KIST 직원은 하나씩 내부로 등록 → 참여연구원이 아니라고 나오면 내부란에 둔 채 참여 여부 '미참여자'(11-10 절). 외부로 강등하지 않는다(옛 방식).
 > 사전결재 연동(9-d)은 **내부 참석자가 1명 이상 있어야** 통과한다 (`1번째행의 내부참석자 정보를 선택하셔야 합니다`).
 
 #### 9-d) 사전결재 연동 (`button00_onclick` → `fam_0100_pop2`)
@@ -402,7 +414,7 @@ C.fileDiv2.gfn_upload("", "fn_endFileCallBack1", "ds_file", "RQST_NO="+rqst, "02
 | 1 | 내부 참석자 7명 등록했는데 아무도 조회 안 됨(PAYNO 빈칸) | `new nexacro.DSColChangeEventInfo(...)` 인자 매핑이 달라 `e.columnid` 가 'KORNM' 이 아님 → 핸들러 `if(e.columnid=="KORNM")` 불통과 | 평범 객체 `{columnid:'KORNM',row:r}` + 먼저 `g.set_rowposition(r)` (§9-c) |
 | 2 | 여러 명을 루프로 등록하니 일부 NORES·다른 행에 반영·행 삭제 | 사원검색 팝업 open/close 가 비동기로 겹침 | **한 명씩**: 등록 → 3초 → 결과 확인 → 다음 |
 | 3 | 동명 2인(같은 센터, 학생연구원 PARTIYN Y / 별정직 N) | 검색팝업 여러 행 | `PARTIYN='Y'` 쪽 선택, 보고에 명시 |
-| 4 | KIST 인원 4명이 "참여연구원이 아닙니다"로 거부, 행엔 이름만 남음 | 8/1 규정(내부 = 계정 참여연구원만) | 이름만 남은 행 삭제 → 외부 grid `한국과학기술연구원`/`PROJJOINYN N`, 총원 유지 |
+| 4 | KIST 인원 4명이 "참여연구원이 아닙니다"로 거부, 행엔 이름만 남음 | 8/1 규정(당시 내부 = 계정 참여연구원만) | (당시) 외부 grid `한국과학기술연구원`/`PROJJOINYN N` 으로 옮김 — **2026-11-10 작성분부터는 내부란 + 참여 여부 '미참여자'**(§9-c 11-10 절) |
 | 5 | 발의자 본인에게 "이미 등록된 회의" 경고 | `DUPLICATE_EAT_YN` — 같은 날 다른 회의비 회의록 참석자 | 저장 보류, 상대 회의 정보 보여주고 사용자 결정(이번엔 제외 → 적요 대표자·인원 수정) |
 | 6 | 둘째 행에서 회의록을 열었는데 첫 행 카드 회의록이 열림 | `rqstGrid_oncellclick` 에 `{}` → `this.curRow=e.row` undefined → `ds_temp_popup_CONFERENCE` 가 이전 행 그대로 | `{row:i}` 전달 + 입력 전 `ds_param.CARDUSEMGRNO` 가드(가드가 잡아 오입력 0) |
 | 7 | `Object reference chain is too long` | 팝업 여는 호출이 식의 마지막 값 | 호출은 실행됨 → 재호출 금지, 마지막 값은 문자열 |

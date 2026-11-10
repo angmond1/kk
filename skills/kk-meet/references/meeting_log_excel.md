@@ -48,13 +48,13 @@
 | 금액 | (자동) RQSTAMT | — |
 | 장소(거래처) | (자동) CUSTNM | input_conferencePlace, ds_SAVE.CONFERENCEPLACE |
 | 처리계정 | (자동) BUDGSBJCD (popBudgList) | output3 (자동) |
-| 내부참석자 | — | ds_datagrid1 (KORNM/PAYNO/DEPTNM) — **해당 계정 참여연구원만** |
+| 내부참석자 | — | ds_datagrid1 (KORNM/PAYNO/DEPTNM) — **KIST 직원 전원**, 미참여자는 참여 여부 '미참여자'(2026-11-10 작성분~) |
 | 외부참석자 | — | ds_datagrid2 (OUTNAME) + **PROJJOINYN=`N`** |
-| 외부참석자 소속 | — | ds_datagrid2 (OUTCOMPANY) — KIST 미참여자는 `한국과학기술연구원` |
+| 외부참석자 소속 | — | ds_datagrid2 (OUTCOMPANY) — 외부기관 소속만 |
 
 | 회의목적(전체) | COMDSCCONT 적요 = `일시:.../장소:.../회의제목:.../김키키 외 N명` | input_conferencePerpose(첫줄=제목) + textarea_conferenceContent(상세 내용) |
 
-⚠️ **2026-08-01~**: KIST 소속이어도 그 계정 참여연구원이 아니면 내부에 못 넣는다 → 외부참석자 칸에 성명, 소속 칸에 `한국과학기술연구원`. 엑셀 6·7·8열을 채울 때 이 기준으로 나눈다. (→ `project_code.md`)
+⚠️ **2026-11-10 작성분~**: KIST 직원은 참여·미참여 모두 내부참석자 칸 — 미참여자는 `성명(미참여)` 로 적는다. 외부참석자·소속 칸은 외부기관 인원만. 엑셀 6·7·8열을 채울 때 이 기준으로 나눈다. (→ `meeting_form.md` 「사전 내부결재·참석자 — 현행」 2) 옛 방식(2026-11-09 이전 작성분 — KIST 미참여자를 외부 칸에 `한국과학기술연구원` 으로) — 지금 쓰지 않는다.
 
 ## 파이썬 헬퍼 (`scripts/meeting_log_xlsx.py`)
 - `openpyxl` 만 필요. `pyhwpx` 와 달리 한글·COM 불요.
